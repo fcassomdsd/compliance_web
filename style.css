@@ -1,0 +1,220 @@
+/* A more professional, modern look with improved spacing and a cohesive color palette. */
+
+:root {
+  --primary-color: #214d72; /* A deep blue for primary elements */
+  --secondary-color: #1e88e5; /* A bright blue for accents and buttons */
+  --light-blue: #e3f2fd; /* A very light blue for backgrounds */
+  --text-dark: #333333; /* Dark gray for main text */
+  --text-light: #f9f9f9; /* Off-white for light text */
+  --border-color: #cfd8dc; /* Light gray for borders */
+  --shadow-color: rgba(0,0,0,0.1); /* Subtle shadow */
+}
+
+body {
+  font-family: 'Inter', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  background-color: var(--light-blue);
+  margin: 0;
+  padding: 2.5rem;
+  color: var(--text-dark);
+}
+
+/* Header and Title Section */
+.header {
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+  padding-bottom: 1.5rem;
+  border-bottom: 1px solid var(--border-color);
+  margin-bottom: 2rem;
+}
+
+.header img {
+  height: 80px;
+  object-fit: contain;
+  border-radius: 8px;
+  box-shadow: 0 4px 12px var(--shadow-color);
+}
+
+.header h2 {
+  color: var(--primary-color);
+  font-weight: 600;
+  margin: 0;
+  text-align: center;
+}
+
+/* Controls and Info Section */
+.controls-container {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 1.5rem;
+  margin-bottom: 2rem;
+}
+
+.controls-container label {
+  font-weight: 500;
+  color: var(--primary-color);
+}
+
+.controls-container select {
+  padding: 0.75rem 1rem;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  background-color: white;
+  min-width: 200px;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%236B7280'%3E%3Cpath d='M7 10l5 5 5-5H7z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 0.75rem center;
+  background-size: 1em;
+}
+
+/* Buttons */
+button {
+  background-color: var(--secondary-color);
+  border: none;
+  color: white;
+  padding: 0.75rem 1.5rem;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 1rem;
+  font-weight: 500;
+  transition: all 0.3s ease;
+  box-shadow: 0 4px 8px rgba(30, 136, 229, 0.2);
+}
+
+button:disabled {
+  background-color: #90caf9;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
+button:hover:not(:disabled) {
+  background-color: #1565c0;
+  transform: translateY(-2px);
+  box-shadow: 0 6px 12px rgba(30, 136, 229, 0.3);
+}
+
+input[type=image] {
+  background-color: var(--secondary-color);
+  border: none;
+  color: white;
+  padding: 0.05rem 0.15rem;
+  margin: 0 0 0 8px;
+  border-radius: 2px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  box-shadow: 0 4px 8px rgba(30, 136, 229, 0.2);
+  opacity: 1;
+}
+
+input[type=image]:disabled {
+  background-color: #90caf9;
+  cursor: not-allowed;
+  box-shadow: none;
+  opacity: 0.7;
+}
+
+input[type=image]:hover:not(:disabled) {
+  background-color: #1565c0;
+  transform: translateY(-2px);
+  box-shadow: 0 6px 12px rgba(30, 136, 229, 0.3);
+}
+
+#currentPath {
+  font-size: 0.9rem;
+  color: #0d47a1;
+  font-style: italic;
+  margin-bottom: 1rem;
+}
+
+/* Table Styling */
+th, td {
+  border: 1px solid var(--border-color);
+  padding: 1rem;
+  vertical-align: top;
+  border-left: none;
+  border-right: none;
+}
+
+th {
+  text-align: center;
+  font-weight: 600;
+}
+
+input[type="file"] {
+  margin-top: 0.5rem;
+}
+
+table.preview {
+border-collapse: collapse;
+}
+
+.preview td {
+  font-size: 0.9em;
+  color: var(--secondary-color);
+  margin: 1px;
+  padding: 0.5rem;
+}
+
+.full-span {
+  background-color: #c3d2fd;
+  font-weight: bold;
+  text-align: center;
+  color: #0d47a1;
+  padding: 0.75rem 1rem;
+}
+
+.preview button {
+  background-color: #1e88e5;
+  border: none;
+  color: white;
+  padding: 0.5rem 1rem;
+  margin: 2px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 14px;
+}
+
+.loader {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  border: 16px solid #3498db;
+  border-top: 16px #3498db;
+  border-radius: 50%;
+  width: 120px; 
+  height: 120px;
+  -webkit-animation: spin 2s linear infinite;
+  animation: spin 2s linear infinite;
+}
+
+@-webkit-keyframes spin {
+  0% { -webkit-transform: rotate(0deg); }
+  100% { -webkit-transform: rotate(360deg); }
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  body {
+    padding: 1rem;
+  }
+  .header {
+    flex-direction: column;
+    text-align: center;
+  }
+  .controls-container {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .controls-container select {
+    width: 100%;
+  }
+}
