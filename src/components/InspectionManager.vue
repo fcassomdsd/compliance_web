@@ -253,12 +253,14 @@ const toggleServices = async () => {
         for (const locationService of locationStore.locationServices) {
           for (const specialty of locationService.specialties) {
             if (serviceTable.value[locationService.id][specialty.id] !== store.inspectedSpecialtySelected(locationService.id, specialty.id)) {
-                  await store.updateInspectedSpecialty(locationService.id,
+                  await store.updateInspectedSpecialty(newInspection.value.id,
+                                                       locationService.id,
+                                                       locationService.name,
                                                        specialty.id,
                                                        specialty.name,
                                                        serviceTable.value[locationService.id][specialty.id]);            
             }
-          }      
+          }
         }
         toast.success("Services saved!");
       } catch (error) {

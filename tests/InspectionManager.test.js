@@ -249,6 +249,7 @@ describe('InspectionManager.vue', () => {
       expect(serviceName.text()).toBe('Service 1')
       const specialties=wrapper.findAll('input[type="checkbox"]');
       expect(specialties.length).toBe(4);
+      expect(specialties[0]).toBe("checked");
       expect(specialties[0].attributes('checked')).toBeDefined();
       expect(specialties[1].attributes('checked')).toBeUndefined();
       const label=wrapper.find('label[for="checkbox-Specialty2"]');

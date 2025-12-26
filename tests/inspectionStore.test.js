@@ -411,4 +411,138 @@ describe('Inspection Store', () => {
 
   });
 
+  describe('updateInspectedSpecialty', () => {
+
+    it('adds inspected service and specialty when selected true and service does not exist', async () => {
+      // start with no inspected services for the location
+      store.inspectedServices = {};
+
+      // Mock API: adding InspectedService returns an object with id,
+      // adding InspectedSpecialty returns an object with id.
+      vi.mocked(apiEntityCRUD).mockImplementation((method, entity, id, data) => {
+        if (method === 'add' && entity === 'InspectedService') {
+          return { id: 'NewInspectedServiceId' };
+        }
+        if (method === 'add' && entity === 'InspectedSpecialty') {
+          return { id: 'NewInspectedSpecialtyId' };
+        }
+        return {};
+      });
+
+      await store.updateInspectedSpecialty('ID123', 'LocationSvcX', 'Service X', 'SpecX', 'Specialty X', true);
+
+      // Expect InspectedService added then InspectedSpecialty added and stored
+      expect(vi.mocked(apiEntityCRUD)).toHaveBeenCalledTimes(2);
+      expect(vi.mocked(apiEntityCRUD)).toHaveBeenCalledWith(
+        'add', 'InspectedService', null, { inspectionId : 'ID123', name: 'Service X', locationServiceId: 'LocationSvcX' }
+      );
+      expect(vi.mocked(apiEntityCRUD)).toHaveBeenCalledWith(
+        'add', 'InspectedSpecialty', null, { name: 'Specialty X', specialtyId: 'SpecX', inspectedServiceId: 'NewInspectedServiceId' }
+      );
+      expect(store.inspectedServices['LocationSvcX']).toBeDefined();
+      expect(store.inspectedServices['LocationSvcX'].specialties['SpecX'].id).toBe('NewInspectedSpecialtyId');
+    });
+
+    it('adds only inspected specialty when selected true and specialty does not exist', async () => {
+      // start with no inspected services for the location
+      store.inspectedServices = {};
+      store.inspectedServices['LocationSvcX'] = { "id" : 'InspectedServiceId', "specialties" : {} };
+
+      // Mock API: adding InspectedService returns an object with id,
+      // adding InspectedSpecialty returns an object with id.
+      vi.mocked(apiEntityCRUD).mockImplementation((method, entity, id, data) => {
+        if (method === 'add' && entity === 'InspectedService') {
+          return { id: 'NewInspectedServiceId' };
+        }
+        if (method === 'add' && entity === 'InspectedSpecialty') {
+          return { id: 'NewInspectedSpecialtyId' };
+        }
+        return {};
+      });
+
+      await store.updateInspectedSpecialty('ID123', 'LocationSvcX', 'Service X', 'SpecX', 'Specialty X', true);
+
+      // Expect InspectedService added then InspectedSpecialty added and stored
+      expect(vi.mocked(apiEntityCRUD)).toHaveBeenCalledTimes(1);
+      expect(vi.mocked(apiEntityCRUD)).toHaveBeenCalledWith(
+        'add', 'InspectedSpecialty', null, {name: 'Specialty X', specialtyId: 'SpecX', inspectedServiceId: 'InspectedServiceId' }
+      );
+      expect(store.inspectedServices['LocationSvcX']).toBeDefined();
+      expect(store.inspectedServices['LocationSvcX'].specialties['SpecX'].id).toBe('NewInspectedSpecialtyId');
+    });
+
+    it('does not add anything when selected and service and specialty exist', async () => {
+      // start with no inspected services for the location
+      store.inspectedServices = {};
+      store.inspectedServices['LocationSvcX'] = { "id" : 'InspectedServiceId', 
+                                                  "specialties" : {
+                                                    "SpecX" : {
+                                                      "id" : 'InspectedSpecialtyId',
+                                                      "name" : 'Specialty X'
+                                                    }
+                                                  } };
+
+      // Mock API: adding InspectedService returns an object with id,
+      // adding InspectedSpecialty returns an object with id.
+      vi.mocked(apiEntityCRUD).mockImplementation((method, entity, id, data) => {
+        if (method === 'add' && entity === 'InspectedService') {
+          return { id: 'NewInspectedServiceId' };
+        }
+        if (method === 'add' && entity === 'InspectedSpecialty') {
+          return { id: 'NewInspectedSpecialtyId' };
+        }
+        return {};
+      });
+
+      await store.updateInspectedSpecialty('LocationSvcX', 'Service X', 'SpecX', 'Specialty X', true);
+
+      // Expect InspectedService added then InspectedSpecialty added and stored
+      expect(vi.mocked(apiEntityCRUD)).toHaveBeenCalledTimes(0);
+      expect(store.inspectedServices['LocationSvcX']).toBeDefined();
+      expect(store.inspectedServices['LocationSvcX'].specialties['SpecX'].id).toBe('InspectedSpecialtyId');
+    });
+
+    it('deletes inspected specialty when selected false and specialty exists', async () => {
+      // Setup existing inspectedServices with a specialty
+      store.inspectedServices = {
+        'LocationService123': {
+          id: 'InspectedService1',
+          specialties: {
+            'Specialty1': { id: 'InspectedSpecialty1', name: 'Specialty 1' }
+          }
+        }
+      };
+
+      vi.mocked(apiEntityCRUD).mockResolvedValueOnce(true);
+
+      await store.updateInspectedSpecialty('ID123', 'LocationService123', 'Service Name', 'Specialty1', 'Specialty 1', false);
+
+      expect(vi.mocked(apiEntityCRUD)).toHaveBeenCalledWith('delete', 'InspectedSpecialty', 'InspectedSpecialty1');
+      expect(store.inspectedServices['LocationService123'].specialties['Specialty1']).toBeUndefined();
+    });
+
+    it('throws when delete API call returns false', async () => {
+      // Setup existing inspectedServices with a specialty
+      store.inspectedServices = {
+        'LocationService123': {
+          id: 'InspectedService1',
+          specialties: {
+            'Specialty1': { id: 'InspectedSpecialty1', name: 'Specialty 1' }
+          }
+        }
+      };
+
+      // Mock delete returning false to simulate API failure
+      vi.mocked(apiEntityCRUD).mockResolvedValueOnce(false);
+
+      await expect(
+        store.updateInspectedSpecialty('ID123', 'LocationService123', 'Service Name', 'Specialty1', 'Specialty 1', false)
+      ).rejects.toThrow('API call for "delete" unsuccessful');
+
+      // ensure specialty still present after failed delete
+      expect(store.inspectedServices['LocationService123'].specialties['Specialty1']).toBeDefined();
+    });
+
+  });
+
 });

@@ -195,23 +195,59 @@ export const useInspectionStore = defineStore('inspection', {
       return (this.inspectedServices[locationService]?.specialties[specialty] !== undefined);
     },
 
-    async updateInspectedSpecialty(locationService, specialtyId, specialtyName, selected) {
+    async updateInspectedSpecialty(inspectionId,
+                                   locationService,
+                                   serviceName,
+                                   specialtyId,
+                                   specialtyName,
+                                   selected) {
       if (selected) {
         if (!this.inspectedServices[locationService]) {
           this.inspectedServices[locationService] = {};
           this.inspectedServices[locationService]["id"] = "new"
           this.inspectedServices[locationService]["specialties"] = {};
           // insert the inspected service
+          const addData = {
+            "inspectionId" : inspectionId,
+            "name" : serviceName,
+            "locationServiceId" : locationService
+          };          
+          const addedService = await apiEntityCRUD("add", "InspectedService", null, addData);
+          if (!addedService || !("id" in addedService)) {
+            console.log(`API call for add returned invalid data: ${addedService}`);
+            throw new Error('API call for "add" returned invalid data');
+          } else {
+            this.inspectedServices[locationService]["id"] = addedService.id;
+          }
         }
         if (!this.inspectedServices[locationService].specialties[specialtyId]) {
           this.inspectedServices[locationService].specialties[specialtyId] = {};
           this.inspectedServices[locationService].specialties[specialtyId]["id"] = "new";
           this.inspectedServices[locationService].specialties[specialtyId]["name"] = specialtyName;
           // insert the inspected specialty
+          const addData = {
+            name : specialtyName,
+            specialtyId : specialtyId,
+            inspectedServiceId : this.inspectedServices[locationService]["id"]
+          };          
+          const addedSpecialty = await apiEntityCRUD("add", "InspectedSpecialty", null, addData);
+          if (!addedSpecialty || !("id" in addedSpecialty)) {
+            console.log(`API call for add returned invalid data: ${addedSpecialty}`);
+            throw new Error('API call for "add" returned invalid data');
+          } else {
+            this.inspectedServices[locationService].specialties[specialtyId]["id"] = addedSpecialty.id;
+          }
         }
       } else {
         if (this.inspectedServices[locationService]?.specialties[specialtyId] !== undefined) {
           // delete the inspected specialty
+          const specialtyIdToDelete = this.inspectedServices[locationService].specialties[specialtyId]["id"];
+          const result = await apiEntityCRUD("delete", "InspectedSpecialty", specialtyIdToDelete);
+          if (!result) {
+            throw new Error('API call for "delete" unsuccessful');
+          } else {
+            delete this.inspectedServices[locationService].specialties[specialtyId];
+          }  
         }
       }
     
