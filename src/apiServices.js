@@ -43,9 +43,17 @@ const apiOp = {
     params: ["name", "id"],
     apiMethod : "delete"
   },
-  link : {
+  getLinks : {
     params: ["name", "id", "link"],
     apiMethod : "get"
+  },
+  addLinks : {
+    params: ["name", "id", "link", "data"],
+    apiMethod : "post"
+  },
+  deleteLinks : {
+    params: ["name", "id", "link", "data"],
+    apiMethod : "post"
   },
 }
   
@@ -121,11 +129,13 @@ export async function apiEntityCRUD(method, entityName, entityId = null, entityD
   }
 }
 
-export async function apiEntityLinks(entityName, entityId, linkName) {
-
-  const method = "link";
+export async function apiEntityLinks(method, entityName, entityId, linkName, entityData = null) {
 
   try {
+    if ((!method) || !["getLinks","addLinks","deleteLinks"].includes(method)) {
+      throw new Error("Invalid method : " + method?.toString());    
+    }
+
     const validName = () => {    
       if (apiOp[method].params.includes("name")) {
         if (typeof entityName !== 'string') {
@@ -168,19 +178,40 @@ export async function apiEntityLinks(entityName, entityId, linkName) {
       }
     };
 
+    const validData = () => {
+      if (apiOp[method].params.includes("data")) {
+        if (!entityData) {
+          throw new Error("entityData should be defined for " + method);      
+        }    
+        if (typeof entityData !== 'object') {
+          throw new Error("entityData should be an object for " + method);      
+        }    
+        if (Object.keys(entityData).length == 0) {
+          throw new Error("entityData is empty");      
+        }
+        return entityData;  
+      } else {
+        return null;      
+      }
+    };
+    
     const apiName = validName();
     const apiId = validId();
     const apiLink = validLink();
+    const apiData = validData();
 
     const apiConfig = {
       method : apiOp[method].apiMethod,
-      url : `${apiServer}/getLinks${apiName}${(apiId ? apiId : "")}${(apiLink ? apiLink : "")}`
+      url : `${apiServer}/${method}${apiName}${(apiId ? apiId : "")}${(apiLink ? apiLink : "")}`
     }
+    if (apiData) {
+      apiConfig["data"] = apiData;    
+    }    
 
     const result = await axios(apiConfig);
     return result.data;
   } catch (error) {
-    throw new Error("apiEntityLink: " + error.message);
+    throw new Error("apiEntityLinks: " + error.message);
   }    
 
 }

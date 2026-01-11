@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { createPinia, setActivePinia } from 'pinia';
 import { ref } from 'vue';
 import { useInspectionStore } from '../src/stores/inspectionStore';
+import { useInspectedSpecialtyStore } from '../src/stores/inspectedSpecialtyStore';
 import { apiEntityCRUD, apiEntityLinks } from '../src/apiServices';
 
 // Mock dependencies
@@ -13,6 +14,7 @@ vi.mock('../src/apiServices.js');
 describe('Inspection Store', () => {
   let pinia;
   let store;
+  let inspectedStore;
   let mockInspection;
   let mockApiUpdate;
   let mockAddedRecord;
@@ -60,7 +62,6 @@ describe('Inspection Store', () => {
       status : 'Cerrada',
       locationId : 'Location123',
       locationName : 'Location 1',
-      inspectedServices : [],
     }
 
     mockUpdatedRecord = {
@@ -73,7 +74,6 @@ describe('Inspection Store', () => {
       status : 'Cerrada',
       locationId : 'Location123',
       locationName : 'Location 1',
-      inspectedServices : [],
     }
     
     mockToAdd = {
@@ -106,20 +106,19 @@ describe('Inspection Store', () => {
       status : 'Cerrada',
       locationId : 'Location123',
       locationName : 'Location 1',
-      inspectedServices : [],
     };
 
     // Mock ref
     vi.mocked(ref).mockImplementation((initialValue) => ({ value: initialValue }));
     vi.mocked(apiEntityCRUD).mockImplementation((method, entity, id, data) => {
 
-      if (method == 'query') {
+      if (method == 'query' && entity !== null ) {
         return { list : [ mockInspection ] }      
       }
       if (method == 'add' ) {
         return mockInspection;      
       }
-      if (method == 'update') {
+      if (method == 'update' && id != null && data != null) {
         return mockApiUpdate;
       }
       if (method == 'delete') {
@@ -127,8 +126,9 @@ describe('Inspection Store', () => {
       }
     });
   
-    // Initialize store
+    // Initialize stores
     store = useInspectionStore();
+    inspectedStore = useInspectedSpecialtyStore();
   });
 
   describe('addInspection', () => { 
@@ -360,13 +360,15 @@ describe('Inspection Store', () => {
       }      
       
       vi.mocked(apiEntityCRUD).mockImplementation((method, entity, id, data) => {
-  
-        if (entity == 'InspectedSpecialty' ) {
+        if(method !=='query' && id !== null && data === null) {
+          throw new Error('Invalid parameters for apiEntityCRUD mock');
+        }
+        if (method === 'query' && entity === 'InspectedSpecialty' ) {
           return { list : [ mockInspectedSpecialties ] }      
         }
       });
   
-      vi.mocked(apiEntityLinks).mockImplementation((entity, id, link) => {
+      vi.mocked(apiEntityLinks).mockImplementation((method, entity, id, link) => {
   
         if (id == 'ID1234') {
           return { list : [] }      
@@ -383,29 +385,29 @@ describe('Inspection Store', () => {
     
     it('correctly retrieves inspected services with valid parameters', async () => {
 
-      await store.getInspectedServices("ID123");
+      await inspectedStore.getInspectedServices("ID123");
       expect(vi.mocked(apiEntityLinks)).toBeCalledTimes(1);
-      expect(vi.mocked(apiEntityLinks)).toBeCalledWith("Inspection","ID123","inspectedServices");
+      expect(vi.mocked(apiEntityLinks)).toBeCalledWith("getLinks","Inspection","ID123","inspectedServices");
       expect(vi.mocked(apiEntityCRUD)).toBeCalledTimes(1);
-      expect(store.inspectedServices).toEqual(mockStoreInspectedServices);
+      expect(inspectedStore.inspectedServices).toEqual(mockStoreInspectedServices);
       
     });
 
     it('correctly retrieves inspections with no services', async () => {
 
-      await store.getInspectedServices("ID1234");
+      await inspectedStore.getInspectedServices("ID1234");
       expect(vi.mocked(apiEntityLinks)).toBeCalledTimes(1);
-      expect(vi.mocked(apiEntityLinks)).toBeCalledWith("Inspection","ID1234","inspectedServices");
-      expect(store.inspectedServices).toEqual({});
+      expect(vi.mocked(apiEntityLinks)).toBeCalledWith("getLinks","Inspection","ID1234","inspectedServices");
+      expect(inspectedStore.inspectedServices).toEqual({});
       
     });
 
     it('correctly determines a specialty exists', async () => {
 
-      await store.getInspectedServices("ID123");
-      expect(store.inspectedSpecialtySelected("LocationService123", "Specialty1")).toBe(true);
-      expect(store.inspectedSpecialtySelected("LocationService1", "Specialty1")).toBe(false);
-      expect(store.inspectedSpecialtySelected("LocationService123", "Specialty2")).toBe(false);
+      await inspectedStore.getInspectedServices("ID123");
+      expect(inspectedStore.inspectedSpecialtySelected("LocationService123", "Specialty1")).toBe(true);
+      expect(inspectedStore.inspectedSpecialtySelected("LocationService1", "Specialty1")).toBe(false);
+      expect(inspectedStore.inspectedSpecialtySelected("LocationService123", "Specialty2")).toBe(false);
       
     });
 
@@ -415,11 +417,14 @@ describe('Inspection Store', () => {
 
     it('adds inspected service and specialty when selected true and service does not exist', async () => {
       // start with no inspected services for the location
-      store.inspectedServices = {};
+      inspectedStore.inspectedServices = {};
 
       // Mock API: adding InspectedService returns an object with id,
       // adding InspectedSpecialty returns an object with id.
       vi.mocked(apiEntityCRUD).mockImplementation((method, entity, id, data) => {
+        if(method == 'add' && (id !== null || data === null)) {
+          throw new Error('Invalid parameters for apiEntityCRUD mock');
+        }
         if (method === 'add' && entity === 'InspectedService') {
           return { id: 'NewInspectedServiceId' };
         }
@@ -429,7 +434,7 @@ describe('Inspection Store', () => {
         return {};
       });
 
-      await store.updateInspectedSpecialty('ID123', 'LocationSvcX', 'Service X', 'SpecX', 'Specialty X', true);
+      await inspectedStore.updateInspectedSpecialty('ID123', 'LocationSvcX', 'Service X', 'SpecX', 'Specialty X', true);
 
       // Expect InspectedService added then InspectedSpecialty added and stored
       expect(vi.mocked(apiEntityCRUD)).toHaveBeenCalledTimes(2);
@@ -439,18 +444,21 @@ describe('Inspection Store', () => {
       expect(vi.mocked(apiEntityCRUD)).toHaveBeenCalledWith(
         'add', 'InspectedSpecialty', null, { name: 'Specialty X', specialtyId: 'SpecX', inspectedServiceId: 'NewInspectedServiceId' }
       );
-      expect(store.inspectedServices['LocationSvcX']).toBeDefined();
-      expect(store.inspectedServices['LocationSvcX'].specialties['SpecX'].id).toBe('NewInspectedSpecialtyId');
+      expect(inspectedStore.inspectedServices['LocationSvcX']).toBeDefined();
+      expect(inspectedStore.inspectedServices['LocationSvcX'].specialties['SpecX'].id).toBe('NewInspectedSpecialtyId');
     });
 
     it('adds only inspected specialty when selected true and specialty does not exist', async () => {
       // start with no inspected services for the location
-      store.inspectedServices = {};
-      store.inspectedServices['LocationSvcX'] = { "id" : 'InspectedServiceId', "specialties" : {} };
+      inspectedStore.inspectedServices = {};
+      inspectedStore.inspectedServices['LocationSvcX'] = { id: 'InspectedServiceId', specialties: {} };
 
       // Mock API: adding InspectedService returns an object with id,
       // adding InspectedSpecialty returns an object with id.
       vi.mocked(apiEntityCRUD).mockImplementation((method, entity, id, data) => {
+        if(method == 'add' && (id !== null || data === null)) {
+          throw new Error('Invalid parameters for apiEntityCRUD mock');
+        }
         if (method === 'add' && entity === 'InspectedService') {
           return { id: 'NewInspectedServiceId' };
         }
@@ -460,31 +468,28 @@ describe('Inspection Store', () => {
         return {};
       });
 
-      await store.updateInspectedSpecialty('ID123', 'LocationSvcX', 'Service X', 'SpecX', 'Specialty X', true);
+      await inspectedStore.updateInspectedSpecialty('ID123', 'LocationSvcX', 'Service X', 'SpecX', 'Specialty X', true);
 
       // Expect InspectedService added then InspectedSpecialty added and stored
       expect(vi.mocked(apiEntityCRUD)).toHaveBeenCalledTimes(1);
       expect(vi.mocked(apiEntityCRUD)).toHaveBeenCalledWith(
         'add', 'InspectedSpecialty', null, {name: 'Specialty X', specialtyId: 'SpecX', inspectedServiceId: 'InspectedServiceId' }
       );
-      expect(store.inspectedServices['LocationSvcX']).toBeDefined();
-      expect(store.inspectedServices['LocationSvcX'].specialties['SpecX'].id).toBe('NewInspectedSpecialtyId');
+      expect(inspectedStore.inspectedServices['LocationSvcX']).toBeDefined();
+      expect(inspectedStore.inspectedServices['LocationSvcX'].specialties['SpecX'].id).toBe('NewInspectedSpecialtyId');
     });
 
     it('does not add anything when selected and service and specialty exist', async () => {
       // start with no inspected services for the location
-      store.inspectedServices = {};
-      store.inspectedServices['LocationSvcX'] = { "id" : 'InspectedServiceId', 
-                                                  "specialties" : {
-                                                    "SpecX" : {
-                                                      "id" : 'InspectedSpecialtyId',
-                                                      "name" : 'Specialty X'
-                                                    }
-                                                  } };
+      inspectedStore.inspectedServices = {};
+      inspectedStore.inspectedServices['LocationSvcX'] = { id: 'InspectedServiceId', specialties: { SpecX: { id: 'InspectedSpecialtyId', name: 'Specialty X' } } };
 
       // Mock API: adding InspectedService returns an object with id,
       // adding InspectedSpecialty returns an object with id.
-      vi.mocked(apiEntityCRUD).mockImplementation((method, entity, id, data) => {
+      vi.mocked(apiEntityCRUD).mockImplementation((method, entity, id = null, data = null) => {
+        if(id === null || data === null) {
+          throw new Error('Invalid parameters for apiEntityCRUD mock');
+        }
         if (method === 'add' && entity === 'InspectedService') {
           return { id: 'NewInspectedServiceId' };
         }
@@ -494,41 +499,37 @@ describe('Inspection Store', () => {
         return {};
       });
 
-      await store.updateInspectedSpecialty('LocationSvcX', 'Service X', 'SpecX', 'Specialty X', true);
+      await inspectedStore.updateInspectedSpecialty('ID123', 'LocationSvcX', 'Service X', 'SpecX', 'Specialty X', true);
 
       // Expect InspectedService added then InspectedSpecialty added and stored
       expect(vi.mocked(apiEntityCRUD)).toHaveBeenCalledTimes(0);
-      expect(store.inspectedServices['LocationSvcX']).toBeDefined();
-      expect(store.inspectedServices['LocationSvcX'].specialties['SpecX'].id).toBe('InspectedSpecialtyId');
+      expect(inspectedStore.inspectedServices['LocationSvcX']).toBeDefined();
+      expect(inspectedStore.inspectedServices['LocationSvcX'].specialties['SpecX'].id).toBe('InspectedSpecialtyId');
     });
 
     it('deletes inspected specialty when selected false and specialty exists', async () => {
       // Setup existing inspectedServices with a specialty
-      store.inspectedServices = {
+      inspectedStore.inspectedServices = {
         'LocationService123': {
           id: 'InspectedService1',
-          specialties: {
-            'Specialty1': { id: 'InspectedSpecialty1', name: 'Specialty 1' }
-          }
+          specialties: { 'Specialty1': { id: 'InspectedSpecialty1', name: 'Specialty 1' } }
         }
       };
 
       vi.mocked(apiEntityCRUD).mockResolvedValueOnce(true);
 
-      await store.updateInspectedSpecialty('ID123', 'LocationService123', 'Service Name', 'Specialty1', 'Specialty 1', false);
+      await inspectedStore.updateInspectedSpecialty('ID123', 'LocationService123', 'Service Name', 'Specialty1', 'Specialty 1', false);
 
       expect(vi.mocked(apiEntityCRUD)).toHaveBeenCalledWith('delete', 'InspectedSpecialty', 'InspectedSpecialty1');
-      expect(store.inspectedServices['LocationService123'].specialties['Specialty1']).toBeUndefined();
+      expect(inspectedStore.inspectedServices['LocationService123'].specialties['Specialty1']).toBeUndefined();
     });
 
     it('throws when delete API call returns false', async () => {
       // Setup existing inspectedServices with a specialty
-      store.inspectedServices = {
+      inspectedStore.inspectedServices = {
         'LocationService123': {
           id: 'InspectedService1',
-          specialties: {
-            'Specialty1': { id: 'InspectedSpecialty1', name: 'Specialty 1' }
-          }
+          specialties: { 'Specialty1': { id: 'InspectedSpecialty1', name: 'Specialty 1' } }
         }
       };
 
@@ -536,13 +537,108 @@ describe('Inspection Store', () => {
       vi.mocked(apiEntityCRUD).mockResolvedValueOnce(false);
 
       await expect(
-        store.updateInspectedSpecialty('ID123', 'LocationService123', 'Service Name', 'Specialty1', 'Specialty 1', false)
+        inspectedStore.updateInspectedSpecialty('ID123', 'LocationService123', 'Service Name', 'Specialty1', 'Specialty 1', false)
       ).rejects.toThrow('API call for "delete" unsuccessful');
 
       // ensure specialty still present after failed delete
-      expect(store.inspectedServices['LocationService123'].specialties['Specialty1']).toBeDefined();
+      expect(inspectedStore.inspectedServices['LocationService123'].specialties['Specialty1']).toBeDefined();
     });
 
+  });
+
+  describe('refreshInspections', () => {
+    it('loads inspections from API and populates store', async () => {
+      store.inspections = [];
+      store.loading = false;
+
+      await store.refreshInspections();
+
+      expect(store.loading).toBe(false);
+      expect(store.inspections).toHaveLength(1);
+      expect(store.inspections[0]).toEqual(mockInspection);
+      expect(apiEntityCRUD).toHaveBeenCalledWith('query', 'Inspection', null, { deleted: false });
+    });
+
+    it('sets loading flag during refresh', async () => {
+      store.inspections = [];
+      let loadingDuringApiCall = false;
+
+      // Mock API call to capture loading state during execution
+      vi.mocked(apiEntityCRUD).mockImplementation(() => {
+        loadingDuringApiCall = store.loading;
+        return { list: [mockInspection] };
+      });
+
+      const beforeLoad = store.loading;
+      await store.refreshInspections();
+      const afterLoad = store.loading;
+
+      expect(beforeLoad).toBe(false);
+      expect(loadingDuringApiCall).toBe(true); // loading during API call
+      expect(afterLoad).toBe(false); // loading after finally block
+    });
+
+    it('handles API error and resets loading', async () => {
+      store.inspections = [];
+      const errorMsg = 'API connection failed';
+      vi.mocked(apiEntityCRUD).mockRejectedValueOnce(new Error(errorMsg));
+
+      await expect(store.refreshInspections()).rejects.toThrow(`refreshInspections: ${errorMsg}`);
+      expect(store.loading).toBe(false);
+    });
+
+    it('handles missing list in API response', async () => {
+      store.inspections = [];
+      vi.mocked(apiEntityCRUD).mockResolvedValueOnce({ total: 0 });
+
+      await expect(store.refreshInspections()).rejects.toThrow('refreshInspections: API query failed');
+      expect(store.loading).toBe(false);
+    });
+
+    it('handles empty list in API response', async () => {
+      store.inspections = [];
+      vi.mocked(apiEntityCRUD).mockResolvedValueOnce({ list: [] });
+
+      await expect(store.refreshInspections()).rejects.toThrow('refreshInspections: API query failed');
+      expect(store.loading).toBe(false);
+    });
+
+    it('correctly transforms multiple inspections from API', async () => {
+      const mockInspections = [
+        {
+          id: 'ID1',
+          code: '0001',
+          startDate: '2025-01-01',
+          endDate: '2025-01-02',
+          objective: 'obj1',
+          scope: 'scope1',
+          status: 'Open',
+          locationId: 'Loc1',
+          locationName: 'Location 1',
+        },
+        {
+          id: 'ID2',
+          code: '0002',
+          startDate: '2025-02-01',
+          endDate: '2025-02-02',
+          objective: 'obj2',
+          scope: 'scope2',
+          status: 'Closed',
+          locationId: 'Loc2',
+          locationName: 'Location 2',
+        },
+      ];
+      store.inspections = [];
+      vi.mocked(apiEntityCRUD).mockResolvedValueOnce({ list: mockInspections });
+
+      await store.refreshInspections();
+
+      expect(store.inspections).toHaveLength(2);
+      expect(store.inspections[0].id).toBe('ID1');
+      expect(store.inspections[1].id).toBe('ID2');
+      expect(store.inspections[0].code).toBe('0001');
+      expect(store.inspections[1].code).toBe('0002');
+    });
   });
 
 });

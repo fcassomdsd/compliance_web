@@ -132,6 +132,7 @@
 import { ref } from 'vue';
 import BaseManager from './BaseManager.vue';
 import { useInspectionStore } from '../stores/inspectionStore';
+import { useInspectedSpecialtyStore } from '../stores/inspectedSpecialtyStore';
 import { useLocationStore } from '../stores/locationStore';
 import { useToast } from 'vue-toastification';
 import editImg from '../images/edit.png';
@@ -143,6 +144,7 @@ import viewImg from '../images/view.png';
 
 const store = useInspectionStore();
 const locationStore = useLocationStore();
+const iSpecialtyStore = useInspectedSpecialtyStore();
 const toast = useToast();
 const appState = ref('viewing');
 const servicesState = ref(false);
@@ -235,15 +237,15 @@ const toggleServices = async () => {
 
   if (servicesState.value) {
 
-    const servicesToAdd = [];
+    
 
     // check if there are any changes that need saving
     let changed = false;
     for (const locationService of locationStore.locationServices) {
       for (const specialty of locationService.specialties) {
-        if (serviceTable.value[locationService.id][specialty.id] !== store.inspectedSpecialtySelected(locationService.id, specialty.id)) {
+        if (serviceTable.value[locationService.id][specialty.id] !== iSpecialtyStore.inspectedSpecialtySelected(locationService.id, specialty.id)) {
           changed = true;
-        }      
+        }
       }
     }
 
@@ -252,13 +254,13 @@ const toggleServices = async () => {
       try {
         for (const locationService of locationStore.locationServices) {
           for (const specialty of locationService.specialties) {
-            if (serviceTable.value[locationService.id][specialty.id] !== store.inspectedSpecialtySelected(locationService.id, specialty.id)) {
-                  await store.updateInspectedSpecialty(newInspection.value.id,
+            if (serviceTable.value[locationService.id][specialty.id] !== iSpecialtyStore.inspectedSpecialtySelected(locationService.id, specialty.id)) {
+                  await iSpecialtyStore.updateInspectedSpecialty(newInspection.value.id,
                                                        locationService.id,
                                                        locationService.name,
                                                        specialty.id,
                                                        specialty.name,
-                                                       serviceTable.value[locationService.id][specialty.id]);            
+                                                       serviceTable.value[locationService.id][specialty.id]);
             }
           }
         }
@@ -280,13 +282,13 @@ const toggleServices = async () => {
       await locationStore.loadLocationServices();    
     }
     await locationStore.getLocationServices(newInspection.value.locationId);
-    await store.getInspectedServices(newInspection.value.id);
-    
+    await iSpecialtyStore.getInspectedServices(newInspection.value.id);
+
     for (const locationService of locationStore.locationServices) {
       serviceTable.value[locationService.id] = {};
       for (const specialty of locationService.specialties) {
-        serviceTable.value[locationService.id][specialty.id] = (store.inspectedSpecialtySelected(locationService.id, specialty.id))
-      }    
+        serviceTable.value[locationService.id][specialty.id] = (iSpecialtyStore.inspectedSpecialtySelected(locationService.id, specialty.id))
+      }
     }
     appState.value = 'services';
   }
@@ -294,8 +296,13 @@ const toggleServices = async () => {
 }
 
 const toggleSpecialty = (locServiceId, specialtyId) => {
-
-  serviceTable.value[locServiceId][specialtyId] = !serviceTable.value[locServiceId][specialtyId]; 
+  if (!serviceTable.value[locServiceId]) {
+    serviceTable.value[locServiceId] = {};
+  }
+  if (serviceTable.value[locServiceId][specialtyId] === undefined) {
+    serviceTable.value[locServiceId][specialtyId] = false;
+  }
+  serviceTable.value[locServiceId][specialtyId] = !serviceTable.value[locServiceId][specialtyId];
 
 }
 

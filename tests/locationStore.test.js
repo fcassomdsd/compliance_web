@@ -1,162 +1,88 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { createPinia, setActivePinia } from 'pinia';
-import { ref } from 'vue';
+import * as apiServices from '../src/apiServices.js';
 import { useLocationStore } from '../src/stores/locationStore';
-import { apiEntityCRUD, apiEntityLinks } from '../src/apiServices';
 
-// Mock dependencies
-vi.mock('vue', () => ({
-  ref: vi.fn((refValue) => ({ "value" : refValue})),
+vi.mock('../src/apiServices.js', () => ({
+  apiEntityCRUD: vi.fn(),
 }));
-vi.mock('../src/apiServices.js');
 
-describe('Location Store', () => {
-  let pinia;
-  let store;
-  let mockLocation;
-  let mockLocationService;
-  let mockLocationSpecialties;
-  let mockLocationServiceSpecialty;
-  let mockStoreLocationServices;
-  let mockStoreServices;
-
+describe('locationStore', () => {
   beforeEach(() => {
-    pinia = createPinia();
-    setActivePinia(pinia);
     vi.clearAllMocks();
-    
-    mockLocation = {
-      id : "Location123",
-      name : "Location 1",
-      city : "Puerto Plata",
-      province : "Puerto Plata",
-      icaoCode : "MDPP",
-    }
+    const pinia = createPinia();
+    setActivePinia(pinia);
+  });
 
-    mockLocationService = {
-      id : "LocationService123",
-      name : "Location Service 1",
-      shortName : "CNS",
-      locationId : "Location123",
-      locationName : "Location 1",
-      serviceProviderId : "a01k5zfkyjee80tvsgr2kxv9vg8",
-      serviceProviderName : "Aeropuertos Dominicanos Siglo XXI  - Puerto Plata"
-    }
-    
-    mockLocationSpecialties = [
-      {
-        "id": "Specialty1",
-        "name": "Specialty 1",
-        "code": "SPEC1",
-        "parentId": "a01k0f6tzh4e46b7y45fxd8q9kg",
-        "parentName": "Comunicación, Navegación y Vigilancia (CNS)"
-      },{    
-        "id": "Specialty2",
-        "name": "Specialty 2",
-        "code": "SPEC2",
-        "parentId": "a01k0f6tzh4e46b7y45fxd8q9kg",
-        "parentName": "Comunicación, Navegación y Vigilancia (CNS)"
-      }    
-    ];
-    
-    mockLocationServiceSpecialty = [
-      {
-        locationServiceId : "LocationService123",
-        locationServiceName : "Location Service 1",
-        specialtyId : "Specialty1",
-        specialtyName : "Specialty 1"            
-        },{
-        locationServiceId : "LocationService123",
-        locationServiceName : "Location Service 1",
-        specialtyId : "Specialty2",
-        specialtyName : "Specialty 2"            
-      }
-    ]
-    
-    mockStoreServices = {
-      "Location123": [
-        {
-          "id": "LocationService123",
-          "name": "Location Service 1",
-          "specialties": [
-            {
-              "id": "Specialty1",
-              "name": "Specialty 1",
-            },
-            {
-              "id": "Specialty2",
-              "name": "Specialty 2",
-            },
-          ],
-        },
+  it('refreshLocations loads locations from API', async () => {
+    const mockApiResponse = {
+      list: [
+        { id: 'L1', icaoCode: 'AAA', name: 'Loc1', city: 'City1', province: 'Prov1' },
       ],
-    }
+    };
 
-        
-    // Mock ref
-    vi.mocked(ref).mockImplementation((initialValue) => ({ value: initialValue }));
+    vi.mocked(apiServices.apiEntityCRUD).mockResolvedValue(mockApiResponse);
 
-    vi.mocked(apiEntityCRUD).mockImplementation((method, entity, id, data) => {
-      if (entity == "LocationService") {
-        return { list : [ mockLocationService ] } 
-      }
-      if (entity == "LocationServiceSpecialty") {
-        return { list : mockLocationServiceSpecialty } 
-      }
-    });
-  
+    const store = useLocationStore();
+    await store.refreshLocations();
 
-    vi.mocked(apiEntityLinks).mockImplementation((entity, id, link) => {
-      if (link == "locationServices") {
-        return { list : [ mockLocationService ] } 
-      }
-      if (link == "specialty") {
-        return { list : mockLocationSpecialties } 
-      }
-    });
-  
-    // Initialize store
-    store = useLocationStore();
+    expect(store.locations).toHaveLength(1);
+    expect(store.locations[0]).toEqual({ id: 'L1', icaoCode: 'AAA', name: 'Loc1', city: 'City1', province: 'Prov1', locationsServices: [] });
   });
 
-  describe('loadLocationServices', () => { 
-    it('correctly retrieves location services with valid parameters', async () => {
+  it('refreshLocations throws when API returns invalid result', async () => {
+    vi.mocked(apiServices.apiEntityCRUD).mockResolvedValue({});
 
-      await store.loadLocationServices();
-      expect(vi.mocked(apiEntityCRUD)).toBeCalledTimes(2);
-      expect(vi.mocked(apiEntityCRUD)).toBeCalledWith("query", "LocationServiceSpecialty", null, { deleted: false});
-      expect(vi.mocked(apiEntityCRUD)).toBeCalledWith("query", "LocationService",null,{ deleted: false});
-      expect(store.services).toEqual(mockStoreServices);
-      
-    });
+    const store = useLocationStore();
+    await expect(store.refreshLocations()).rejects.toThrow();
   });
 
-  describe('getLocationServices', () => { 
-    it('correctly retrieves location services with valid parameters', async () => {
+  it('loadLocationServices builds services map from two API calls', async () => {
+    const mockSubquery = {
+      list: [
+        { locationServiceId: 'SVC1', locationServiceName: 'Service 1', specialtyId: 'SP1', specialtyName: 'Spec1' },
+        { locationServiceId: 'SVC1', locationServiceName: 'Service 1', specialtyId: 'SP2', specialtyName: 'Spec2' },
+      ],
+    };
 
-      const locServices = [
-        {
-          "id": "LocationService123",
-          "name": "Location Service 1",
-          "specialties": [
-            {
-              "id": "Specialty1",
-              "name": "Specialty 1",
-            },
-            {
-              "id": "Specialty2",
-              "name": "Specialty 2",
-            },
-          ],
-        },
-      ]
+    const mockServicesQuery = {
+      list: [
+        { id: 'SVC1', locationId: 'L1' },
+      ],
+    };
 
+    vi.mocked(apiServices.apiEntityCRUD).mockResolvedValueOnce(mockSubquery).mockResolvedValueOnce(mockServicesQuery);
 
-      await store.loadLocationServices();
-      await store.getLocationServices('Location123');
-      expect(store.locationServices).toEqual(locServices);
-      
-    });
+    const store = useLocationStore();
+    const loadPromise = store.loadLocationServices();
+    expect(store.loading).toBe(true);
+    await loadPromise;
+    expect(store.loading).toBe(false);
 
+    expect(store.services['L1']).toBeDefined();
+    expect(store.services['L1'][0]).toEqual({ id: 'SVC1', name: 'Service 1', specialties: [{ id: 'SP1', name: 'Spec1' }, { id: 'SP2', name: 'Spec2' }] });
+  });
+
+  it('loadLocationServices throws on missing list and resets loading', async () => {
+    vi.mocked(apiServices.apiEntityCRUD).mockResolvedValueOnce({ list: [] });
+
+    const store = useLocationStore();
+    await expect(store.loadLocationServices()).rejects.toThrow();
+    expect(store.loading).toBe(false);
+  });
+
+  it('getLocationServices sets locationServices from services map', async () => {
+    const store = useLocationStore();
+    store.services = { L1: [{ id: 'SVC1', name: 'Service 1', specialties: [] }] };
+    await store.getLocationServices('L1');
+    expect(store.locationServices).toEqual(store.services['L1']);
+  });
+
+  it('servicesLoaded getter reflects state correctly', () => {
+    const store = useLocationStore();
+    expect(store.servicesLoaded).toBe(false);
+    store.services = { any: {} };
+    store.loading = false;
+    expect(store.servicesLoaded).toBe(true);
   });
 });
