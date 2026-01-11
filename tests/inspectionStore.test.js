@@ -113,16 +113,16 @@ describe('Inspection Store', () => {
     vi.mocked(apiEntityCRUD).mockImplementation((method, entity, id, data) => {
 
       if (method == 'query' && entity !== null ) {
-        return { list : [ mockInspection ] }      
+        return { data: { list : [ mockInspection ] }, status: 200 }      
       }
       if (method == 'add' ) {
-        return mockInspection;      
+        return { data: mockInspection, status: 200 };      
       }
       if (method == 'update' && id != null && data != null) {
-        return mockApiUpdate;
+        return { data: mockApiUpdate, status: 200 };
       }
       if (method == 'delete') {
-        return true;      
+        return { data: true, status: 200 };      
       }
     });
   
@@ -172,7 +172,7 @@ describe('Inspection Store', () => {
     it('handles null add result', async () => {
 
       store.inspections = [];    
-      vi.mocked(apiEntityCRUD).mockResolvedValueOnce(null);
+      vi.mocked(apiEntityCRUD).mockResolvedValueOnce({ data: null, status: 200 });
       await expect(store.addInspection(mockToAdd)).rejects.toThrow('addInspection: API call for "add" returned invalid data');
       expect(store.inspections).toEqual([]);
       expect(apiEntityCRUD).toHaveBeenCalledWith("add","Inspection",null,addData);
@@ -183,7 +183,7 @@ describe('Inspection Store', () => {
     it('handles invalid add result', async () => {
 
       store.inspections = [];    
-      vi.mocked(apiEntityCRUD).mockResolvedValueOnce({"code" : "0225"});
+      vi.mocked(apiEntityCRUD).mockResolvedValueOnce({ data: {"code" : "0225"}, status: 200 });
       await expect(store.addInspection(mockToAdd)).rejects.toThrow('addInspection: API call for "add" returned invalid data');
       expect(store.inspections).toEqual([]);
       expect(apiEntityCRUD).toHaveBeenCalledWith("add","Inspection",null,addData);
@@ -195,7 +195,7 @@ describe('Inspection Store', () => {
 
       store.inspections = [];    
       vi.mocked(apiEntityCRUD)
-        .mockResolvedValueOnce(mockInspection)
+        .mockResolvedValueOnce({ data: mockInspection, status: 200 })
         .mockRejectedValueOnce(new Error('API query failed'));      
       await expect(store.addInspection(mockToAdd)).rejects.toThrow('addInspection: API query failed');
       expect(store.inspections).toEqual([]);
@@ -208,8 +208,8 @@ describe('Inspection Store', () => {
 
       store.inspections = [];    
       vi.mocked(apiEntityCRUD)
-        .mockResolvedValueOnce(mockInspection)
-        .mockResolvedValueOnce({"total" : 0});      
+        .mockResolvedValueOnce({ data: mockInspection, status: 200 })
+        .mockResolvedValueOnce({ data: {"total" : 0}, status: 200 });      
       await expect(store.addInspection(mockToAdd)).rejects.toThrow('addInspection: API query failed for ID123');
       expect(store.inspections).toEqual([]);
       expect(apiEntityCRUD).toHaveBeenCalledWith("add","Inspection",null,addData);
@@ -221,8 +221,8 @@ describe('Inspection Store', () => {
 
       store.inspections = [];    
       vi.mocked(apiEntityCRUD)
-        .mockResolvedValueOnce(mockInspection)
-        .mockResolvedValueOnce({"total" : 0, "list" : []});      
+        .mockResolvedValueOnce({ data: mockInspection, status: 200 })
+        .mockResolvedValueOnce({ data: {"total" : 0, "list" : []}, status: 200 });      
       await expect(store.addInspection(mockToAdd)).rejects.toThrow('addInspection: API query failed for ID123');
       expect(store.inspections).toEqual([]);
       expect(apiEntityCRUD).toHaveBeenCalledWith("add","Inspection",null,addData);
@@ -266,7 +266,7 @@ describe('Inspection Store', () => {
     it('handles null update result', async () => {
 
       store.inspections = [mockAddedRecord];    
-      vi.mocked(apiEntityCRUD).mockResolvedValueOnce(null);
+      vi.mocked(apiEntityCRUD).mockResolvedValueOnce({ data: null, status: 200 });
       await expect(store.updateInspection(mockUpdatedRecord)).rejects.toThrow('updateInspection: API call for "update" returned invalid data');
       expect(store.inspections).toEqual([mockAddedRecord]);
       expect(apiEntityCRUD).toHaveBeenCalledWith("update","Inspection","ID123",updateData);
@@ -277,7 +277,7 @@ describe('Inspection Store', () => {
     it('handles invalid update result', async () => {
 
       store.inspections = [mockAddedRecord];    
-      vi.mocked(apiEntityCRUD).mockResolvedValueOnce({"code" : "0225"});
+      vi.mocked(apiEntityCRUD).mockResolvedValueOnce({ data: {"code" : "0225"}, status: 200 });
       await expect(store.updateInspection(mockUpdatedRecord)).rejects.toThrow('updateInspection: API call for "update" returned invalid data');
       expect(store.inspections).toEqual([mockAddedRecord]);
       expect(apiEntityCRUD).toHaveBeenCalledWith("update","Inspection","ID123",updateData);
@@ -311,7 +311,7 @@ describe('Inspection Store', () => {
     it('handles invalid delete result', async () => {
 
       store.inspections = [mockAddedRecord];    
-      vi.mocked(apiEntityCRUD).mockResolvedValueOnce(false);
+      vi.mocked(apiEntityCRUD).mockResolvedValueOnce({ data: false, status: 200 });
       await expect(store.deleteInspection("ID123")).rejects.toThrow('deleteInspection: API call for "delete" unsuccessful');
       expect(store.inspections).toEqual([mockAddedRecord]);
       expect(apiEntityCRUD).toHaveBeenCalledWith("delete","Inspection","ID123");
@@ -364,20 +364,20 @@ describe('Inspection Store', () => {
           throw new Error('Invalid parameters for apiEntityCRUD mock');
         }
         if (method === 'query' && entity === 'InspectedSpecialty' ) {
-          return { list : [ mockInspectedSpecialties ] }      
+          return { data: { list : [ mockInspectedSpecialties ] }, status: 200 }      
         }
       });
   
       vi.mocked(apiEntityLinks).mockImplementation((method, entity, id, link) => {
   
         if (id == 'ID1234') {
-          return { list : [] }      
+          return { data: { list : [] }, status: 200 }      
         }
         if (link == 'inspectedServices') {
-          return { list : [ mockInspectedServices ] }      
+          return { data: { list : [ mockInspectedServices ] }, status: 200 }      
         }
         if (link == 'inspectedSpecialties' ) {
-          return { list : [ mockInspectedSpecialties ] }      
+          return { data: { list : [ mockInspectedSpecialties ] }, status: 200 }      
         }
       });
   
@@ -426,12 +426,12 @@ describe('Inspection Store', () => {
           throw new Error('Invalid parameters for apiEntityCRUD mock');
         }
         if (method === 'add' && entity === 'InspectedService') {
-          return { id: 'NewInspectedServiceId' };
+          return { data: { id: 'NewInspectedServiceId' }, status: 200 };
         }
         if (method === 'add' && entity === 'InspectedSpecialty') {
-          return { id: 'NewInspectedSpecialtyId' };
+          return { data: { id: 'NewInspectedSpecialtyId' }, status: 200 };
         }
-        return {};
+        return { data: {}, status: 200 };
       });
 
       await inspectedStore.updateInspectedSpecialty('ID123', 'LocationSvcX', 'Service X', 'SpecX', 'Specialty X', true);
@@ -460,12 +460,12 @@ describe('Inspection Store', () => {
           throw new Error('Invalid parameters for apiEntityCRUD mock');
         }
         if (method === 'add' && entity === 'InspectedService') {
-          return { id: 'NewInspectedServiceId' };
+          return { data: { id: 'NewInspectedServiceId' }, status: 200 };
         }
         if (method === 'add' && entity === 'InspectedSpecialty') {
-          return { id: 'NewInspectedSpecialtyId' };
+          return { data: { id: 'NewInspectedSpecialtyId' }, status: 200 };
         }
-        return {};
+        return { data: {}, status: 200 };
       });
 
       await inspectedStore.updateInspectedSpecialty('ID123', 'LocationSvcX', 'Service X', 'SpecX', 'Specialty X', true);
@@ -491,12 +491,12 @@ describe('Inspection Store', () => {
           throw new Error('Invalid parameters for apiEntityCRUD mock');
         }
         if (method === 'add' && entity === 'InspectedService') {
-          return { id: 'NewInspectedServiceId' };
+          return { data: { id: 'NewInspectedServiceId' }, status: 200 };
         }
         if (method === 'add' && entity === 'InspectedSpecialty') {
-          return { id: 'NewInspectedSpecialtyId' };
+          return { data: { id: 'NewInspectedSpecialtyId' }, status: 200 };
         }
-        return {};
+        return { data: {}, status: 200 };
       });
 
       await inspectedStore.updateInspectedSpecialty('ID123', 'LocationSvcX', 'Service X', 'SpecX', 'Specialty X', true);
@@ -516,7 +516,7 @@ describe('Inspection Store', () => {
         }
       };
 
-      vi.mocked(apiEntityCRUD).mockResolvedValueOnce(true);
+      vi.mocked(apiEntityCRUD).mockResolvedValueOnce({ data: true, status: 200 });
 
       await inspectedStore.updateInspectedSpecialty('ID123', 'LocationService123', 'Service Name', 'Specialty1', 'Specialty 1', false);
 
@@ -534,7 +534,7 @@ describe('Inspection Store', () => {
       };
 
       // Mock delete returning false to simulate API failure
-      vi.mocked(apiEntityCRUD).mockResolvedValueOnce(false);
+      vi.mocked(apiEntityCRUD).mockResolvedValueOnce({ data: false, status: 200 });
 
       await expect(
         inspectedStore.updateInspectedSpecialty('ID123', 'LocationService123', 'Service Name', 'Specialty1', 'Specialty 1', false)
@@ -566,7 +566,7 @@ describe('Inspection Store', () => {
       // Mock API call to capture loading state during execution
       vi.mocked(apiEntityCRUD).mockImplementation(() => {
         loadingDuringApiCall = store.loading;
-        return { list: [mockInspection] };
+        return { data: { list: [mockInspection] }, status: 200 };
       });
 
       const beforeLoad = store.loading;
@@ -589,7 +589,7 @@ describe('Inspection Store', () => {
 
     it('handles missing list in API response', async () => {
       store.inspections = [];
-      vi.mocked(apiEntityCRUD).mockResolvedValueOnce({ total: 0 });
+      vi.mocked(apiEntityCRUD).mockResolvedValueOnce({ data: { total: 0 }, status: 200 });
 
       await expect(store.refreshInspections()).rejects.toThrow('refreshInspections: API query failed');
       expect(store.loading).toBe(false);
@@ -597,7 +597,7 @@ describe('Inspection Store', () => {
 
     it('handles empty list in API response', async () => {
       store.inspections = [];
-      vi.mocked(apiEntityCRUD).mockResolvedValueOnce({ list: [] });
+      vi.mocked(apiEntityCRUD).mockResolvedValueOnce({ data: { list: [] }, status: 200 });
 
       await expect(store.refreshInspections()).rejects.toThrow('refreshInspections: API query failed');
       expect(store.loading).toBe(false);
@@ -629,7 +629,7 @@ describe('Inspection Store', () => {
         },
       ];
       store.inspections = [];
-      vi.mocked(apiEntityCRUD).mockResolvedValueOnce({ list: mockInspections });
+      vi.mocked(apiEntityCRUD).mockResolvedValueOnce({ data: { list: mockInspections }, status: 200 });
 
       await store.refreshInspections();
 

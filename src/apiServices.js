@@ -123,7 +123,7 @@ export async function apiEntityCRUD(method, entityName, entityId = null, entityD
     }    
     
     const result = await axios(apiConfig);
-    return result.data;
+    return { data: result.data, status: result.status };
   } catch (error) {
     throw new Error("apiEntityCRUD: " + error.message);
   }
@@ -209,7 +209,7 @@ export async function apiEntityLinks(method, entityName, entityId, linkName, ent
     }    
 
     const result = await axios(apiConfig);
-    return result.data;
+    return { data: result.data, status: result.status };
   } catch (error) {
     throw new Error("apiEntityLinks: " + error.message);
   }    

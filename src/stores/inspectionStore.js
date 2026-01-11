@@ -22,12 +22,12 @@ export const useInspectionStore = defineStore('inspection', {
         for (const key of Object.keys(inspectionToAdd)) {
           if (key !== 'id') addData[key] = inspectionToAdd[key];
         }
-        const addedInspection = await apiEntityCRUD('add', 'Inspection', null, addData);
+        const { data: addedInspection } = await apiEntityCRUD('add', 'Inspection', null, addData);
         if (!addedInspection || !('id' in addedInspection)) {
           throw new Error('API call for "add" returned invalid data');
         }
 
-        const wholeRecord = await apiEntityCRUD('query', 'Inspection', null, { id: addedInspection.id });
+        const { data: wholeRecord } = await apiEntityCRUD('query', 'Inspection', null, { id: addedInspection.id });
         if (!('list' in wholeRecord) || wholeRecord.list.length === 0) {
           throw new Error('API query failed for ' + addedInspection.id);
         }
@@ -68,14 +68,18 @@ export const useInspectionStore = defineStore('inspection', {
         for (const key of Object.keys(inspectionToUpdate)) {
           if (key !== 'id') updateData[key] = inspectionToUpdate[key];
         }
-        const updatedInspection = await apiEntityCRUD('update', 'Inspection', updateId, updateData);
-        if (!updatedInspection || !('id' in updatedInspection)) {
-          throw new Error('API call for "update" returned invalid data');
-        }
-        const index = this.inspections.findIndex((x) => x.id === updateId);
-        if (index === -1) throw new Error('Could not find ID in displayed list: ' + updateId);
-        for (const key of Object.keys(updatedInspection)) {
-          this.inspections[index][key] = updatedInspection[key];
+        const result = await apiEntityCRUD('update', 'Inspection', updateId, updateData);
+        // check result for a not modified status.  If not modified, do not update local record.
+        if (result.status !== 204) {
+          const updatedInspection = result.data;
+          if (!updatedInspection || !('id' in updatedInspection)) {
+            throw new Error('API call for "update" returned invalid data: ' + result.status.toString());
+          }
+          const index = this.inspections.findIndex((x) => x.id === updateId);
+          if (index === -1) throw new Error('Could not find ID in displayed list: ' + updateId);
+          for (const key of Object.keys(updatedInspection)) {
+            this.inspections[index][key] = updatedInspection[key];
+          }
         }
       } catch (error) {
         throw new Error('updateInspection: ' + error.message);
@@ -85,7 +89,7 @@ export const useInspectionStore = defineStore('inspection', {
     async deleteInspection(id) {
       try {
         if (!id || (typeof id !== 'string')) throw new Error('Invalid ID : ' + id?.toString());
-        const result = await apiEntityCRUD('delete', 'Inspection', id);
+        const { data: result } = await apiEntityCRUD('delete', 'Inspection', id);
         if (!result) throw new Error('API call for "delete" unsuccessful');
         this.inspections = this.inspections.filter((p) => p.id !== id);
       } catch (error) {
@@ -96,7 +100,7 @@ export const useInspectionStore = defineStore('inspection', {
     async refreshInspections() {
       this.loading = true;
       try {
-        const queryResults = await apiEntityCRUD('query', 'Inspection', null, { deleted: false });
+        const { data: queryResults } = await apiEntityCRUD('query', 'Inspection', null, { deleted: false });
         if (!('list' in queryResults) || queryResults.list.length === 0) throw new Error('API query failed');
         this.inspections = [];
         for (const entity of queryResults.list) {

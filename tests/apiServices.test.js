@@ -5,7 +5,7 @@ import { default as axios } from 'axios';
 
 // Mock the axios module
 vi.mock('axios', () => ({
-  default : vi.fn((config) => ({data : config })),
+  default : vi.fn((config) => ({data : config, status: 200 })),
 }));
 
 describe('apiServices', () => {
@@ -54,7 +54,8 @@ describe('apiServices', () => {
         data : { status : "Cerrada" }      
       };
       const result = await apiEntityCRUD("query", "Inspection", null, {status : "Cerrada"});
-      expect(result).toEqual(config);
+      expect(result.data).toEqual(config);
+      expect(result.status).toBe(200);
     });
 
     it('throws error for missing required parameters', async () => {
@@ -72,7 +73,8 @@ describe('apiServices', () => {
         data : { status : "Cerrada" }      
       };
       const result = await apiEntityCRUD("add", "Inspection", null, {status : "Cerrada"});
-      expect(result).toEqual(config);
+      expect(result.data).toEqual(config);
+      expect(result.status).toBe(200);
     });
 
     it('throws error for missing required parameters', async () => {
@@ -91,7 +93,8 @@ describe('apiServices', () => {
         data : { status : "Cerrada" }      
       };
       const result = await apiEntityCRUD("update", "Inspection", "123", {status : "Cerrada"});
-      expect(result).toEqual(config);
+      expect(result.data).toEqual(config);
+      expect(result.status).toBe(200);
     });
 
     it('throws error for missing required parameters', async () => {
@@ -109,7 +112,8 @@ describe('apiServices', () => {
         url : "http://localhost:1880/deleteEntity?entity=Inspection&id=123",
       };
       const result = await apiEntityCRUD("delete", "Inspection", "123", null);
-      expect(result).toEqual(config);
+      expect(result.data).toEqual(config);
+      expect(result.status).toBe(200);
     });
 
     it('throws error for missing required parameters', async () => {
@@ -166,7 +170,8 @@ describe('apiServices', () => {
         data : { ids : ["LinkId"] }      
       };
       const result = await apiEntityLinks("addLinks", "Inspection", "EntityId", "EntityLink", {ids : ["LinkId"]});
-      expect(result).toEqual(config);
+      expect(result.data).toEqual(config);
+      expect(result.status).toBe(200);
     });
 
     it('throws error for missing required parameters', async () => {
@@ -184,7 +189,8 @@ describe('apiServices', () => {
         data : { ids : ["LinkId"] }      
       };
       const result = await apiEntityLinks("deleteLinks", "Inspection", "EntityId", "EntityLink", {ids : ["LinkId"]});
-      expect(result).toEqual(config);
+      expect(result.data).toEqual(config);
+      expect(result.status).toBe(200);
     });
 
     it('throws error for missing required parameters', async () => {
@@ -201,7 +207,8 @@ describe('apiServices', () => {
         url : "http://localhost:1880/getLinks?entity=Inspection&id=EntityId&link=EntityLink",
       };
       const result = await apiEntityLinks("getLinks", "Inspection", "EntityId", "EntityLink", null);
-      expect(result).toEqual(config);
+      expect(result.data).toEqual(config);
+      expect(result.status).toBe(200);
     });
 
   }); 

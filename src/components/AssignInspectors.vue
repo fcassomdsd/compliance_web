@@ -85,7 +85,7 @@
 </template>
 
 <script setup>
-import { ref } from 'vue';
+import { onBeforeMount, ref } from 'vue';
 import BaseManager from './BaseManager.vue';
 import { useInspectionStore } from '../stores/inspectionStore';
 import { useInspectorStore } from '../stores/inspectorStore';
@@ -107,19 +107,21 @@ const specialtiesList = ref([]); // { key: string, name: string, locationService
 const allowedInspectorList = ref({});
 const assigned = ref({}); // key -> Set of inspector ids
 
-inspectionStore.refreshInspections();
-// load inspector data (list and specialties) so we can prefill assignments
+onBeforeMount(async () => {
+  // load inspections
+  await inspectionStore.refreshInspections();
 
-  inspectorStore.refreshInspectors();
+  // load inspector data (list and specialties) so we can prefill assignments
+  await inspectorStore.refreshInspectors();
 
-
-// if there are no inspectors, do not allow inspections selection
-if (inspectorStore.inspectors.length === 0) {
-  toast.warning('No inspectors available. Please add inspectors before assigning.');
-}
-
-// load inspector specialties if not already loaded
-  inspectorStore.loadInspectorSpecialties();
+  // if there are no inspectors, do not allow inspections selection
+  if (inspectorStore.inspectors.length === 0) {
+    toast.warning('No inspectors available. Please add inspectors before assigning.');
+  } else {
+    // load inspector specialties if not already loaded
+    await inspectorStore.loadInspectorSpecialties();
+  }
+});
 
 const buildSpecialtiesList = () => {
   const isAssigned = (specialtyId, inspectorId) => {

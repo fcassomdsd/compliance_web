@@ -5,7 +5,7 @@ export async function getMultivalueList(listName, criteria = null) {
     try {
       const apiData = (criteria) ? criteria : {'deleted': false};
       apiData["extensibleEnumName"] = listName;
-      const queryResults = await apiEntityCRUD("query", "ExtensibleEnumExtensibleEnumOption", null, apiData);
+      const { data: queryResults } = await apiEntityCRUD("query", "ExtensibleEnumExtensibleEnumOption", null, apiData);
       if (!('list' in queryResults) || queryResults.list.length === 0) {
         throw new Error('getMultivalueList: API query failed for multivalue attributes for : ' + listName + "/" + JSON.stringify(criteria));
       }

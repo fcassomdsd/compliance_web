@@ -20,7 +20,7 @@ export const useInspectorStore = defineStore('inspectorStore', {
     
     async refreshInspectors() {
       try {
-        const queryResults = await apiEntityCRUD("query", "Inspector", null, {"deleted" : false});
+        const { data: queryResults } = await apiEntityCRUD("query", "Inspector", null, {"deleted" : false});
         let entityObj = {};
         this.inspectors = [];
         
@@ -46,7 +46,7 @@ export const useInspectorStore = defineStore('inspectorStore', {
       
       try {
 
-        const subqueryResults = await apiEntityCRUD("query", "InspectorSpecialty", null, {deleted : false});
+        const { data: subqueryResults } = await apiEntityCRUD("query", "InspectorSpecialty", null, {deleted : false});
         if (!("list" in subqueryResults) || (subqueryResults.list.length == 0)) {
           throw new Error('API query failed');
         }

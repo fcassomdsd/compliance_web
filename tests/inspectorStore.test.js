@@ -22,7 +22,7 @@ describe('inspectorStore', () => {
       ],
     };
 
-    vi.mocked(apiServices.apiEntityCRUD).mockResolvedValue(mockApiResponse);
+    vi.mocked(apiServices.apiEntityCRUD).mockResolvedValue({ data: mockApiResponse, status: 200 });
 
     const store = useInspectorStore();
     await store.refreshInspectors();
@@ -33,7 +33,7 @@ describe('inspectorStore', () => {
   });
 
   it('refreshInspectors throws when API returns invalid result', async () => {
-    vi.mocked(apiServices.apiEntityCRUD).mockResolvedValue({});
+    vi.mocked(apiServices.apiEntityCRUD).mockResolvedValue({ data: {}, status: 200 });
 
     const store = useInspectorStore();
 
@@ -49,7 +49,7 @@ describe('inspectorStore', () => {
       ],
     };
 
-    vi.mocked(apiServices.apiEntityCRUD).mockResolvedValue(mockSubquery);
+    vi.mocked(apiServices.apiEntityCRUD).mockResolvedValue({ data: mockSubquery, status: 200 });
 
     const store = useInspectorStore();
     expect(store.loading).toBe(false);
@@ -69,7 +69,7 @@ describe('inspectorStore', () => {
   });
 
   it('loadInspectorSpecialties throws on empty list and resets loading', async () => {
-    vi.mocked(apiServices.apiEntityCRUD).mockResolvedValue({ list: [] });
+    vi.mocked(apiServices.apiEntityCRUD).mockResolvedValue({ data: { list: [] }, status: 200 });
 
     const store = useInspectorStore();
     await expect(store.loadInspectorSpecialties()).rejects.toThrow();
