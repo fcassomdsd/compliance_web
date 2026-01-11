@@ -1,11 +1,37 @@
 import js from "@eslint/js";
 import globals from "globals";
 import pluginVue from "eslint-plugin-vue";
-import json from "@eslint/json";
-import { defineConfig } from "eslint/config";
+import vueParser from "vue-eslint-parser";
 
-export default defineConfig([
-  { files: ["**/*.{js,mjs,cjs,vue}"], plugins: { js }, extends: ["js/recommended"], languageOptions: { globals: globals.browser } },
-  pluginVue.configs["flat/essential"],
-  { files: ["**/*.json"], plugins: { json }, language: "json/json", extends: ["json/recommended"] },
-]);
+export default [
+  {
+    ignores: ["node_modules/", "dist/", ".git/", "coverage/", "*.lock.json", "package-lock.json", "package.json"]
+  },
+  {
+    files: ["**/*.{js,mjs,cjs}"],
+    languageOptions: {
+      ecmaVersion: "latest",
+      sourceType: "module",
+      globals: globals.browser
+    },
+    rules: {
+      ...js.configs.recommended.rules
+    }
+  },
+  {
+    files: ["**/*.vue"],
+    languageOptions: {
+      ecmaVersion: "latest",
+      sourceType: "module",
+      globals: globals.browser,
+      parser: vueParser
+    },
+    plugins: {
+      vue: pluginVue
+    },
+    rules: {
+      ...pluginVue.configs["essential"].rules,
+      "vue/multi-word-component-names": "warn"
+    }
+  }
+];

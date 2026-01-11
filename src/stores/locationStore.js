@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia';
-import { apiEntityCRUD, apiEntityLinks } from '../apiServices';
+import { apiEntityCRUD } from '../apiServices';
 
 export const useLocationStore = defineStore('locationStore', {
 
@@ -9,7 +9,6 @@ export const useLocationStore = defineStore('locationStore', {
       services : {},
       locationServices : [],
       loading : false,
-      nextServiceId : 300
     }
 
   },
@@ -19,46 +18,6 @@ export const useLocationStore = defineStore('locationStore', {
   },
   
   actions : {
-    addLocation(name) {
-      const newLocation = { id: this.nextId++, name, services: [] };
-      this.locations.push(newLocation);
-    },
-  
-    updateLocation(updatedLocation) {
-      const index = this.locations.findIndex(loc => loc.id === updatedLocation.id);
-      if (index !== -1) {
-        this.locations[index] = updatedLocation;
-      }
-    },
-  
-    deleteLocation(id) {
-      this.locations = this.locations.filter(loc => loc.id !== id);
-    },
-    
-    // Location Service CRUD (Detail data)
-    addService (locationId, name, providerId){
-      const location = this.locations.find(loc => loc.id === locationId);
-      if (location) {
-        location.services.push({ id: this.nextServiceId++, name, providerId });
-      }
-    },
-  
-    updateService(locationId, updatedService) {
-      const location = this.locations.find(loc => loc.id === locationId);
-      if (location) {
-        const index = location.services.findIndex(svc => svc.id === updatedService.id);
-        if (index !== -1) {
-          location.services[index] = updatedService;
-        }
-      }
-    },
-  
-    deleteService(locationId, serviceId) {
-      const location = this.locations.find(loc => loc.id === locationId);
-      if (location) {
-        location.services = location.services.filter(svc => svc.id !== serviceId);
-      }
-    },
     
     async refreshLocations() {
       try {

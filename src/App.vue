@@ -11,28 +11,30 @@
         Inspection Manager
       </button>
     </div>
-    <p id="currentPath" v-if="currentView === 'Checklist'">{{ store.currentPath }}</p>
-    <LocationManager v-if="currentView === 'Location'"/>
-    <ServiceProviderManager v-if="currentView === 'Provider'"/>
-    <InspectorManager v-if="currentView === 'Inspector'"/>
+      <div>
+        <button @click="currentView = 'Inspection'" :class="{ 'active-view': currentView === 'Inspection' }">
+          Inspection Manager
+        </button>
+        <button @click="currentView = 'AssignInspectors'" :class="{ 'active-view': currentView === 'AssignInspectors' }">
+          Assign Inspectors
+        </button>
+      </div>
     <InspectionManager v-if="currentView === 'Inspection'"/>
+    <AssignInspectors v-if="currentView === 'AssignInspectors'"/>
   </div>
 </template>
 
 <script setup>
 import { ref } from 'vue'; // Import ref
-import ModalWindow from './components/ModalWindow.vue';
-// Import the new manager components
-import LocationManager from './components/LocationManager.vue';
-import ServiceProviderManager from './components/ServiceProviderManager.vue';
-import InspectorManager from './components/InspectorManager.vue';
+// Import the manager components
 import InspectionManager from './components/InspectionManager.vue';
+import AssignInspectors from './components/AssignInspectors.vue';
 
-import { useToast } from 'vue-toastification';
+// toast not used here; keep App minimal
 import logo from './images/compliance-logo.png'
 
 // Access the Pinia store
-const toast = useToast();
+// no-op
 
 // NEW: State variable to track the current view
 const currentView = ref('Inspection'); 

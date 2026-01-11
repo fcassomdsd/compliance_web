@@ -1,0 +1,157 @@
+import { defineStore } from 'pinia';
+import { apiEntityCRUD, apiEntityLinks } from '../apiServices';
+
+export const useInspectedSpecialtyStore = defineStore('inspectedSpecialty', {
+
+  state: () => ({
+    inspectedServices: {},
+    inspectedSpecialties: {},
+    inspectors: {},
+    loading: false,
+  }),
+
+  actions: {
+    async getInspectedServices(inspectionId) {
+      this.loading = true;
+      try {
+          const queryResults = await apiEntityLinks('getLinks', 'Inspection', inspectionId.toString(), 'inspectedServices');
+        if (!('list' in queryResults)) throw new Error('API query failed');
+        this.inspectedServices = {};
+        const joinObj = {};
+        for (const entity of queryResults.list) {
+          const locService = entity.locationServiceId;
+          this.inspectedServices[locService] = { id: entity.id, specialties: {} };
+          joinObj[entity.id] = locService;
+        }
+
+        if (queryResults.list.length > 0) {
+          const subquery = await apiEntityCRUD('query', 'InspectedSpecialty', null, { inspectedServiceId: Array.from(Object.keys(joinObj)) });
+          if (!('list' in subquery)) throw new Error('API subquery failed');
+          for (const inspectedSpec of subquery.list) {
+            const locService = joinObj[inspectedSpec.inspectedServiceId];
+            this.inspectedServices[locService].specialties[inspectedSpec.specialtyId] = {
+              id: inspectedSpec.id,
+              name: inspectedSpec.specialtyName,
+            };
+          }
+        }
+      } catch (error) {
+        throw new Error('getInspectedServices: ' + error.message);
+      } finally {
+        this.loading = false;
+      }
+    },
+
+    async getInspectedSpecialties(inspectionId) {
+      this.loading = true;
+      try {
+        const queryResults = await apiEntityLinks('getLinks', 'Inspection', inspectionId.toString(), 'inspectedServices');
+        if (!('list' in queryResults)) throw new Error('API query failed');
+        const joinObj = [];
+        for (const entity of queryResults.list) {
+          joinObj.push(entity.id);
+        }
+
+        if (queryResults.list.length > 0) {
+          const subquery = await apiEntityCRUD('query', 'InspectedSpecialty', null, { inspectedServiceId: joinObj });
+          if (!('list' in subquery)) throw new Error('API subquery failed');
+          this.inspectedSpecialties = {};
+          for (const inspectedSpec of subquery.list) {
+            this.inspectedSpecialties[inspectedSpec.specialtyId] = {
+              id: inspectedSpec.id,
+              name: inspectedSpec.specialtyName,
+            };
+          }
+        }
+      } catch (error) {
+        throw new Error('getInspectedSpecialties: ' + error.message);
+      } finally {
+        this.loading = false;
+      }
+    },
+
+    inspectedSpecialtySelected(locationService, specialty) {
+      return (this.inspectedServices[locationService]?.specialties[specialty] !== undefined);
+    },
+
+    async updateInspectedSpecialty(inspectionId, locationService, serviceName, specialtyId, specialtyName, selected) {
+      if (selected) {
+        if (!this.inspectedServices[locationService]) {
+          this.inspectedServices[locationService] = { id: 'new', specialties: {} };
+          // insert inspected service
+          const addData = { inspectionId, name: serviceName, locationServiceId: locationService };
+          const addedService = await apiEntityCRUD('add', 'InspectedService', null, addData);
+          if (!addedService || !('id' in addedService)) throw new Error('API call for "add" returned invalid data');
+          this.inspectedServices[locationService].id = addedService.id;
+        }
+        if (!this.inspectedServices[locationService].specialties[specialtyId]) {
+          this.inspectedServices[locationService].specialties[specialtyId] = { id: 'new', name: specialtyName };
+          const addData = { name: specialtyName, specialtyId, inspectedServiceId: this.inspectedServices[locationService].id };
+          const addedSpecialty = await apiEntityCRUD('add', 'InspectedSpecialty', null, addData);
+          if (!addedSpecialty || !('id' in addedSpecialty)) throw new Error('API call for "add" returned invalid data');
+          this.inspectedServices[locationService].specialties[specialtyId].id = addedSpecialty.id;
+        }
+      } else {
+        if (this.inspectedServices[locationService]?.specialties[specialtyId] !== undefined) {
+          const specialtyIdToDelete = this.inspectedServices[locationService].specialties[specialtyId].id;
+          const result = await apiEntityCRUD('delete', 'InspectedSpecialty', specialtyIdToDelete);
+          if (!result) throw new Error('API call for "delete" unsuccessful');
+          delete this.inspectedServices[locationService].specialties[specialtyId];
+        }
+      }
+    },
+
+    async loadActingInspectors(criteria = {deleted: false}) {
+    this.loading = true;
+
+    this.inspectors = {};
+    try {
+
+      const subqueryResults = await apiEntityCRUD("query", "InspectedSpecialtyInspector", null, criteria);
+      if (!("list" in subqueryResults)) {
+        throw new Error('API query failed');
+      }
+
+      for (const subEntity of subqueryResults.list ) {
+        this.inspectors[subEntity.inspectedSpecialtyId] = this.inspectors[subEntity.inspectedSpecialtyId] || [];
+        this.inspectors[subEntity.inspectedSpecialtyId].push( { "id" : subEntity.inspectorId , "name" : subEntity.inspectorName } );
+      }
+    } catch (error) {
+      console.log(error);
+      throw new Error('loadActingInspectors: ' + error.message);
+    } finally {
+      this.loading = false;      
+    }   
+  },
+    async linkActingInspectors(inspectedSpecialtyId, inspectors) {
+
+    try {
+
+      const subqueryResults = await apiEntityLinks("addLinks", "InspectedSpecialty", inspectedSpecialtyId, "actingInspectors", {"ids" : inspectors});
+      if (!(subqueryResults)) {
+        throw new Error('API query failed');
+      }
+    } catch (error) {
+      console.log(error);
+      throw new Error('linkActingInspectors: ' + error.message);
+  }
+},
+
+    async unlinkActingInspectors(inspectedSpecialtyId, inspectors) {
+
+    try {
+
+      const subqueryResults = await apiEntityLinks("deleteLinks", "InspectedSpecialty", inspectedSpecialtyId, "actingInspectors", {"ids" : inspectors});
+      if (!(subqueryResults)) {
+        throw new Error('API query failed');
+      }
+    } catch (error) {
+      console.log(error);
+      throw new Error('unlinkActingInspectors: ' + error.message);
+    }
+  },
+
+},
+
+
+ });

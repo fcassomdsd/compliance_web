@@ -1,28 +1,75 @@
 import { defineStore } from 'pinia';
-import { ref } from 'vue';
+import { apiEntityCRUD } from '../apiServices';
 
-export const useInspectorStore = defineStore('inspectorStore', () => {
-  const inspectors = ref([
-    { id: 1, orgId: 'ORG001', name: 'Inspector A', specialties: ['ATS', 'COM'] },
-    { id: 2, orgId: 'ORG002', name: 'Inspector B', specialties: ['MET', 'NOT'] },
-  ]);
-  let nextId = 3;
+export const useInspectorStore = defineStore('inspectorStore', {
 
-  const addInspector = (orgId, name, specialties) => {
-    const newInspector = { id: nextId++, orgId, name, specialties };
-    inspectors.value.push(newInspector);
-  };
-
-  const updateInspector = (updatedInspector) => {
-    const index = inspectors.value.findIndex(i => i.id === updatedInspector.id);
-    if (index !== -1) {
-      inspectors.value[index] = updatedInspector;
+  state : () => {
+    return {
+      inspectors : [],
+      inspectorSpecialties : {},
+      loading : false,
     }
-  };
 
-  const deleteInspector = (id) => {
-    inspectors.value = inspectors.value.filter(i => i.id !== id);
-  };
+  },
+  
+  getters: {
+    specialtiesLoaded : (state) => ((Object.keys(state.inspectorSpecialties).length > 0) && (!state.loading)),
+  },
+  
+  actions : {
+    
+    async refreshInspectors() {
+      try {
+        const queryResults = await apiEntityCRUD("query", "Inspector", null, {"deleted" : false});
+        let entityObj = {};
+        this.inspectors = [];
+        
+        for (const entity of queryResults.list ) {
+          entityObj["id"] = entity["id"];
+          entityObj["name"] = entity["name"];
+          entityObj["organizationId"] = entity["organizationId"];
+          entityObj["specialties"] = [];
+          
+          this.inspectors.push(entityObj);
+          entityObj = {};
+        }
+      } catch (error) {
+        console.log(error);
+        throw error;
+      }
+    },
+    async loadInspectorSpecialties() {
 
-  return { inspectors, addInspector, updateInspector, deleteInspector };
+      this.loading = true;
+
+      this.specialties = {};
+      
+      try {
+
+        const subqueryResults = await apiEntityCRUD("query", "InspectorSpecialty", null, {deleted : false});
+        if (!("list" in subqueryResults) || (subqueryResults.list.length == 0)) {
+          throw new Error('API query failed');
+        }
+
+        this.inspectorSpecialties = {};
+        for (const subEntity of subqueryResults.list ) {
+          if (!this.inspectorSpecialties[subEntity.specialtyId]) {
+            this.inspectorSpecialties[subEntity.specialtyId] = {};
+            this.inspectorSpecialties[subEntity.specialtyId]["id"] = subEntity.specialtyId;
+            this.inspectorSpecialties[subEntity.specialtyId]["name"] = subEntity.specialtyName;
+            this.inspectorSpecialties[subEntity.specialtyId]["inspectors"] = [];            
+          } 
+          this.inspectorSpecialties[subEntity.specialtyId].inspectors.push({ id: subEntity.inspectorId, name : subEntity.inspectorName });
+        }
+        
+      } catch (error) {
+        console.log(error);
+        throw error;
+      } finally {
+        this.loading = false;      
+      }
+      
+    },
+  },
+
 });

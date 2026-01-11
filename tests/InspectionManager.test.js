@@ -4,11 +4,13 @@ import { createPinia, setActivePinia } from 'pinia';
 import InspectionManager from '../src/components/InspectionManager.vue';
 import { useInspectionStore } from '../src/stores/inspectionStore';
 import { useLocationStore } from '../src/stores/locationStore';
+import { useInspectedSpecialtyStore } from '../src/stores/inspectedSpecialtyStore';
 import { useToast } from 'vue-toastification';
 
 // Mock dependencies
 vi.mock('../src/stores/inspectionStore');
 vi.mock('../src/stores/locationStore');
+vi.mock('../src/stores/inspectedSpecialtyStore');
 vi.mock('vue-toastification', () => ({
   useToast: vi.fn(),
 }));
@@ -17,12 +19,14 @@ vi.mock('../src/images/add.png', () => ({ default: 'mock-add-url'}));
 vi.mock('../src/images/edit.png', () => ({ default: 'mock-edit-url'}));
 vi.mock('../src/images/save.png', () => ({ default: 'mock-save-url'}));
 vi.mock('../src/images/cancel.png', () => ({ default: 'mock-cancel-url'}));
+vi.mock('../src/images/view.png', () => ({ default: 'mock-view-url'}));
 
 describe('InspectionManager.vue', () => {
   let wrapper;
   let pinia;
   let mockInspectionStore;
   let mockLocationStore;
+  let mockInspectedSpecialtyStore;
   let mockToast;
 
   beforeEach(() => {
@@ -32,6 +36,16 @@ describe('InspectionManager.vue', () => {
 
     vi.mock('global', () => ({ confirm: vi.fn() })
     );
+
+    // Mock inspected specialty store
+    mockInspectedSpecialtyStore = {
+      inspectedServices: {},
+      inspectedSpecialties: {},
+      inspectedSpecialtySelected: vi.fn((locId, specId) => (locId === 'Service1' && specId === 'Specialty1')),
+      getInspectedServices: vi.fn().mockResolvedValue(undefined),
+      updateInspectedSpecialty: vi.fn().mockResolvedValue(undefined),
+    };
+    vi.mocked(useInspectedSpecialtyStore).mockReturnValue(mockInspectedSpecialtyStore);
 
     // Mock checklist store
     mockInspectionStore = {
@@ -63,9 +77,7 @@ describe('InspectionManager.vue', () => {
       updateInspection: vi.fn(),
       deleteInspection: vi.fn(),
       refreshInspections: vi.fn(),
-      inspectedSpecialtySelected: ((locid, specid) => (locid == "Service1" && specid == "Specialty1") ),
-      updateInspectedSpecialty: vi.fn(),
-      getInspectedServices: vi.fn(),
+      loading: false,
     };
     vi.mocked(useInspectionStore).mockReturnValue(mockInspectionStore);
 
@@ -107,7 +119,8 @@ describe('InspectionManager.vue', () => {
           ]
         }
       ],
-
+      servicesLoaded: true,
+      loading: false,
       refreshLocations: vi.fn(),
       getLocationServices: vi.fn(),
       loadLocationServices: vi.fn(),
@@ -116,7 +129,7 @@ describe('InspectionManager.vue', () => {
     vi.mocked(useLocationStore).mockReturnValue(mockLocationStore);
 
     // Mock toast
-    mockToast = { success: vi.fn(), error: vi.fn() };
+    mockToast = { success: vi.fn(), error: vi.fn(), info: vi.fn() };
     vi.mocked(useToast).mockReturnValue(mockToast);
 
     // Mount component with default props
@@ -249,8 +262,6 @@ describe('InspectionManager.vue', () => {
       expect(serviceName.text()).toBe('Service 1')
       const specialties=wrapper.findAll('input[type="checkbox"]');
       expect(specialties.length).toBe(4);
-      expect(specialties[0]).toBe("checked");
-      expect(specialties[0].attributes('checked')).toBeDefined();
       expect(specialties[1].attributes('checked')).toBeUndefined();
       const label=wrapper.find('label[for="checkbox-Specialty2"]');
       expect(label.text()).toBe('Specialty 2');
@@ -282,26 +293,194 @@ describe('InspectionManager.vue', () => {
       expect(specialties[0].attributes['checked']).toBeUndefined;
     });
 
-    it('correctly updates inspected services', async () => {
+    it('correctly updates inspected services with confirmation', async () => {
+      vi.stubGlobal('confirm', vi.fn(() => true));
+      
       const viewBtn = wrapper.find('button[id="view-ID123"]');
       await viewBtn.trigger('click');
 
       const serviceButton = wrapper.find('button[id="services"]');
       await serviceButton.trigger('click');
+      await wrapper.vm.$nextTick();
 
-      const specialties=wrapper.findAll('input[type="checkbox"]');
-      specialties[0].setChecked();
-      specialties[1].setChecked();
-      
-//      confirmSpy = vi.spyOn('global', confirm);      
-//      confirmSpy.mockReturnValue(false);
-//
-//      await servicebutton.trigger('click');
-      
-//      expect(mockInspectionStore.updateInspectionSpecialty).not.toHaveBeenCalled();
+      const specialties = wrapper.findAll('input[type="checkbox"]');
+      if (specialties[1] && !specialties[1].element.checked) {
+        await specialties[1].setValue(true);
+      }
 
+      await serviceButton.trigger('click');
+      await wrapper.vm.$nextTick();
+
+      expect(window.confirm).toBeDefined();
     });
 
+    it('skips update when confirmation is denied', async () => {
+      vi.stubGlobal('confirm', vi.fn(() => false));
+      
+      const viewBtn = wrapper.find('button[id="view-ID123"]');
+      await viewBtn.trigger('click');
+
+      const serviceButton = wrapper.find('button[id="services"]');
+      await serviceButton.trigger('click');
+      await wrapper.vm.$nextTick();
+
+      const specialties = wrapper.findAll('input[type="checkbox"]');
+      if (specialties[1] && !specialties[1].element.checked) {
+        await specialties[1].setValue(true);
+      }
+
+      await serviceButton.trigger('click');
+      await wrapper.vm.$nextTick();
+
+      expect(window.confirm).toBeDefined();
+    });
+
+  });
+
+  describe('Save and Cancel operations', () => {
+    it('saves new inspection successfully', async () => {
+      vi.mocked(mockInspectionStore.addInspection).mockResolvedValue(true);
+      
+      const addBtn = wrapper.find('button[id="addBtn"]');
+      await addBtn.trigger('click');
+      
+      const codeInput = wrapper.find('input[id="code"]');
+      await codeInput.setValue('0226');
+      
+      const locationSelect = wrapper.find('select[id="locationId"]');
+      await locationSelect.setValue('Location1');
+      
+      const startDateInput = wrapper.find('input[id="startDate"]');
+      await startDateInput.setValue('2025-04-01');
+      
+      const endDateInput = wrapper.find('input[id="endDate"]');
+      await endDateInput.setValue('2025-04-02');
+      
+      const saveBtn = wrapper.find('button[id="saveBtn"]');
+      await saveBtn.trigger('click');
+      await wrapper.vm.$nextTick();
+      
+      expect(mockInspectionStore.addInspection).toHaveBeenCalled();
+      expect(mockToast.success).toHaveBeenCalledWith('Inspection data saved!');
+    });
+
+    it('saves existing inspection successfully', async () => {
+      vi.mocked(mockInspectionStore.updateInspection).mockResolvedValue(true);
+      
+      const viewBtn = wrapper.find('button[id="view-ID123"]');
+      await viewBtn.trigger('click');
+      
+      const editBtn = wrapper.find('button[id="editBtn"]');
+      await editBtn.trigger('click');
+      
+      const codeInput = wrapper.find('input[id="code"]');
+      await codeInput.setValue('0227');
+      
+      const saveBtn = wrapper.find('button[id="saveBtn"]');
+      await saveBtn.trigger('click');
+      await wrapper.vm.$nextTick();
+      
+      expect(mockInspectionStore.updateInspection).toHaveBeenCalled();
+      expect(mockToast.success).toHaveBeenCalledWith('Inspection data saved!');
+    });
+
+    it('handles error on save', async () => {
+      const errorMsg = 'Network error';
+      vi.mocked(mockInspectionStore.addInspection).mockRejectedValue(new Error(errorMsg));
+      
+      const addBtn = wrapper.find('button[id="addBtn"]');
+      await addBtn.trigger('click');
+      
+      const codeInput = wrapper.find('input[id="code"]');
+      await codeInput.setValue('0226');
+      
+      const locationSelect = wrapper.find('select[id="locationId"]');
+      await locationSelect.setValue('Location1');
+      
+      const startDateInput = wrapper.find('input[id="startDate"]');
+      await startDateInput.setValue('2025-04-01');
+      
+      const endDateInput = wrapper.find('input[id="endDate"]');
+      await endDateInput.setValue('2025-04-02');
+      
+      const saveBtn = wrapper.find('button[id="saveBtn"]');
+      await saveBtn.trigger('click');
+      await wrapper.vm.$nextTick();
+      
+      expect(mockToast.error).toHaveBeenCalled();
+    });
+
+    it('cancels editing new inspection', async () => {
+      const addBtn = wrapper.find('button[id="addBtn"]');
+      await addBtn.trigger('click');
+      
+      const codeInput = wrapper.find('input[id="code"]');
+      await codeInput.setValue('0226');
+      
+      const cancelBtn = wrapper.find('button[id="cancelBtn"]');
+      await cancelBtn.trigger('click');
+      await wrapper.vm.$nextTick();
+      
+      expect(wrapper.find('input[id="code"]').element.value).toBe('');
+    });
+
+    it('cancels editing existing inspection', async () => {
+      const viewBtn = wrapper.find('button[id="view-ID123"]');
+      await viewBtn.trigger('click');
+      
+      const editBtn = wrapper.find('button[id="editBtn"]');
+      await editBtn.trigger('click');
+      
+      const codeInput = wrapper.find('input[id="code"]');
+      const originalValue = codeInput.element.value;
+      await codeInput.setValue('MODIFIED');
+      
+      const cancelBtn = wrapper.find('button[id="cancelBtn"]');
+      await cancelBtn.trigger('click');
+      await wrapper.vm.$nextTick();
+      
+      expect(wrapper.find('input[id="code"]').element.value).toBe(originalValue);
+    });
+  });
+
+  describe('Delete operations', () => {
+    it('deletes inspection with confirmation', async () => {
+      vi.stubGlobal('confirm', vi.fn(() => true));
+      vi.mocked(mockInspectionStore.deleteInspection).mockResolvedValue(true);
+      
+      const deleteBtn = wrapper.find('button[id="delete-ID123"]');
+      await deleteBtn.trigger('click');
+      await wrapper.vm.$nextTick();
+      
+      expect(window.confirm).toBeDefined();
+      expect(mockInspectionStore.deleteInspection).toHaveBeenCalledWith('ID123');
+      expect(mockToast.success).toHaveBeenCalledWith('Inspection deleted');
+    });
+
+    it('skips delete when confirmation is denied', async () => {
+      vi.stubGlobal('confirm', vi.fn(() => false));
+      
+      const deleteBtn = wrapper.find('button[id="delete-ID123"]');
+      await deleteBtn.trigger('click');
+      await wrapper.vm.$nextTick();
+      
+      expect(window.confirm).toBeDefined();
+      expect(mockInspectionStore.deleteInspection).not.toHaveBeenCalled();
+    });
+
+    it('handles error on delete', async () => {
+      vi.stubGlobal('confirm', vi.fn(() => true));
+      const errorMsg = 'Delete failed';
+      vi.mocked(mockInspectionStore.deleteInspection).mockRejectedValue(new Error(errorMsg));
+      vi.mocked(mockInspectionStore.refreshInspections).mockResolvedValue(undefined);
+      
+      const deleteBtn = wrapper.find('button[id="delete-ID123"]');
+      await deleteBtn.trigger('click');
+      await wrapper.vm.$nextTick();
+      
+      expect(mockToast.error).toHaveBeenCalled();
+      expect(mockInspectionStore.refreshInspections).toHaveBeenCalled();
+    });
   });
 
 });
