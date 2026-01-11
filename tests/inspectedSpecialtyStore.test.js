@@ -38,8 +38,8 @@ describe('Inspected Specialty Store', () => {
         ],
       };
 
-      vi.mocked(apiEntityLinks).mockResolvedValueOnce(mockQueryResult);
-      vi.mocked(apiEntityCRUD).mockResolvedValueOnce(mockSubquery);
+      vi.mocked(apiEntityLinks).mockResolvedValueOnce({ data: mockQueryResult, status: 200 });
+      vi.mocked(apiEntityCRUD).mockResolvedValueOnce({ data: mockSubquery, status: 200 });
 
       await store.getInspectedServices('Inspection1');
 
@@ -60,7 +60,7 @@ describe('Inspected Specialty Store', () => {
     it('handles empty services list', async () => {
       const mockQueryResult = { list: [] };
 
-      vi.mocked(apiEntityLinks).mockResolvedValueOnce(mockQueryResult);
+      vi.mocked(apiEntityLinks).mockResolvedValueOnce({ data: mockQueryResult, status: 200 });
 
       await store.getInspectedServices('Inspection1');
 
@@ -78,7 +78,7 @@ describe('Inspected Specialty Store', () => {
     });
 
     it('throws error when query result missing list', async () => {
-      vi.mocked(apiEntityLinks).mockResolvedValueOnce({ total: 0 });
+      vi.mocked(apiEntityLinks).mockResolvedValueOnce({ data: { total: 0 }, status: 200 });
 
       await expect(store.getInspectedServices('Inspection1')).rejects.toThrow(
         'getInspectedServices: API query failed'
@@ -87,7 +87,7 @@ describe('Inspected Specialty Store', () => {
 
     it('toggles loading state during operation', async () => {
       const mockQueryResult = { list: [] };
-      vi.mocked(apiEntityLinks).mockResolvedValueOnce(mockQueryResult);
+      vi.mocked(apiEntityLinks).mockResolvedValueOnce({ data: mockQueryResult, status: 200 });
 
       expect(store.loading).toBe(false);
       const promise = store.getInspectedServices('Inspection1');
@@ -121,8 +121,8 @@ describe('Inspected Specialty Store', () => {
         ],
       };
 
-      vi.mocked(apiEntityLinks).mockResolvedValueOnce(mockQueryResult);
-      vi.mocked(apiEntityCRUD).mockResolvedValueOnce(mockSubquery);
+      vi.mocked(apiEntityLinks).mockResolvedValueOnce({ data: mockQueryResult, status: 200 });
+      vi.mocked(apiEntityCRUD).mockResolvedValueOnce({ data: mockSubquery, status: 200 });
 
       await store.getInspectedServices('Inspection1');
 
@@ -154,8 +154,8 @@ describe('Inspected Specialty Store', () => {
         ],
       };
 
-      vi.mocked(apiEntityLinks).mockResolvedValueOnce(mockQueryResult);
-      vi.mocked(apiEntityCRUD).mockResolvedValueOnce(mockSubquery);
+      vi.mocked(apiEntityLinks).mockResolvedValueOnce({ data: mockQueryResult, status: 200 });
+      vi.mocked(apiEntityCRUD).mockResolvedValueOnce({ data: mockSubquery, status: 200 });
 
       await store.getInspectedSpecialties('Inspection1');
 
@@ -189,8 +189,8 @@ describe('Inspected Specialty Store', () => {
         ],
       };
 
-      vi.mocked(apiEntityLinks).mockResolvedValueOnce(mockQueryResult);
-      vi.mocked(apiEntityCRUD).mockResolvedValueOnce(mockSubquery);
+      vi.mocked(apiEntityLinks).mockResolvedValueOnce({ data: mockQueryResult, status: 200 });
+      vi.mocked(apiEntityCRUD).mockResolvedValueOnce({ data: mockSubquery, status: 200 });
 
       await store.getInspectedSpecialties('Inspection1');
 
@@ -200,7 +200,7 @@ describe('Inspected Specialty Store', () => {
 
     it('handles empty services list', async () => {
       const mockQueryResult = { list: [] };
-      vi.mocked(apiEntityLinks).mockResolvedValueOnce(mockQueryResult);
+      vi.mocked(apiEntityLinks).mockResolvedValueOnce({ data: mockQueryResult, status: 200 });
 
       await store.getInspectedSpecialties('Inspection1');
 
@@ -256,8 +256,8 @@ describe('Inspected Specialty Store', () => {
       store.inspectedServices = {};
 
       vi.mocked(apiEntityCRUD)
-        .mockResolvedValueOnce({ id: 'NewInspectedServiceId' })
-        .mockResolvedValueOnce({ id: 'NewInspectedSpecialtyId' });
+        .mockResolvedValueOnce({ data: { id: 'NewInspectedServiceId' }, status: 200 })
+        .mockResolvedValueOnce({ data: { id: 'NewInspectedSpecialtyId' }, status: 200 });
 
       await store.updateInspectedSpecialty(
         'Inspection1',
@@ -294,7 +294,7 @@ describe('Inspected Specialty Store', () => {
         },
       };
 
-      vi.mocked(apiEntityCRUD).mockResolvedValueOnce({ id: 'NewInspectedSpecialtyId' });
+      vi.mocked(apiEntityCRUD).mockResolvedValueOnce({ data: { id: 'NewInspectedSpecialtyId' }, status: 200 });
 
       await store.updateInspectedSpecialty(
         'Inspection1',
@@ -345,7 +345,7 @@ describe('Inspected Specialty Store', () => {
         },
       };
 
-      vi.mocked(apiEntityCRUD).mockResolvedValueOnce(true);
+      vi.mocked(apiEntityCRUD).mockResolvedValueOnce({ data: true, status: 200 });
 
       await store.updateInspectedSpecialty(
         'Inspection1',
@@ -383,7 +383,7 @@ describe('Inspected Specialty Store', () => {
     it('throws error when add service returns invalid data', async () => {
       store.inspectedServices = {};
 
-      vi.mocked(apiEntityCRUD).mockResolvedValueOnce(null);
+      vi.mocked(apiEntityCRUD).mockResolvedValueOnce({ data: null, status: 200 });
 
       await expect(
         store.updateInspectedSpecialty(
@@ -401,8 +401,8 @@ describe('Inspected Specialty Store', () => {
       store.inspectedServices = {};
 
       vi.mocked(apiEntityCRUD)
-        .mockResolvedValueOnce({ id: 'ServiceId1' })
-        .mockResolvedValueOnce(null);
+        .mockResolvedValueOnce({ data: { id: 'ServiceId1' }, status: 200 })
+        .mockResolvedValueOnce({ data: null, status: 200 });
 
       await expect(
         store.updateInspectedSpecialty(
@@ -426,7 +426,7 @@ describe('Inspected Specialty Store', () => {
         },
       };
 
-      vi.mocked(apiEntityCRUD).mockResolvedValueOnce(false);
+      vi.mocked(apiEntityCRUD).mockResolvedValueOnce({ data: false, status: 200 });
 
       await expect(
         store.updateInspectedSpecialty(
@@ -458,7 +458,7 @@ describe('Inspected Specialty Store', () => {
         ],
       };
 
-      vi.mocked(apiEntityCRUD).mockResolvedValueOnce(mockResult);
+      vi.mocked(apiEntityCRUD).mockResolvedValueOnce({ data: mockResult, status: 200 });
 
       await store.loadActingInspectors();
 
@@ -481,7 +481,7 @@ describe('Inspected Specialty Store', () => {
 
     it('loads acting inspectors with custom criteria', async () => {
       const mockResult = { list: [] };
-      vi.mocked(apiEntityCRUD).mockResolvedValueOnce(mockResult);
+      vi.mocked(apiEntityCRUD).mockResolvedValueOnce({ data: mockResult, status: 200 });
 
       const customCriteria = { deleted: true };
       await store.loadActingInspectors(customCriteria);
@@ -507,7 +507,7 @@ describe('Inspected Specialty Store', () => {
         ],
       };
 
-      vi.mocked(apiEntityCRUD).mockResolvedValueOnce(mockResult);
+      vi.mocked(apiEntityCRUD).mockResolvedValueOnce({ data: mockResult, status: 200 });
 
       await store.loadActingInspectors();
 
@@ -517,7 +517,7 @@ describe('Inspected Specialty Store', () => {
 
     it('handles empty inspector list', async () => {
       const mockResult = { list: [] };
-      vi.mocked(apiEntityCRUD).mockResolvedValueOnce(mockResult);
+      vi.mocked(apiEntityCRUD).mockResolvedValueOnce({ data: mockResult, status: 200 });
 
       await store.loadActingInspectors();
 
@@ -525,7 +525,7 @@ describe('Inspected Specialty Store', () => {
     });
 
     it('throws error when API returns no list', async () => {
-      vi.mocked(apiEntityCRUD).mockResolvedValueOnce({ total: 0 });
+      vi.mocked(apiEntityCRUD).mockResolvedValueOnce({ data: { total: 0 }, status: 200 });
 
       await expect(store.loadActingInspectors()).rejects.toThrow('loadActingInspectors: API query failed');
     });
@@ -540,7 +540,7 @@ describe('Inspected Specialty Store', () => {
 
   describe('linkActingInspectors', () => {
     it('links inspectors to an inspected specialty', async () => {
-      vi.mocked(apiEntityLinks).mockResolvedValueOnce({ success: true });
+      vi.mocked(apiEntityLinks).mockResolvedValueOnce({ data: { success: true }, status: 200 });
 
       await store.linkActingInspectors('InspectedSpecialty1', ['Inspector1', 'Inspector2']);
 
@@ -554,7 +554,7 @@ describe('Inspected Specialty Store', () => {
     });
 
     it('handles empty inspectors array', async () => {
-      vi.mocked(apiEntityLinks).mockResolvedValueOnce({ success: true });
+      vi.mocked(apiEntityLinks).mockResolvedValueOnce({ data: { success: true }, status: 200 });
 
       await store.linkActingInspectors('InspectedSpecialty1', []);
 
@@ -568,7 +568,7 @@ describe('Inspected Specialty Store', () => {
     });
 
     it('throws error when API returns false', async () => {
-      vi.mocked(apiEntityLinks).mockResolvedValueOnce(false);
+      vi.mocked(apiEntityLinks).mockResolvedValueOnce({ data: false, status: 200 });
 
       await expect(
         store.linkActingInspectors('InspectedSpecialty1', ['Inspector1'])
@@ -586,7 +586,7 @@ describe('Inspected Specialty Store', () => {
 
   describe('unlinkActingInspectors', () => {
     it('unlinks inspectors from an inspected specialty', async () => {
-      vi.mocked(apiEntityLinks).mockResolvedValueOnce({ success: true });
+      vi.mocked(apiEntityLinks).mockResolvedValueOnce({ data: { success: true }, status: 200 });
 
       await store.unlinkActingInspectors('InspectedSpecialty1', ['Inspector1', 'Inspector2']);
 
@@ -600,7 +600,7 @@ describe('Inspected Specialty Store', () => {
     });
 
     it('handles empty inspectors array', async () => {
-      vi.mocked(apiEntityLinks).mockResolvedValueOnce({ success: true });
+      vi.mocked(apiEntityLinks).mockResolvedValueOnce({ data: { success: true }, status: 200 });
 
       await store.unlinkActingInspectors('InspectedSpecialty1', []);
 
@@ -614,7 +614,7 @@ describe('Inspected Specialty Store', () => {
     });
 
     it('throws error when API returns false', async () => {
-      vi.mocked(apiEntityLinks).mockResolvedValueOnce(false);
+      vi.mocked(apiEntityLinks).mockResolvedValueOnce({ data: false, status: 200 });
 
       await expect(
         store.unlinkActingInspectors('InspectedSpecialty1', ['Inspector1'])

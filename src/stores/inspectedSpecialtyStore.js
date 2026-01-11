@@ -14,7 +14,7 @@ export const useInspectedSpecialtyStore = defineStore('inspectedSpecialty', {
     async getInspectedServices(inspectionId) {
       this.loading = true;
       try {
-          const queryResults = await apiEntityLinks('getLinks', 'Inspection', inspectionId.toString(), 'inspectedServices');
+          const { data: queryResults } = await apiEntityLinks('getLinks', 'Inspection', inspectionId.toString(), 'inspectedServices');
         if (!('list' in queryResults)) throw new Error('API query failed');
         this.inspectedServices = {};
         const joinObj = {};
@@ -25,7 +25,7 @@ export const useInspectedSpecialtyStore = defineStore('inspectedSpecialty', {
         }
 
         if (queryResults.list.length > 0) {
-          const subquery = await apiEntityCRUD('query', 'InspectedSpecialty', null, { inspectedServiceId: Array.from(Object.keys(joinObj)) });
+          const { data: subquery } = await apiEntityCRUD('query', 'InspectedSpecialty', null, { inspectedServiceId: Array.from(Object.keys(joinObj)) });
           if (!('list' in subquery)) throw new Error('API subquery failed');
           for (const inspectedSpec of subquery.list) {
             const locService = joinObj[inspectedSpec.inspectedServiceId];
@@ -45,7 +45,7 @@ export const useInspectedSpecialtyStore = defineStore('inspectedSpecialty', {
     async getInspectedSpecialties(inspectionId) {
       this.loading = true;
       try {
-        const queryResults = await apiEntityLinks('getLinks', 'Inspection', inspectionId.toString(), 'inspectedServices');
+        const { data: queryResults } = await apiEntityLinks('getLinks', 'Inspection', inspectionId.toString(), 'inspectedServices');
         if (!('list' in queryResults)) throw new Error('API query failed');
         const joinObj = [];
         for (const entity of queryResults.list) {
@@ -53,7 +53,7 @@ export const useInspectedSpecialtyStore = defineStore('inspectedSpecialty', {
         }
 
         if (queryResults.list.length > 0) {
-          const subquery = await apiEntityCRUD('query', 'InspectedSpecialty', null, { inspectedServiceId: joinObj });
+          const { data: subquery } = await apiEntityCRUD('query', 'InspectedSpecialty', null, { inspectedServiceId: joinObj });
           if (!('list' in subquery)) throw new Error('API subquery failed');
           this.inspectedSpecialties = {};
           for (const inspectedSpec of subquery.list) {
@@ -80,21 +80,21 @@ export const useInspectedSpecialtyStore = defineStore('inspectedSpecialty', {
           this.inspectedServices[locationService] = { id: 'new', specialties: {} };
           // insert inspected service
           const addData = { inspectionId, name: serviceName, locationServiceId: locationService };
-          const addedService = await apiEntityCRUD('add', 'InspectedService', null, addData);
+          const { data: addedService } = await apiEntityCRUD('add', 'InspectedService', null, addData);
           if (!addedService || !('id' in addedService)) throw new Error('API call for "add" returned invalid data');
           this.inspectedServices[locationService].id = addedService.id;
         }
         if (!this.inspectedServices[locationService].specialties[specialtyId]) {
           this.inspectedServices[locationService].specialties[specialtyId] = { id: 'new', name: specialtyName };
           const addData = { name: specialtyName, specialtyId, inspectedServiceId: this.inspectedServices[locationService].id };
-          const addedSpecialty = await apiEntityCRUD('add', 'InspectedSpecialty', null, addData);
+          const { data: addedSpecialty } = await apiEntityCRUD('add', 'InspectedSpecialty', null, addData);
           if (!addedSpecialty || !('id' in addedSpecialty)) throw new Error('API call for "add" returned invalid data');
           this.inspectedServices[locationService].specialties[specialtyId].id = addedSpecialty.id;
         }
       } else {
         if (this.inspectedServices[locationService]?.specialties[specialtyId] !== undefined) {
           const specialtyIdToDelete = this.inspectedServices[locationService].specialties[specialtyId].id;
-          const result = await apiEntityCRUD('delete', 'InspectedSpecialty', specialtyIdToDelete);
+          const { data: result } = await apiEntityCRUD('delete', 'InspectedSpecialty', specialtyIdToDelete);
           if (!result) throw new Error('API call for "delete" unsuccessful');
           delete this.inspectedServices[locationService].specialties[specialtyId];
         }
@@ -107,7 +107,7 @@ export const useInspectedSpecialtyStore = defineStore('inspectedSpecialty', {
     this.inspectors = {};
     try {
 
-      const subqueryResults = await apiEntityCRUD("query", "InspectedSpecialtyInspector", null, criteria);
+      const { data: subqueryResults } = await apiEntityCRUD("query", "InspectedSpecialtyInspector", null, criteria);
       if (!("list" in subqueryResults)) {
         throw new Error('API query failed');
       }
@@ -127,7 +127,7 @@ export const useInspectedSpecialtyStore = defineStore('inspectedSpecialty', {
 
     try {
 
-      const subqueryResults = await apiEntityLinks("addLinks", "InspectedSpecialty", inspectedSpecialtyId, "actingInspectors", {"ids" : inspectors});
+      const { data: subqueryResults } = await apiEntityLinks("addLinks", "InspectedSpecialty", inspectedSpecialtyId, "actingInspectors", {"ids" : inspectors});
       if (!(subqueryResults)) {
         throw new Error('API query failed');
       }
@@ -141,7 +141,7 @@ export const useInspectedSpecialtyStore = defineStore('inspectedSpecialty', {
 
     try {
 
-      const subqueryResults = await apiEntityLinks("deleteLinks", "InspectedSpecialty", inspectedSpecialtyId, "actingInspectors", {"ids" : inspectors});
+      const { data: subqueryResults } = await apiEntityLinks("deleteLinks", "InspectedSpecialty", inspectedSpecialtyId, "actingInspectors", {"ids" : inspectors});
       if (!(subqueryResults)) {
         throw new Error('API query failed');
       }

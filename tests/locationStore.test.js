@@ -21,7 +21,7 @@ describe('locationStore', () => {
       ],
     };
 
-    vi.mocked(apiServices.apiEntityCRUD).mockResolvedValue(mockApiResponse);
+    vi.mocked(apiServices.apiEntityCRUD).mockResolvedValue({ data: mockApiResponse, status: 200 });
 
     const store = useLocationStore();
     await store.refreshLocations();
@@ -31,7 +31,7 @@ describe('locationStore', () => {
   });
 
   it('refreshLocations throws when API returns invalid result', async () => {
-    vi.mocked(apiServices.apiEntityCRUD).mockResolvedValue({});
+    vi.mocked(apiServices.apiEntityCRUD).mockResolvedValue({ data: {}, status: 200 });
 
     const store = useLocationStore();
     await expect(store.refreshLocations()).rejects.toThrow();
@@ -51,7 +51,7 @@ describe('locationStore', () => {
       ],
     };
 
-    vi.mocked(apiServices.apiEntityCRUD).mockResolvedValueOnce(mockSubquery).mockResolvedValueOnce(mockServicesQuery);
+    vi.mocked(apiServices.apiEntityCRUD).mockResolvedValueOnce({ data: mockSubquery, status: 200 }).mockResolvedValueOnce({ data: mockServicesQuery, status: 200 });
 
     const store = useLocationStore();
     const loadPromise = store.loadLocationServices();
@@ -64,7 +64,7 @@ describe('locationStore', () => {
   });
 
   it('loadLocationServices throws on missing list and resets loading', async () => {
-    vi.mocked(apiServices.apiEntityCRUD).mockResolvedValueOnce({ list: [] });
+    vi.mocked(apiServices.apiEntityCRUD).mockResolvedValueOnce({ data: { list: [] }, status: 200 });
 
     const store = useLocationStore();
     await expect(store.loadLocationServices()).rejects.toThrow();

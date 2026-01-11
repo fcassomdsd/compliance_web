@@ -36,7 +36,7 @@ describe('utils.js', () => {
           ],
         };
 
-        vi.mocked(apiServices.apiEntityCRUD).mockResolvedValue(mockApiResponse);
+        vi.mocked(apiServices.apiEntityCRUD).mockResolvedValue({ data: mockApiResponse, status: 200 });
 
         const result = await getMultivalueList('TestList');
 
@@ -57,7 +57,7 @@ describe('utils.js', () => {
           ],
         };
 
-        vi.mocked(apiServices.apiEntityCRUD).mockResolvedValue(mockApiResponse);
+        vi.mocked(apiServices.apiEntityCRUD).mockResolvedValue({ data: mockApiResponse, status: 200 });
 
         const result = await getMultivalueList('ServiceTypes');
 
@@ -69,7 +69,7 @@ describe('utils.js', () => {
       it('handles empty list response', async () => {
         const mockApiResponse = { list: [] };
 
-        vi.mocked(apiServices.apiEntityCRUD).mockResolvedValue(mockApiResponse);
+        vi.mocked(apiServices.apiEntityCRUD).mockResolvedValue({ data: mockApiResponse, status: 200 });
 
         await expect(getMultivalueList('EmptyList')).rejects.toThrow(
           'getMultivalueList: API query failed for multivalue attributes'
@@ -86,7 +86,7 @@ describe('utils.js', () => {
           ],
         };
 
-        vi.mocked(apiServices.apiEntityCRUD).mockResolvedValue(mockApiResponse);
+        vi.mocked(apiServices.apiEntityCRUD).mockResolvedValue({ data: mockApiResponse, status: 200 });
 
         await getMultivalueList('TestList');
 
@@ -111,7 +111,7 @@ describe('utils.js', () => {
           ],
         };
 
-        vi.mocked(apiServices.apiEntityCRUD).mockResolvedValue(mockApiResponse);
+        vi.mocked(apiServices.apiEntityCRUD).mockResolvedValue({ data: mockApiResponse, status: 200 });
 
         const customCriteria = { status: 'active', deleted: false };
         await getMultivalueList('TestList', customCriteria);
@@ -138,7 +138,7 @@ describe('utils.js', () => {
           ],
         };
 
-        vi.mocked(apiServices.apiEntityCRUD).mockResolvedValue(mockApiResponse);
+        vi.mocked(apiServices.apiEntityCRUD).mockResolvedValue({ data: mockApiResponse, status: 200 });
 
         await getMultivalueList('MyCustomList');
 
@@ -151,7 +151,7 @@ describe('utils.js', () => {
       it('throws error when API returns missing list property', async () => {
         const mockApiResponse = { data: [] };
 
-        vi.mocked(apiServices.apiEntityCRUD).mockResolvedValue(mockApiResponse);
+        vi.mocked(apiServices.apiEntityCRUD).mockResolvedValue({ data: mockApiResponse, status: 200 });
 
         await expect(getMultivalueList('TestList')).rejects.toThrow(
           'getMultivalueList: API query failed for multivalue attributes'
@@ -161,7 +161,7 @@ describe('utils.js', () => {
       it('throws error with list name and criteria in message', async () => {
         const mockApiResponse = {};
 
-        vi.mocked(apiServices.apiEntityCRUD).mockResolvedValue(mockApiResponse);
+        vi.mocked(apiServices.apiEntityCRUD).mockResolvedValue({ data: mockApiResponse, status: 200 });
 
         const criteria = { status: 'active' };
         const errorPromise = getMultivalueList('TestList', criteria);
@@ -226,7 +226,7 @@ describe('utils.js', () => {
           ],
         };
 
-        vi.mocked(apiServices.apiEntityCRUD).mockResolvedValue(mockApiResponse);
+        vi.mocked(apiServices.apiEntityCRUD).mockResolvedValue({ data: mockApiResponse, status: 200 });
 
         await getMultivalueList('TestList');
 
@@ -245,7 +245,7 @@ describe('utils.js', () => {
           ],
         };
 
-        vi.mocked(apiServices.apiEntityCRUD).mockResolvedValue(mockApiResponse);
+        vi.mocked(apiServices.apiEntityCRUD).mockResolvedValue({ data: mockApiResponse, status: 200 });
 
         await getMultivalueList('TestList');
 
@@ -263,7 +263,7 @@ describe('utils.js', () => {
           ],
         };
 
-        vi.mocked(apiServices.apiEntityCRUD).mockResolvedValue(mockApiResponse);
+        vi.mocked(apiServices.apiEntityCRUD).mockResolvedValue({ data: mockApiResponse, status: 200 });
 
         await getMultivalueList('TestList');
 
@@ -282,7 +282,7 @@ describe('utils.js', () => {
           ],
         };
 
-        vi.mocked(apiServices.apiEntityCRUD).mockResolvedValue(mockApiResponse);
+        vi.mocked(apiServices.apiEntityCRUD).mockResolvedValue({ data: mockApiResponse, status: 200 });
 
         const result = await getMultivalueList('TestList');
 
@@ -299,7 +299,7 @@ describe('utils.js', () => {
           ],
         };
 
-        vi.mocked(apiServices.apiEntityCRUD).mockResolvedValue(mockApiResponse);
+        vi.mocked(apiServices.apiEntityCRUD).mockResolvedValue({ data: mockApiResponse, status: 200 });
 
         const result = await getMultivalueList('TestList');
 
@@ -315,7 +315,7 @@ describe('utils.js', () => {
           ],
         };
 
-        vi.mocked(apiServices.apiEntityCRUD).mockResolvedValue(mockApiResponse);
+        vi.mocked(apiServices.apiEntityCRUD).mockResolvedValue({ data: mockApiResponse, status: 200 });
 
         const result = await getMultivalueList('TestList');
 
@@ -334,7 +334,7 @@ describe('utils.js', () => {
           ],
         };
 
-        vi.mocked(apiServices.apiEntityCRUD).mockResolvedValue(mockApiResponse);
+        vi.mocked(apiServices.apiEntityCRUD).mockResolvedValue({ data: mockApiResponse, status: 200 });
 
         const result = await getMultivalueList('TestList');
 
@@ -351,7 +351,7 @@ describe('utils.js', () => {
           ],
         };
 
-        vi.mocked(apiServices.apiEntityCRUD).mockResolvedValue(mockApiResponse);
+        vi.mocked(apiServices.apiEntityCRUD).mockResolvedValue({ data: mockApiResponse, status: 200 });
 
         const result = await getMultivalueList('TestList');
 
@@ -370,7 +370,7 @@ describe('utils.js', () => {
           ],
         };
 
-        vi.mocked(apiServices.apiEntityCRUD).mockResolvedValue(mockApiResponse);
+        vi.mocked(apiServices.apiEntityCRUD).mockResolvedValue({ data: mockApiResponse, status: 200 });
 
         const result = await getMultivalueList('TestList');
 
@@ -392,7 +392,7 @@ describe('utils.js', () => {
 
         const mockApiResponse = { list: largeList };
 
-        vi.mocked(apiServices.apiEntityCRUD).mockResolvedValue(mockApiResponse);
+        vi.mocked(apiServices.apiEntityCRUD).mockResolvedValue({ data: mockApiResponse, status: 200 });
 
         const result = await getMultivalueList('LargeList');
 
@@ -411,7 +411,7 @@ describe('utils.js', () => {
           ],
         };
 
-        vi.mocked(apiServices.apiEntityCRUD).mockResolvedValue(mockApiResponse);
+        vi.mocked(apiServices.apiEntityCRUD).mockResolvedValue({ data: mockApiResponse, status: 200 });
 
         const complexCriteria = {
           deleted: false,
@@ -442,7 +442,7 @@ describe('utils.js', () => {
           ],
         };
 
-        vi.mocked(apiServices.apiEntityCRUD).mockResolvedValue(mockApiResponse);
+        vi.mocked(apiServices.apiEntityCRUD).mockResolvedValue({ data: mockApiResponse, status: 200 });
 
         const result = await getMultivalueList('TestList');
 
@@ -460,7 +460,7 @@ describe('utils.js', () => {
           ],
         };
 
-        vi.mocked(apiServices.apiEntityCRUD).mockResolvedValue(mockApiResponse);
+        vi.mocked(apiServices.apiEntityCRUD).mockResolvedValue({ data: mockApiResponse, status: 200 });
 
         const result = await getMultivalueList('List-With_Special.Chars');
 
@@ -479,7 +479,7 @@ describe('utils.js', () => {
           ],
         };
 
-        vi.mocked(apiServices.apiEntityCRUD).mockResolvedValue(mockApiResponse);
+        vi.mocked(apiServices.apiEntityCRUD).mockResolvedValue({ data: mockApiResponse, status: 200 });
 
         const result = getMultivalueList('TestList');
 
