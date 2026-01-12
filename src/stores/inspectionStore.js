@@ -43,6 +43,10 @@ export const useInspectionStore = defineStore('inspection', {
           status: entity.status,
           locationId: entity.locationId,
           locationName: entity.locationName,
+          mainInspectorId: entity.mainInspectorId,
+          mainInspectorName: entity.mainInspectorName,
+          secondaryInspectorId: entity.secondaryInspectorId,
+          secondaryInspectorName: entity.secondaryInspectorName,  
         };
         this.inspections.push(entityObj);
         return true;
@@ -114,6 +118,10 @@ export const useInspectionStore = defineStore('inspection', {
             status: entity.status,
             locationId: entity.locationId,
             locationName: entity.locationName,
+            mainInspectorId: entity.mainInspectorId,
+            mainInspectorName: entity.mainInspectorName,
+            secondaryInspectorId: entity.secondaryInspectorId,
+            secondaryInspectorName: entity.secondaryInspectorName,  
           };
           this.inspections.push(obj);
         }

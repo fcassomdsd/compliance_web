@@ -35,6 +35,24 @@
         <label for="status">Status:</label>
         <span id="status"> {{ newInspection.status }} </span>
       </div>      
+      <div class="grid-cell8 grid-item">
+        <label for="mainInspector">Main Inspector:</label>
+        <select id="mainInspector" v-model="newInspection.mainInspectorId" :disabled="(appState != 'editing')">
+          <option :value="`${NONE_VALUE}`">None</option>
+          <option v-for="inspector in inspectorStore.inspectors" :key="inspector.id" :value="inspector.id">
+            {{ inspector.name }}
+          </option>
+        </select>
+      </div>      
+      <div class="grid-cell9 grid-item">
+        <label for="secondaryInspector">Secondary Inspector:</label>
+        <select id="secondaryInspector" v-model="newInspection.secondaryInspectorId" :disabled="(appState != 'editing')">
+          <option :value="`${NONE_VALUE}`">None</option>
+          <option v-for="inspector in inspectorStore.inspectors" :key="inspector.id" :value="inspector.id">
+            {{ inspector.name }}
+          </option>
+        </select>
+      </div>      
       <div class="input-buttons">
         <button id="addBtn" @click="startAdd" :disabled="appState != 'viewing'"><img :src="addImg" alt="Add" class="icon-btn" /></button>
         <button id="editBtn" @click="appState = 'editing'" :disabled="newInspection.id == null || appState != 'viewing'"><img :src="editImg" alt="Edit" class="icon-btn" /></button>
@@ -134,6 +152,7 @@ import BaseManager from './BaseManager.vue';
 import { useInspectionStore } from '../stores/inspectionStore';
 import { useInspectedSpecialtyStore } from '../stores/inspectedSpecialtyStore';
 import { useLocationStore } from '../stores/locationStore';
+import { useInspectorStore } from '../stores/inspectorStore';
 import { useToast } from 'vue-toastification';
 import editImg from '../images/edit.png';
 import deleteImg from '../images/trash.png';
@@ -144,6 +163,7 @@ import viewImg from '../images/view.png';
 
 const store = useInspectionStore();
 const locationStore = useLocationStore();
+const inspectorStore = useInspectorStore();
 const iSpecialtyStore = useInspectedSpecialtyStore();
 const toast = useToast();
 const appState = ref('viewing');
@@ -159,6 +179,8 @@ const DEFAULT_INSPECTION = {
   objective : null,
   scope : null,
   status : null,
+  mainInspectorId : NONE_VALUE.value,
+  secondaryInspectorId : NONE_VALUE.value,
 }
 
 const newInspection = ref({
@@ -170,6 +192,8 @@ const newInspection = ref({
   objective : null,
   scope : null,
   status : null,
+  mainInspectorId : NONE_VALUE.value,
+  secondaryInspectorId : NONE_VALUE.value,
   valid() {
     return (this.code?.trim().length > 0 &&
            this.locationId !== null &&
@@ -183,6 +207,7 @@ const newInspection = ref({
 
 store.refreshInspections();
 locationStore.refreshLocations();
+inspectorStore.refreshInspectors();
 
 const startAdd = () => {
   appState.value = 'editing';
@@ -315,6 +340,7 @@ const toggleSpecialty = (locServiceId, specialtyId) => {
     "grid-cell1 grid-cell2"
     "grid-cell3 grid-cell4"
     "grid-cell5 grid-cell6"
+    "grid-cell8 grid-cell9"
     "grid-cell7 grid-cell7"  
     "input-buttons input-buttons";
   gap: 1rem;
@@ -406,6 +432,13 @@ input:focus {
   grid-area: grid-cell7;
 }
 
+.grid-cell8 {
+  grid-area: grid-cell8;
+}
+.grid-cell9 {
+  grid-area: grid-cell9;
+}
+
 .input-buttons {
   grid-area: input-buttons;
   justify-self : center;
@@ -487,7 +520,9 @@ input:focus {
       "grid-cell4"
       "grid-cell5"
       "grid-cell6"
-      "grid-cell7"  
+      "grid-cell7"
+      "grid-cell8"
+      "grid-cell9"
       "input-buttons"; 
     }
   .data-table {

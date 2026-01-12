@@ -5,12 +5,14 @@ import InspectionManager from '../src/components/InspectionManager.vue';
 import { useInspectionStore } from '../src/stores/inspectionStore';
 import { useLocationStore } from '../src/stores/locationStore';
 import { useInspectedSpecialtyStore } from '../src/stores/inspectedSpecialtyStore';
+import { useInspectorStore } from '../src/stores/inspectorStore';
 import { useToast } from 'vue-toastification';
 
 // Mock dependencies
 vi.mock('../src/stores/inspectionStore');
 vi.mock('../src/stores/locationStore');
 vi.mock('../src/stores/inspectedSpecialtyStore');
+vi.mock('../src/stores/inspectorStore');
 vi.mock('vue-toastification', () => ({
   useToast: vi.fn(),
 }));
@@ -27,6 +29,7 @@ describe('InspectionManager.vue', () => {
   let mockInspectionStore;
   let mockLocationStore;
   let mockInspectedSpecialtyStore;
+  let mockInspectorStore;
   let mockToast;
 
   beforeEach(() => {
@@ -60,6 +63,8 @@ describe('InspectionManager.vue', () => {
           status : 'Cerrada',
           locationId : 'Location1',
           locationName : 'Location 1',
+          mainInspectorId : 'Inspector1',
+          secondaryInspectorId : 'Inspector2',
         }
       ],
       inspectedServices : {
@@ -127,6 +132,29 @@ describe('InspectionManager.vue', () => {
       queryLocationServices: vi.fn(),
     };
     vi.mocked(useLocationStore).mockReturnValue(mockLocationStore);
+
+    // Mock inspector store
+    mockInspectorStore = {
+      inspectors: [
+        {
+          id: 'Inspector1',
+          name: 'Inspector One',
+        },
+        {
+          id: 'Inspector2',
+          name: 'Inspector Two',
+        },
+        {
+          id: 'Inspector3',
+          name: 'Inspector Three',
+        },
+      ],
+      inspectorSpecialties: {},
+      loading: false,
+      refreshInspectors: vi.fn(),
+      loadInspectorSpecialties: vi.fn(),
+    };
+    vi.mocked(useInspectorStore).mockReturnValue(mockInspectorStore);
 
     // Mock toast
     mockToast = { success: vi.fn(), error: vi.fn(), info: vi.fn() };
@@ -480,6 +508,183 @@ describe('InspectionManager.vue', () => {
       
       expect(mockToast.error).toHaveBeenCalled();
       expect(mockInspectionStore.refreshInspections).toHaveBeenCalled();
+    });
+  });
+
+  describe('Main and Secondary Inspector Assignment', () => {
+    it('renders main inspector dropdown with label', () => {
+      expect(wrapper.find('label[for="mainInspector"]').text()).toBe('Main Inspector:');
+      expect(wrapper.find('select#mainInspector').exists()).toBe(true);
+    });
+
+    it('renders secondary inspector dropdown with label', () => {
+      expect(wrapper.find('label[for="secondaryInspector"]').text()).toBe('Secondary Inspector:');
+      expect(wrapper.find('select#secondaryInspector').exists()).toBe(true);
+    });
+
+    it('displays all inspectors in main inspector dropdown', () => {
+      const mainInspectorSelect = wrapper.find('select#mainInspector');
+      const options = mainInspectorSelect.findAll('option');
+      
+      // Should have "None" + 3 inspectors = 4 options
+      expect(options.length).toBe(4);
+      expect(options[0].text()).toBe('None');
+      expect(options[1].text()).toBe('Inspector One');
+      expect(options[2].text()).toBe('Inspector Two');
+      expect(options[3].text()).toBe('Inspector Three');
+    });
+
+    it('displays all inspectors in secondary inspector dropdown', () => {
+      const secondaryInspectorSelect = wrapper.find('select#secondaryInspector');
+      const options = secondaryInspectorSelect.findAll('option');
+      
+      // Should have "None" + 3 inspectors = 4 options
+      expect(options.length).toBe(4);
+      expect(options[0].text()).toBe('None');
+      expect(options[1].text()).toBe('Inspector One');
+      expect(options[2].text()).toBe('Inspector Two');
+      expect(options[3].text()).toBe('Inspector Three');
+    });
+
+    it('loads existing inspection with main inspector', async () => {
+      const viewBtn = wrapper.find('button[id="view-ID123"]');
+      await viewBtn.trigger('click');
+      await wrapper.vm.$nextTick();
+      
+      const mainInspectorSelect = wrapper.find('select#mainInspector');
+      expect(mainInspectorSelect.element.value).toBe('Inspector1');
+    });
+
+    it('loads existing inspection with secondary inspector', async () => {
+      const viewBtn = wrapper.find('button[id="view-ID123"]');
+      await viewBtn.trigger('click');
+      await wrapper.vm.$nextTick();
+      
+      const secondaryInspectorSelect = wrapper.find('select#secondaryInspector');
+      expect(secondaryInspectorSelect.element.value).toBe('Inspector2');
+    });
+
+    it('updates main inspector when dropdown selection changes', async () => {
+      const viewBtn = wrapper.find('button[id="view-ID123"]');
+      await viewBtn.trigger('click');
+      await wrapper.vm.$nextTick();
+      
+      const editBtn = wrapper.find('button[id="editBtn"]');
+      await editBtn.trigger('click');
+      await wrapper.vm.$nextTick();
+      
+      const mainInspectorSelect = wrapper.find('select#mainInspector');
+      await mainInspectorSelect.setValue('Inspector2');
+      
+      expect(wrapper.vm.newInspection.mainInspectorId).toBe('Inspector2');
+    });
+
+    it('updates secondary inspector when dropdown selection changes', async () => {
+      const viewBtn = wrapper.find('button[id="view-ID123"]');
+      await viewBtn.trigger('click');
+      await wrapper.vm.$nextTick();
+      
+      const editBtn = wrapper.find('button[id="editBtn"]');
+      await editBtn.trigger('click');
+      await wrapper.vm.$nextTick();
+      
+      const secondaryInspectorSelect = wrapper.find('select#secondaryInspector');
+      await secondaryInspectorSelect.setValue('Inspector3');
+      
+      expect(wrapper.vm.newInspection.secondaryInspectorId).toBe('Inspector3');
+    });
+
+    it('can clear main inspector by selecting None', async () => {
+      const viewBtn = wrapper.find('button[id="view-ID123"]');
+      await viewBtn.trigger('click');
+      await wrapper.vm.$nextTick();
+      
+      const editBtn = wrapper.find('button[id="editBtn"]');
+      await editBtn.trigger('click');
+      await wrapper.vm.$nextTick();
+      
+      const mainInspectorSelect = wrapper.find('select#mainInspector');
+      await mainInspectorSelect.setValue('NONE');
+      
+      expect(wrapper.vm.newInspection.mainInspectorId).toBe('NONE');
+    });
+
+    it('calls updateInspection when saving modified inspectors', async () => {
+      vi.mocked(mockInspectionStore.updateInspection).mockResolvedValue(undefined);
+      
+      const viewBtn = wrapper.find('button[id="view-ID123"]');
+      await viewBtn.trigger('click');
+      await wrapper.vm.$nextTick();
+      
+      const editBtn = wrapper.find('button[id="editBtn"]');
+      await editBtn.trigger('click');
+      await wrapper.vm.$nextTick();
+      
+      const mainInspectorSelect = wrapper.find('select#mainInspector');
+      await mainInspectorSelect.setValue('Inspector3');
+      
+      const saveBtn = wrapper.find('button[id="saveBtn"]');
+      await saveBtn.trigger('click');
+      await wrapper.vm.$nextTick();
+      
+      expect(mockInspectionStore.updateInspection).toHaveBeenCalled();
+    });
+
+    it('disables inspector dropdowns when not in editing mode', async () => {
+      const mainInspectorSelect = wrapper.find('select#mainInspector');
+      const secondaryInspectorSelect = wrapper.find('select#secondaryInspector');
+      
+      expect(mainInspectorSelect.attributes('disabled')).toBeDefined();
+      expect(secondaryInspectorSelect.attributes('disabled')).toBeDefined();
+    });
+
+    it('enables inspector dropdowns when in editing mode', async () => {
+      const viewBtn = wrapper.find('button[id="view-ID123"]');
+      await viewBtn.trigger('click');
+      await wrapper.vm.$nextTick();
+      
+      const editBtn = wrapper.find('button[id="editBtn"]');
+      await editBtn.trigger('click');
+      await wrapper.vm.$nextTick();
+      
+      const mainInspectorSelect = wrapper.find('select#mainInspector');
+      const secondaryInspectorSelect = wrapper.find('select#secondaryInspector');
+      
+      expect(mainInspectorSelect.attributes('disabled')).toBeUndefined();
+      expect(secondaryInspectorSelect.attributes('disabled')).toBeUndefined();
+    });
+
+    it('preserves inspector selections when canceling edit', async () => {
+      const viewBtn = wrapper.find('button[id="view-ID123"]');
+      await viewBtn.trigger('click');
+      await wrapper.vm.$nextTick();
+      
+      const editBtn = wrapper.find('button[id="editBtn"]');
+      await editBtn.trigger('click');
+      await wrapper.vm.$nextTick();
+      
+      const mainInspectorSelect = wrapper.find('select#mainInspector');
+      await mainInspectorSelect.setValue('Inspector3');
+      
+      const cancelBtn = wrapper.find('button[id="cancelBtn"]');
+      await cancelBtn.trigger('click');
+      await wrapper.vm.$nextTick();
+      
+      // Should revert to original value
+      expect(wrapper.vm.newInspection.mainInspectorId).toBe('Inspector1');
+    });
+
+    it('sets inspectors to None when creating new inspection', async () => {
+      const addBtn = wrapper.find('button[id="addBtn"]');
+      await addBtn.trigger('click');
+      await wrapper.vm.$nextTick();
+      
+      expect(wrapper.vm.newInspection.mainInspectorId).toBe('NONE');
+      expect(wrapper.vm.newInspection.secondaryInspectorId).toBe('NONE');
+    });
+
+    it('calls refreshInspectors on component mount', () => {
+      expect(mockInspectorStore.refreshInspectors).toHaveBeenCalled();
     });
   });
 
