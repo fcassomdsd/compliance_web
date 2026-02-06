@@ -18,9 +18,13 @@
         <button @click="currentView = 'AssignInspectors'" :class="{ 'active-view': currentView === 'AssignInspectors' }">
           Assign Inspectors
         </button>
+        <button @click="currentView = 'Checklist'" :class="{ 'active-view': currentView === 'Checklist' }">
+          Inspection Checklist
+        </button>
       </div>
     <InspectionManager v-if="currentView === 'Inspection'"/>
     <AssignInspectors v-if="currentView === 'AssignInspectors'"/>
+    <ChecklistManager v-if="currentView === 'Checklist'"/>
   </div>
 </template>
 
@@ -29,6 +33,7 @@ import { ref } from 'vue'; // Import ref
 // Import the manager components
 import InspectionManager from './components/InspectionManager.vue';
 import AssignInspectors from './components/AssignInspectors.vue';
+import ChecklistManager from './components/ChecklistManager.vue';
 
 // toast not used here; keep App minimal
 import logo from './images/compliance-logo.png'
