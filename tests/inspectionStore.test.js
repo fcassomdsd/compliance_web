@@ -354,6 +354,7 @@ describe('Inspection Store', () => {
             "Specialty1" : {
               id : "InspectedSpecialty1",
               name : "Specialty 1",
+              inspectionId: "ID123",
             }          
           }        
         }
@@ -442,7 +443,7 @@ describe('Inspection Store', () => {
         'add', 'InspectedService', null, { inspectionId : 'ID123', name: 'Service X', locationServiceId: 'LocationSvcX' }
       );
       expect(vi.mocked(apiEntityCRUD)).toHaveBeenCalledWith(
-        'add', 'InspectedSpecialty', null, { name: 'Specialty X', specialtyId: 'SpecX', inspectedServiceId: 'NewInspectedServiceId' }
+        'add', 'InspectedSpecialty', null, { name: 'Specialty X', specialtyId: 'SpecX', inspectionId: 'ID123', inspectedServiceId: 'NewInspectedServiceId' }
       );
       expect(inspectedStore.inspectedServices['LocationSvcX']).toBeDefined();
       expect(inspectedStore.inspectedServices['LocationSvcX'].specialties['SpecX'].id).toBe('NewInspectedSpecialtyId');
@@ -473,7 +474,7 @@ describe('Inspection Store', () => {
       // Expect InspectedService added then InspectedSpecialty added and stored
       expect(vi.mocked(apiEntityCRUD)).toHaveBeenCalledTimes(1);
       expect(vi.mocked(apiEntityCRUD)).toHaveBeenCalledWith(
-        'add', 'InspectedSpecialty', null, {name: 'Specialty X', specialtyId: 'SpecX', inspectedServiceId: 'InspectedServiceId' }
+        'add', 'InspectedSpecialty', null, {name: 'Specialty X', specialtyId: 'SpecX', inspectionId: 'ID123', inspectedServiceId: 'InspectedServiceId' }
       );
       expect(inspectedStore.inspectedServices['LocationSvcX']).toBeDefined();
       expect(inspectedStore.inspectedServices['LocationSvcX'].specialties['SpecX'].id).toBe('NewInspectedSpecialtyId');

@@ -34,6 +34,7 @@ describe('Inspected Specialty Store', () => {
             inspectedServiceId: 'InspectedService1',
             specialtyId: 'Specialty1',
             specialtyName: 'Specialty One',
+            inspectionId: 'Inspection1',
           },
         ],
       };
@@ -53,6 +54,7 @@ describe('Inspected Specialty Store', () => {
       expect(store.inspectedServices['LocationService1'].specialties['Specialty1']).toEqual({
         id: 'InspectedSpecialty1',
         name: 'Specialty One',
+        inspectionId: 'Inspection1',
       });
       expect(store.loading).toBe(false);
     });
@@ -137,37 +139,29 @@ describe('Inspected Specialty Store', () => {
       const mockQueryResult = {
         list: [
           {
-            id: 'InspectedService1',
-            locationServiceId: 'LocationService1',
-          },
-        ],
-      };
-
-      const mockSubquery = {
-        list: [
-          {
             id: 'InspectedSpecialty1',
             inspectedServiceId: 'InspectedService1',
             specialtyId: 'Specialty1',
             specialtyName: 'Specialty One',
+            inspectionId: 'Inspection1',
           },
         ],
       };
 
-      vi.mocked(apiEntityLinks).mockResolvedValueOnce({ data: mockQueryResult, status: 200 });
-      vi.mocked(apiEntityCRUD).mockResolvedValueOnce({ data: mockSubquery, status: 200 });
+      vi.mocked(apiEntityCRUD).mockResolvedValueOnce({ data: mockQueryResult, status: 200 });
 
       await store.getInspectedSpecialties('Inspection1');
 
-      expect(apiEntityLinks).toHaveBeenCalledWith(
-        'getLinks',
-        'Inspection',
-        'Inspection1',
-        'inspectedServices'
+      expect(apiEntityCRUD).toHaveBeenCalledWith(
+        'query',
+        'InspectedSpecialty',
+        null,
+        { inspectionId: 'Inspection1' }
       );
       expect(store.inspectedSpecialties['Specialty1']).toEqual({
         id: 'InspectedSpecialty1',
         name: 'Specialty One',
+        inspectionId: 'Inspection1',
       });
     });
 
@@ -175,10 +169,6 @@ describe('Inspected Specialty Store', () => {
       store.inspectedSpecialties = { 'OldSpecialty': { id: 'Old' } };
 
       const mockQueryResult = {
-        list: [{ id: 'InspectedService1', locationServiceId: 'LocationService1' }],
-      };
-
-      const mockSubquery = {
         list: [
           {
             id: 'InspectedSpecialty1',
@@ -189,8 +179,7 @@ describe('Inspected Specialty Store', () => {
         ],
       };
 
-      vi.mocked(apiEntityLinks).mockResolvedValueOnce({ data: mockQueryResult, status: 200 });
-      vi.mocked(apiEntityCRUD).mockResolvedValueOnce({ data: mockSubquery, status: 200 });
+      vi.mocked(apiEntityCRUD).mockResolvedValueOnce({ data: mockQueryResult, status: 200 });
 
       await store.getInspectedSpecialties('Inspection1');
 
@@ -200,7 +189,7 @@ describe('Inspected Specialty Store', () => {
 
     it('handles empty services list', async () => {
       const mockQueryResult = { list: [] };
-      vi.mocked(apiEntityLinks).mockResolvedValueOnce({ data: mockQueryResult, status: 200 });
+      vi.mocked(apiEntityCRUD).mockResolvedValueOnce({ data: mockQueryResult, status: 200 });
 
       await store.getInspectedSpecialties('Inspection1');
 
@@ -208,7 +197,7 @@ describe('Inspected Specialty Store', () => {
     });
 
     it('throws error when query fails', async () => {
-      vi.mocked(apiEntityLinks).mockRejectedValueOnce(new Error('Query failed'));
+      vi.mocked(apiEntityCRUD).mockRejectedValueOnce(new Error('Query failed'));
 
       await expect(store.getInspectedSpecialties('Inspection1')).rejects.toThrow(
         'getInspectedSpecialties: Query failed'
@@ -277,12 +266,16 @@ describe('Inspected Specialty Store', () => {
       expect(apiEntityCRUD).toHaveBeenNthCalledWith(2, 'add', 'InspectedSpecialty', null, {
         name: 'Specialty Name',
         specialtyId: 'Specialty1',
+        inspectionId: 'Inspection1',
         inspectedServiceId: 'NewInspectedServiceId',
       });
 
       expect(store.inspectedServices['LocationService1'].id).toBe('NewInspectedServiceId');
       expect(store.inspectedServices['LocationService1'].specialties['Specialty1'].id).toBe(
         'NewInspectedSpecialtyId'
+      );
+      expect(store.inspectedServices['LocationService1'].specialties['Specialty1'].inspectionId).toBe(
+        'Inspection1'
       );
     });
 
@@ -309,6 +302,7 @@ describe('Inspected Specialty Store', () => {
       expect(apiEntityCRUD).toHaveBeenCalledWith('add', 'InspectedSpecialty', null, {
         name: 'Specialty Name',
         specialtyId: 'Specialty1',
+        inspectionId: 'Inspection1',
         inspectedServiceId: 'ExistingServiceId',
       });
     });
