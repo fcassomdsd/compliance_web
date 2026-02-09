@@ -63,6 +63,7 @@
     <div class="detail-group">
       <div class="detail-buttons">
         <button id="services" class="push-button" :class="{'button-down' : servicesState}" :disabled="appState == 'editing' || !newInspection.id" @click="toggleServices()">Services</button>
+        <button id="schedules" class="push-button" :class="{'button-down' : schedulesState}" :disabled="appState == 'editing' || !newInspection.id" @click="toggleSchedules()">Schedules</button>
       </div>
       <div id="services" class="service-group" v-show="servicesState" >
         <table class="service-table">
@@ -98,6 +99,56 @@
             </td>          
           </tr>
         </table>
+      </div>
+      <div id="schedules" class="schedule-group" v-show="schedulesState">
+        <div class="schedule-form">
+          <h3>{{ editingScheduleIndex !== null ? 'Edit Schedule' : 'Add Schedule' }}</h3>
+          <div class="schedule-fields">
+            <div>
+              <label for="schedule-name">Name:</label>
+              <input id="schedule-name" type="text" v-model="currentSchedule.name" placeholder="Event name"/>
+            </div>
+            <div>
+              <label for="schedule-start">Start Date/Time:</label>
+              <input id="schedule-start" type="datetime-local" v-model="currentSchedule.startDateTime"/>
+            </div>
+            <div>
+              <label for="schedule-end">End Date/Time:</label>
+              <input id="schedule-end" type="datetime-local" v-model="currentSchedule.endDateTime"/>
+            </div>
+          </div>
+          <div class="schedule-buttons">
+            <button @click="addOrUpdateSchedule" :disabled="!currentSchedule.name || !currentSchedule.startDateTime || !currentSchedule.endDateTime">
+              {{ editingScheduleIndex !== null ? 'Update' : 'Add' }}
+            </button>
+            <button @click="cancelScheduleEdit" v-if="editingScheduleIndex !== null">Cancel</button>
+          </div>
+        </div>
+        <table class="schedule-table" v-if="schedules.length > 0">
+          <thead>
+            <tr>
+              <th>Name</th>
+              <th>Start Date/Time</th>
+              <th>End Date/Time</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="(schedule, index) in schedules" :key="index">
+              <td>{{ schedule.name }}</td>
+              <td>{{ formatDateTime(schedule.startDateTime) }}</td>
+              <td>{{ formatDateTime(schedule.endDateTime) }}</td>
+              <td>
+                <button @click="editSchedule(index)">Edit</button>
+                <button @click="deleteSchedule(index)">Delete</button>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+        <p v-else>No schedules defined yet.</p>
+        <div class="schedule-actions">
+          <button @click="saveSchedules" :disabled="!schedulesChanged">Save All</button>
+        </div>
       </div>
     </div>
     <div class="data-table">
@@ -154,6 +205,7 @@ import { useInspectedSpecialtyStore } from '../stores/inspectedSpecialtyStore';
 import { useLocationStore } from '../stores/locationStore';
 import { useInspectorStore } from '../stores/inspectorStore';
 import { useToast } from 'vue-toastification';
+import { apiEntityCRUD } from '../apiServices';
 import editImg from '../images/edit.png';
 import deleteImg from '../images/trash.png';
 import saveImg from '../images/save.png';
@@ -168,7 +220,13 @@ const iSpecialtyStore = useInspectedSpecialtyStore();
 const toast = useToast();
 const appState = ref('viewing');
 const servicesState = ref(false);
+const schedulesState = ref(false);
 const serviceTable = ref({});
+const schedules = ref([]);
+const originalSchedules = ref([]);
+const currentSchedule = ref({ name: '', startDateTime: '', endDateTime: '' });
+const editingScheduleIndex = ref(null);
+const schedulesChanged = ref(false);
 const NONE_VALUE = ref("NONE");
 const DEFAULT_INSPECTION = {
   id : null,
@@ -328,7 +386,171 @@ const toggleSpecialty = (locServiceId, specialtyId) => {
     serviceTable.value[locServiceId][specialtyId] = false;
   }
   serviceTable.value[locServiceId][specialtyId] = !serviceTable.value[locServiceId][specialtyId];
+}
 
+const toggleSchedules = async () => {
+  if (schedulesState.value) {
+    if (schedulesChanged.value && confirm('Changes detected. Do you want to save them?')) {
+      await saveSchedules();
+    } else if (schedulesChanged.value) {
+      // Restore original schedules
+      schedules.value = JSON.parse(JSON.stringify(originalSchedules.value));
+      schedulesChanged.value = false;
+      toast.info("Changes cancelled");
+    }
+    resetScheduleForm();
+    appState.value = 'viewing';
+  } else {
+    await loadSchedules();
+    appState.value = 'schedules';
+  }
+  schedulesState.value = !schedulesState.value;
+}
+
+const loadSchedules = async () => {
+  try {
+    const { data: queryResults } = await apiEntityCRUD('query', 'InspectionSchedule', null, { inspectionId: newInspection.value.id });
+    if ('list' in queryResults) {
+      schedules.value = queryResults.list.map(s => ({
+        id: s.id,
+        name: s.name,
+        startDateTime: toInputDateTime(s.startDateTime),
+        endDateTime: toInputDateTime(s.endDateTime)
+      }));
+      originalSchedules.value = JSON.parse(JSON.stringify(schedules.value));
+      schedulesChanged.value = false;
+    } else {
+      schedules.value = [];
+      originalSchedules.value = [];
+    }
+  } catch (error) {
+    toast.error("Could not load schedules: " + error.message);
+    schedules.value = [];
+    originalSchedules.value = [];
+  }
+}
+
+const addOrUpdateSchedule = () => {
+  if (editingScheduleIndex.value !== null) {
+    schedules.value[editingScheduleIndex.value] = { ...currentSchedule.value };
+    editingScheduleIndex.value = null;
+  } else {
+    schedules.value.push({ ...currentSchedule.value });
+  }
+  resetScheduleForm();
+  schedulesChanged.value = true;
+}
+
+const editSchedule = (index) => {
+  currentSchedule.value = { ...schedules.value[index] };
+  editingScheduleIndex.value = index;
+}
+
+const deleteSchedule = (index) => {
+  if (confirm('Are you sure you want to delete this schedule?')) {
+    schedules.value.splice(index, 1);
+    schedulesChanged.value = true;
+    if (editingScheduleIndex.value === index) {
+      resetScheduleForm();
+    }
+  }
+}
+
+const cancelScheduleEdit = () => {
+  resetScheduleForm();
+}
+
+const resetScheduleForm = () => {
+  currentSchedule.value = { name: '', startDateTime: '', endDateTime: '' };
+  editingScheduleIndex.value = null;
+}
+
+const saveSchedules = async () => {
+  try {
+    // Delete schedules that were removed
+    for (const origSchedule of originalSchedules.value) {
+      if (!schedules.value.find(s => s.id === origSchedule.id)) {
+        if (origSchedule.id) {
+          await apiEntityCRUD('delete', 'InspectionSchedule', origSchedule.id);
+        }
+      }
+    }
+
+    // Add or update schedules
+    for (const schedule of schedules.value) {
+      const scheduleData = {
+        name: schedule.name,
+        startDateTime: toBackendDateTime(schedule.startDateTime),
+        endDateTime: toBackendDateTime(schedule.endDateTime),
+        inspectionId: newInspection.value.id
+      };
+
+      if (schedule.id) {
+        // Update existing schedule
+        await apiEntityCRUD('update', 'InspectionSchedule', schedule.id, scheduleData);
+      } else {
+        // Add new schedule
+        const { data: addedSchedule } = await apiEntityCRUD('add', 'InspectionSchedule', null, scheduleData);
+        schedule.id = addedSchedule.id;
+      }
+    }
+
+    originalSchedules.value = JSON.parse(JSON.stringify(schedules.value));
+    schedulesChanged.value = false;
+    toast.success("Schedules saved successfully!");
+  } catch (error) {
+    toast.error("Could not save schedules: " + error.message);
+  }
+}
+
+const formatDateTime = (dateTimeStr) => {
+  if (!dateTimeStr) return '';
+  const dt = new Date(dateTimeStr);
+  return dt.toLocaleString('en-US', {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit'
+  });
+}
+
+const toInputDateTime = (dateTimeStr) => {
+  if (!dateTimeStr) return '';
+  const trimmed = dateTimeStr.trim();
+  const normalized = trimmed.replace('Z', '');
+  if (normalized.includes('T')) {
+    const [datePart, timePart] = normalized.split('T');
+    return `${datePart}T${timePart.slice(0, 5)}`;
+  }
+  if (normalized.includes(' ')) {
+    const [datePart, timePart] = normalized.split(' ');
+    return `${datePart}T${timePart.slice(0, 5)}`;
+  }
+  return '';
+}
+
+const toBackendDateTime = (dateTimeStr) => {
+  if (!dateTimeStr) return null;
+  const trimmed = dateTimeStr.trim();
+  let datePart = '';
+  let timePart = '';
+  if (trimmed.includes('T')) {
+    [datePart, timePart] = trimmed.split('T');
+  } else if (trimmed.includes(' ')) {
+    [datePart, timePart] = trimmed.split(' ');
+  } else {
+    datePart = trimmed;
+  }
+
+  const [year, month, day] = datePart.split('-');
+  if (!year || !month || !day) return null;
+  const timeSegments = (timePart || '00:00:00').split(':');
+  const hour = timeSegments[0] || '00';
+  const minute = timeSegments[1] || '00';
+  const second = timeSegments[2] || '00';
+  const pad = (value) => value.toString().padStart(2, '0');
+  return `${year}-${pad(month)}-${pad(day)} ${pad(hour)}:${pad(minute)}:${pad(second)}`;
 }
 
 </script>
@@ -480,9 +702,89 @@ input:focus {
   width: 50%;
 }
 
+.detail-buttons {
+  display: flex;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
 .service-group {
   display: flex;
   gap: 2rem;
+}
+
+.schedule-group {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.schedule-form {
+  border: 1px solid var(--border-color);
+  padding: 1rem;
+  border-radius: 4px;
+}
+
+.schedule-form h3 {
+  margin-top: 0;
+  margin-bottom: 1rem;
+}
+
+.schedule-fields {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.schedule-fields > div {
+  display: flex;
+  flex-direction: column;
+}
+
+.schedule-fields label {
+  margin-bottom: 0.5rem;
+  font-weight: bold;
+}
+
+.schedule-fields input {
+  padding: 0.5rem;
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+}
+
+.schedule-buttons {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.schedule-table {
+  width: 100%;
+  border-collapse: collapse;
+  border: 1px solid var(--border-color);
+}
+
+.schedule-table th,
+.schedule-table td {
+  padding: 0.5rem;
+  text-align: left;
+  border: 1px solid var(--border-color);
+}
+
+.schedule-table th {
+  background-color: var(--primary-color);
+  color: white;
+}
+
+.schedule-table td button {
+  margin-right: 0.5rem;
+  padding: 0.25rem 0.5rem;
+}
+
+.schedule-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 1rem;
 }
 
 .service-table {
