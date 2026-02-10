@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia';
-import { apiEntityCRUD, apiEntityLinks } from '../apiServices';
+import { apiEntityCRUD, apiEntityLinks } from '@/services/apiServices';
 
 export const useInspectedSpecialtyStore = defineStore('inspectedSpecialty', {
 

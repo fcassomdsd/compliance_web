@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { mount } from '@vue/test-utils';
-import ModalWindow from '../src/components/ModalWindow.vue';
+import ModalWindow from '@/components/common/ModalWindow.vue';
 
 describe('ModalWindow.vue', () => {
   describe('Rendering', () => {

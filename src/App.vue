@@ -30,13 +30,13 @@
 
 <script setup>
 import { ref } from 'vue'; // Import ref
-// Import the manager components
-import InspectionManager from './components/InspectionManager.vue';
-import AssignInspectors from './components/AssignInspectors.vue';
-import ChecklistManager from './components/ChecklistManager.vue';
+// Import the view components
+import InspectionManager from '@/views/InspectionManager.vue';
+import AssignInspectors from '@/views/AssignInspectors.vue';
+import ChecklistManager from '@/views/ChecklistManager.vue';
 
 // toast not used here; keep App minimal
-import logo from './images/compliance-logo.png'
+import logo from './assets/images/logos/compliance-logo.png'
 
 // Access the Pinia store
 // no-op

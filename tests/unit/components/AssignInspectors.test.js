@@ -1,23 +1,23 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { mount } from '@vue/test-utils';
 import { createPinia, setActivePinia } from 'pinia';
-import AssignInspectors from '../src/components/AssignInspectors.vue';
-import { useInspectionStore } from '../src/stores/inspectionStore';
-import { useInspectorStore } from '../src/stores/inspectorStore';
-import { useInspectedSpecialtyStore } from '../src/stores/inspectedSpecialtyStore';
+import AssignInspectors from '@/views/AssignInspectors.vue';
+import { useInspectionStore } from '@/stores/inspectionStore';
+import { useInspectorStore } from '@/stores/inspectorStore';
+import { useInspectedSpecialtyStore } from '@/stores/inspectedSpecialtyStore';
 import { useToast } from 'vue-toastification';
 
 // Mock dependencies
-vi.mock('../src/stores/inspectionStore');
-vi.mock('../src/stores/inspectorStore');
-vi.mock('../src/stores/inspectedSpecialtyStore');
+vi.mock('../../../src/stores/inspectionStore');
+vi.mock('../../../src/stores/inspectorStore');
+vi.mock('../../../src/stores/inspectedSpecialtyStore');
 vi.mock('vue-toastification', () => ({
   useToast: vi.fn(),
 }));
-vi.mock('../src/apiServices.js');
-vi.mock('../src/images/save.png', () => ({ default: 'mock-save-url' }));
-vi.mock('../src/images/cancel.png', () => ({ default: 'mock-cancel-url' }));
-vi.mock('../src/images/view.png', () => ({ default: 'mock-view-url' }));
+vi.mock('../../../src/services/apiServices.js');
+vi.mock('../../../src/assets/images/icons/save.png', () => ({ default: 'mock-save-url' }));
+vi.mock('../../../src/assets/images/icons/cancel.png', () => ({ default: 'mock-cancel-url' }));
+vi.mock('../../../src/assets/images/icons/view.png', () => ({ default: 'mock-view-url' }));
 
 describe('AssignInspectors.vue', () => {
   let pinia;

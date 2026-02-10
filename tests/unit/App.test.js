@@ -1,10 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { mount } from '@vue/test-utils';
 import { createPinia, setActivePinia } from 'pinia';
-import App from '../src/App.vue';
+import App from '@/App.vue';
 
 // Mock dependencies
-vi.mock('../src/images/compliance-logo.png', () => ({ default: 'mock-logo-url' }));
+vi.mock('../src/assets/images/logos/compliance-logo.png', () => ({ default: 'mock-logo-url' }));
 
 describe('App.vue', () => {
   let pinia;
@@ -55,6 +55,7 @@ describe('App.vue', () => {
           stubs: {
             InspectionManager: true,
             AssignInspectors: true,
+            ChecklistManager: true,
           },
         },
       });
@@ -69,6 +70,10 @@ describe('App.vue', () => {
       // Check for Assign Inspectors button
       const assignButton = buttons.find(btn => btn.text().includes('Assign Inspectors'));
       expect(assignButton).toBeDefined();
+
+      // Check for Inspection Checklist button
+      const checklistButton = buttons.find(btn => btn.text().includes('Inspection Checklist'));
+      expect(checklistButton).toBeDefined();
     });
 
     it('initializes with Inspection view as default', () => {
@@ -111,6 +116,7 @@ describe('App.vue', () => {
           stubs: {
             InspectionManager: true,
             AssignInspectors: { template: '<div id="assign-inspectors">AssignInspectors</div>' },
+            ChecklistManager: true,
           },
         },
       });
@@ -122,6 +128,26 @@ describe('App.vue', () => {
       await wrapper.vm.$nextTick();
 
       expect(wrapper.find('#assign-inspectors').exists()).toBe(true);
+    });
+
+    it('switches to Checklist view when button is clicked', async () => {
+      const wrapper = mount(App, {
+        global: {
+          stubs: {
+            InspectionManager: true,
+            AssignInspectors: true,
+            ChecklistManager: { template: '<div id="checklist-manager">ChecklistManager</div>' },
+          },
+        },
+      });
+
+      const buttons = wrapper.findAll('button');
+      const checklistButton = buttons.find(btn => btn.text().includes('Inspection Checklist'));
+
+      await checklistButton.trigger('click');
+      await wrapper.vm.$nextTick();
+
+      expect(wrapper.find('#checklist-manager').exists()).toBe(true);
     });
 
     it('highlights active button with active-view class', async () => {
@@ -159,6 +185,7 @@ describe('App.vue', () => {
           stubs: {
             InspectionManager: true,
             AssignInspectors: true,
+            ChecklistManager: true,
           },
         },
       });
@@ -171,6 +198,26 @@ describe('App.vue', () => {
 
       // The assign button should have the active-view class
       expect(assignButton.classes()).toContain('active-view');
+    });
+
+    it('applies active-view class to Checklist button on navigation', async () => {
+      const wrapper = mount(App, {
+        global: {
+          stubs: {
+            InspectionManager: true,
+            AssignInspectors: true,
+            ChecklistManager: true,
+          },
+        },
+      });
+
+      const buttons = wrapper.findAll('button');
+      const checklistButton = buttons.find(btn => btn.text().includes('Inspection Checklist'));
+
+      await checklistButton.trigger('click');
+      await wrapper.vm.$nextTick();
+
+      expect(checklistButton.classes()).toContain('active-view');
     });
 
     it('has controls-container for layout', () => {
@@ -210,6 +257,7 @@ describe('App.vue', () => {
           stubs: {
             InspectionManager: { template: '<div id="inspection-mgr">Mock InspectionManager</div>' },
             AssignInspectors: true,
+            ChecklistManager: true,
           },
         },
       });
@@ -225,6 +273,7 @@ describe('App.vue', () => {
           stubs: {
             InspectionManager: true,
             AssignInspectors: { template: '<div id="assign-insp">Mock AssignInspectors</div>' },
+            ChecklistManager: true,
           },
         },
       });
@@ -238,6 +287,27 @@ describe('App.vue', () => {
       expect(wrapper.text()).toContain('Mock AssignInspectors');
     });
 
+    it('renders ChecklistManager component when view changes', async () => {
+      const wrapper = mount(App, {
+        global: {
+          plugins: [pinia],
+          stubs: {
+            InspectionManager: true,
+            AssignInspectors: true,
+            ChecklistManager: { template: '<div id="checklist-mgr">Mock ChecklistManager</div>' },
+          },
+        },
+      });
+
+      const buttons = wrapper.findAll('button');
+      const checklistButton = buttons.find(btn => btn.text().includes('Inspection Checklist'));
+
+      await checklistButton.trigger('click');
+      await wrapper.vm.$nextTick();
+
+      expect(wrapper.text()).toContain('Mock ChecklistManager');
+    });
+
     it('does not render both components simultaneously', async () => {
       const wrapper = mount(App, {
         global: {
@@ -245,6 +315,7 @@ describe('App.vue', () => {
           stubs: {
             InspectionManager: { template: '<div id="inspection-mgr">InspectionManager</div>' },
             AssignInspectors: { template: '<div id="assign-insp">AssignInspectors</div>' },
+            ChecklistManager: { template: '<div id="checklist-mgr">ChecklistManager</div>' },
           },
         },
       });
@@ -262,6 +333,14 @@ describe('App.vue', () => {
       // Now only AssignInspectors should be visible
       expect(wrapper.find('#inspection-mgr').exists()).toBe(false);
       expect(wrapper.find('#assign-insp').exists()).toBe(true);
+
+      // Switch to Checklist
+      const checklistButton = buttons.find(btn => btn.text().includes('Inspection Checklist'));
+      await checklistButton.trigger('click');
+      await wrapper.vm.$nextTick();
+
+      expect(wrapper.find('#assign-insp').exists()).toBe(false);
+      expect(wrapper.find('#checklist-mgr').exists()).toBe(true);
     });
   });
 

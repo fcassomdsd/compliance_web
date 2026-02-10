@@ -199,19 +199,19 @@
 
 <script setup>
 import { ref } from 'vue';
-import BaseManager from './BaseManager.vue';
-import { useInspectionStore } from '../stores/inspectionStore';
-import { useInspectedSpecialtyStore } from '../stores/inspectedSpecialtyStore';
-import { useLocationStore } from '../stores/locationStore';
-import { useInspectorStore } from '../stores/inspectorStore';
+import BaseManager from '@/components/base/BaseManager.vue';
+import { useInspectionStore } from '@/stores/inspectionStore';
+import { useInspectedSpecialtyStore } from '@/stores/inspectedSpecialtyStore';
+import { useLocationStore } from '@/stores/locationStore';
+import { useInspectorStore } from '@/stores/inspectorStore';
 import { useToast } from 'vue-toastification';
-import { apiEntityCRUD } from '../apiServices';
-import editImg from '../assets/images/icons/edit.png';
-import deleteImg from '../assets/images/icons/trash.png';
-import saveImg from '../assets/images/icons/save.png';
-import addImg from '../assets/images/icons/add.png';
-import cancelImg from '../assets/images/icons/cancel.png';
-import viewImg from '../assets/images/icons/view.png';
+import { apiEntityCRUD } from '@/services/apiServices';
+import editImg from '@/assets/images/icons/edit.png';
+import deleteImg from '@/assets/images/icons/trash.png';
+import saveImg from '@/assets/images/icons/save.png';
+import addImg from '@/assets/images/icons/add.png';
+import cancelImg from '@/assets/images/icons/cancel.png';
+import viewImg from '@/assets/images/icons/view.png';
 
 const store = useInspectionStore();
 const locationStore = useLocationStore();

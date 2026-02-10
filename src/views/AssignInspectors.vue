@@ -86,16 +86,16 @@
 
 <script setup>
 import { onBeforeMount, ref } from 'vue';
-import BaseManager from './BaseManager.vue';
-import { useInspectionStore } from '../stores/inspectionStore';
-import { useInspectorStore } from '../stores/inspectorStore';
-import { useInspectedSpecialtyStore } from '../stores/inspectedSpecialtyStore';
+import BaseManager from '@/components/base/BaseManager.vue';
+import { useInspectionStore } from '@/stores/inspectionStore';
+import { useInspectorStore } from '@/stores/inspectorStore';
+import { useInspectedSpecialtyStore } from '@/stores/inspectedSpecialtyStore';
 // specialtyStore not required here; inspectorStore provides inspector specialties
 import { useToast } from 'vue-toastification';
-import saveImg from '../images/save.png';
-import cancelImg from '../images/cancel.png';
-import viewImg from '../images/view.png';
-import { apiEntityLinks } from '../apiServices';
+import saveImg from '@/assets/images/icons/save.png';
+import cancelImg from '@/assets/images/icons/cancel.png';
+import viewImg from '@/assets/images/icons/view.png';
+import { apiEntityLinks } from '@/services/apiServices';
 
 const inspectionStore = useInspectionStore();
 const inspectorStore = useInspectorStore();

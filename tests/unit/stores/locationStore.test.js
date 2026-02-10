@@ -1,9 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { createPinia, setActivePinia } from 'pinia';
-import * as apiServices from '../src/apiServices.js';
-import { useLocationStore } from '../src/stores/locationStore';
+import * as apiServices from '@/services/apiServices';
+import { useLocationStore } from '@/stores/locationStore';
 
-vi.mock('../src/apiServices.js', () => ({
+vi.mock('../../../src/services/apiServices.js', () => ({
   apiEntityCRUD: vi.fn(),
 }));
 

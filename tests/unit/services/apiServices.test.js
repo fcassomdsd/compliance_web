@@ -1,6 +1,6 @@
 // fileServices.test.js
 import { describe, it, expect, vi } from 'vitest';
-import { apiEntityCRUD, apiEntityLinks } from '../src/apiServices';
+import { apiEntityCRUD, apiEntityLinks } from '@/services/apiServices';
 import { default as axios } from 'axios';
 
 // Mock the axios module
