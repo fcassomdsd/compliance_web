@@ -1,18 +1,18 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { mount } from '@vue/test-utils';
 import { createPinia, setActivePinia } from 'pinia';
-import ChecklistManager from '../src/components/ChecklistManager.vue';
-import { useProtocolQuestionStore } from '../src/stores/protocolQuestionStore';
-import { useInspectionQuestionStore } from '../src/stores/inspectionQuestionStore';
-import { useInspectedSpecialtyStore } from '../src/stores/inspectedSpecialtyStore';
-import { useInspectionStore } from '../src/stores/inspectionStore';
+import ChecklistManager from '@/views/ChecklistManager.vue';
+import { useProtocolQuestionStore } from '@/stores/protocolQuestionStore';
+import { useInspectionQuestionStore } from '@/stores/inspectionQuestionStore';
+import { useInspectedSpecialtyStore } from '@/stores/inspectedSpecialtyStore';
+import { useInspectionStore } from '@/stores/inspectionStore';
 import { useToast } from 'vue-toastification';
 
 // Mock dependencies
-vi.mock('../src/stores/protocolQuestionStore');
-vi.mock('../src/stores/inspectionQuestionStore');
-vi.mock('../src/stores/inspectedSpecialtyStore');
-vi.mock('../src/stores/inspectionStore');
+vi.mock('../../../src/stores/protocolQuestionStore');
+vi.mock('../../../src/stores/inspectionQuestionStore');
+vi.mock('../../../src/stores/inspectedSpecialtyStore');
+vi.mock('../../../src/stores/inspectionStore');
 vi.mock('vue-toastification', () => ({
   useToast: vi.fn(),
 }));

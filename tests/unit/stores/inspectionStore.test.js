@@ -1,15 +1,15 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { createPinia, setActivePinia } from 'pinia';
 import { ref } from 'vue';
-import { useInspectionStore } from '../src/stores/inspectionStore';
-import { useInspectedSpecialtyStore } from '../src/stores/inspectedSpecialtyStore';
-import { apiEntityCRUD, apiEntityLinks } from '../src/apiServices';
+import { useInspectionStore } from '@/stores/inspectionStore';
+import { useInspectedSpecialtyStore } from '@/stores/inspectedSpecialtyStore';
+import { apiEntityCRUD, apiEntityLinks } from '@/services/apiServices';
 
 // Mock dependencies
 vi.mock('vue', () => ({
   ref: vi.fn((refValue) => ({ "value" : refValue})),
 }));
-vi.mock('../src/apiServices.js');
+vi.mock('../../../src/services/apiServices.js');
 
 describe('Inspection Store', () => {
   let pinia;

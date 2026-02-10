@@ -1,7 +1,7 @@
 <template>
   <div>
     <div class="header">
-      <img src="../images/compliance-logo.png" alt="Compliance Logo"/> <span>
+      <img src="../../assets/images/logos/compliance-logo.png" alt="Compliance Logo"/> <span>
         <h2>{{ title }} Management</h2>
       </span>
     </div>

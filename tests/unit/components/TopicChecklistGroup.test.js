@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { mount } from '@vue/test-utils';
 import { createPinia, setActivePinia } from 'pinia';
-import TopicChecklistGroup from '../src/components/TopicChecklistGroup.vue';
+import TopicChecklistGroup from '@/components/TopicChecklistGroup.vue';
 
 // Mock dependencies
 vi.mock('vue-toastification');

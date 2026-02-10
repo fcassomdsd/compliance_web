@@ -112,12 +112,12 @@
 
 <script setup>
 import { ref, computed, onMounted } from 'vue';
-import BaseManager from './BaseManager.vue';
-import TopicChecklistGroup from './TopicChecklistGroup.vue';
-import { useProtocolQuestionStore } from '../stores/protocolQuestionStore';
-import { useInspectionQuestionStore } from '../stores/inspectionQuestionStore';
-import { useInspectedSpecialtyStore } from '../stores/inspectedSpecialtyStore';
-import { useInspectionStore } from '../stores/inspectionStore';
+import BaseManager from '@/components/base/BaseManager.vue';
+import TopicChecklistGroup from '@/components/TopicChecklistGroup.vue';
+import { useProtocolQuestionStore } from '@/stores/protocolQuestionStore';
+import { useInspectionQuestionStore } from '@/stores/inspectionQuestionStore';
+import { useInspectedSpecialtyStore } from '@/stores/inspectedSpecialtyStore';
+import { useInspectionStore } from '@/stores/inspectionStore';
 import { useToast } from 'vue-toastification';
 
 const protocolQuestionStore = useProtocolQuestionStore();

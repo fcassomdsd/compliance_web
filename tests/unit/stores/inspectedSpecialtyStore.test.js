@@ -1,9 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { createPinia, setActivePinia } from 'pinia';
-import { useInspectedSpecialtyStore } from '../src/stores/inspectedSpecialtyStore';
-import { apiEntityCRUD, apiEntityLinks } from '../src/apiServices';
+import { useInspectedSpecialtyStore } from '@/stores/inspectedSpecialtyStore';
+import { apiEntityCRUD, apiEntityLinks } from '@/services/apiServices';
 
-vi.mock('../src/apiServices.js');
+vi.mock('../../../src/services/apiServices.js');
 
 describe('Inspected Specialty Store', () => {
   let pinia;

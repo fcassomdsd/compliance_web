@@ -1,10 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { createPinia, setActivePinia } from 'pinia';
-import { useProtocolQuestionStore } from '../src/stores/protocolQuestionStore';
-import { apiEntityCRUD } from '../src/apiServices';
+import { useProtocolQuestionStore } from '@/stores/protocolQuestionStore';
+import { apiEntityCRUD } from '@/services/apiServices';
 
 // Mock dependencies
-vi.mock('../src/apiServices.js');
+vi.mock('../../../src/services/apiServices.js');
 
 describe('Protocol Question Store', () => {
   let pinia;

@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia';
-import { apiEntityCRUD } from '../apiServices';
+import { apiEntityCRUD } from '@/services/apiServices';
 
 export const useProtocolQuestionStore = defineStore('protocolQuestion', {
 
