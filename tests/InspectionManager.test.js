@@ -688,6 +688,62 @@ describe('InspectionManager.vue', () => {
     });
   });
 
+  describe('Schedules Management', () => {
+    beforeEach(() => {
+      vi.mock('../src/apiServices', () => ({
+        apiEntityCRUD: vi.fn(),
+      }));
+    });
+
+    it('renders schedules button', () => {
+      expect(wrapper.find('button[id="schedules"]').exists()).toBe(true);
+    });
+
+    it('disables schedules button when no inspection selected', () => {
+      const schedulesButton = wrapper.find('button[id="schedules"]');
+      expect(schedulesButton.attributes('disabled')).toBeDefined();
+    });
+
+    it('enables schedules button when inspection is selected', async () => {
+      const viewBtn = wrapper.find('button[id="view-ID123"]');
+      await viewBtn.trigger('click');
+      
+      const schedulesButton = wrapper.find('button[id="schedules"]');
+      expect(schedulesButton.attributes('disabled')).toBeUndefined();
+    });
+
+    it('displays schedules section when button is clicked', async () => {
+      const { apiEntityCRUD } = await import('../src/apiServices');
+      vi.mocked(apiEntityCRUD).mockResolvedValue({ data: { list: [] } });
+
+      const viewBtn = wrapper.find('button[id="view-ID123"]');
+      await viewBtn.trigger('click');
+      
+      const schedulesButton = wrapper.find('button[id="schedules"]');
+      await schedulesButton.trigger('click');
+      await wrapper.vm.$nextTick();
+      
+      const schedulesDiv = wrapper.find('div[id="schedules"]');
+      expect(schedulesDiv.isVisible()).toBe(true);
+    });
+
+    it('displays schedule form fields', async () => {
+      const { apiEntityCRUD } = await import('../src/apiServices');
+      vi.mocked(apiEntityCRUD).mockResolvedValue({ data: { list: [] } });
+
+      const viewBtn = wrapper.find('button[id="view-ID123"]');
+      await viewBtn.trigger('click');
+      
+      const schedulesButton = wrapper.find('button[id="schedules"]');
+      await schedulesButton.trigger('click');
+      await wrapper.vm.$nextTick();
+      
+      expect(wrapper.find('input[id="schedule-name"]').exists()).toBe(true);
+      expect(wrapper.find('input[id="schedule-start"]').exists()).toBe(true);
+      expect(wrapper.find('input[id="schedule-end"]').exists()).toBe(true);
+    });
+  });
+
 });
 
 

@@ -32,6 +32,7 @@ export const useInspectedSpecialtyStore = defineStore('inspectedSpecialty', {
             this.inspectedServices[locService].specialties[inspectedSpec.specialtyId] = {
               id: inspectedSpec.id,
               name: inspectedSpec.specialtyName,
+              inspectionId: inspectedSpec.inspectionId ?? inspectionId,
             };
           }
         }
@@ -45,23 +46,15 @@ export const useInspectedSpecialtyStore = defineStore('inspectedSpecialty', {
     async getInspectedSpecialties(inspectionId) {
       this.loading = true;
       try {
-        const { data: queryResults } = await apiEntityLinks('getLinks', 'Inspection', inspectionId.toString(), 'inspectedServices');
+        const { data: queryResults } = await apiEntityCRUD('query', 'InspectedSpecialty', null, { inspectionId });
         if (!('list' in queryResults)) throw new Error('API query failed');
-        const joinObj = [];
-        for (const entity of queryResults.list) {
-          joinObj.push(entity.id);
-        }
-
-        if (queryResults.list.length > 0) {
-          const { data: subquery } = await apiEntityCRUD('query', 'InspectedSpecialty', null, { inspectedServiceId: joinObj });
-          if (!('list' in subquery)) throw new Error('API subquery failed');
-          this.inspectedSpecialties = {};
-          for (const inspectedSpec of subquery.list) {
-            this.inspectedSpecialties[inspectedSpec.specialtyId] = {
-              id: inspectedSpec.id,
-              name: inspectedSpec.specialtyName,
-            };
-          }
+        this.inspectedSpecialties = {};
+        for (const inspectedSpec of queryResults.list) {
+          this.inspectedSpecialties[inspectedSpec.specialtyId] = {
+            id: inspectedSpec.id,
+            name: inspectedSpec.specialtyName,
+            inspectionId: inspectedSpec.inspectionId ?? inspectionId,
+          };
         }
       } catch (error) {
         throw new Error('getInspectedSpecialties: ' + error.message);
@@ -85,8 +78,17 @@ export const useInspectedSpecialtyStore = defineStore('inspectedSpecialty', {
           this.inspectedServices[locationService].id = addedService.id;
         }
         if (!this.inspectedServices[locationService].specialties[specialtyId]) {
-          this.inspectedServices[locationService].specialties[specialtyId] = { id: 'new', name: specialtyName };
-          const addData = { name: specialtyName, specialtyId, inspectedServiceId: this.inspectedServices[locationService].id };
+          this.inspectedServices[locationService].specialties[specialtyId] = {
+            id: 'new',
+            name: specialtyName,
+            inspectionId,
+          };
+          const addData = {
+            name: specialtyName,
+            specialtyId,
+            inspectionId,
+            inspectedServiceId: this.inspectedServices[locationService].id,
+          };
           const { data: addedSpecialty } = await apiEntityCRUD('add', 'InspectedSpecialty', null, addData);
           if (!addedSpecialty || !('id' in addedSpecialty)) throw new Error('API call for "add" returned invalid data');
           this.inspectedServices[locationService].specialties[specialtyId].id = addedSpecialty.id;
