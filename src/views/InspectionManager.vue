@@ -4,11 +4,11 @@
       <p v-if="!locationStore.locations.length" class="error">No locations available. Please add locations first.</p>
       <div class="grid-cell1 grid-item">
         <label for="code">Inspection Code:</label>
-        <input id="code" type="text" size="6" v-model="newInspection.code" :disabled="(appState != 'editing')" placeholder="Code"/>
+        <input id="code" type="text" size="6" v-model="newInspection.code" :disabled="true" placeholder="Code"/>
       </div>      
       <div class="grid-cell2 grid-item">
         <label for="locationId">Location:</label>
-        <select id="locationId" v-model="newInspection.locationId" :disabled="(appState != 'editing')">
+        <select id="locationId" v-model="newInspection.locationId" :disabled="(appState != 'editing' || isLocationLocked())">
           <option :value="`${NONE_VALUE}`">Select a location</option>
           <option v-for="(location, index) in locationStore.locations" :key="index" :value="location.id" >
               {{location.name }}
@@ -230,7 +230,7 @@ const schedulesChanged = ref(false);
 const NONE_VALUE = ref("NONE");
 const DEFAULT_INSPECTION = {
   id : null,
-  code : null,
+  code : '',
   locationId : NONE_VALUE.value,
   startDate : null,
   endDate : null,
@@ -243,7 +243,7 @@ const DEFAULT_INSPECTION = {
 
 const newInspection = ref({
   id : null,
-  code : null,
+  code : '',
   locationId : NONE_VALUE.value,
   startDate : null,
   endDate : null,
@@ -253,8 +253,7 @@ const newInspection = ref({
   mainInspectorId : NONE_VALUE.value,
   secondaryInspectorId : NONE_VALUE.value,
   valid() {
-    return (this.code?.trim().length > 0 &&
-           this.locationId !== null &&
+    return (this.locationId !== null &&
            this.locationId !== NONE_VALUE.value &&
            this.startDate !== null &&
            this.endDate !== null &&
@@ -267,6 +266,16 @@ store.refreshInspections();
 locationStore.refreshLocations();
 inspectorStore.refreshInspectors();
 
+const isPersistedInspectionWithCode = (inspection) => {
+  return !!inspection &&
+    typeof inspection.id === 'string' &&
+    inspection.id !== 'new' &&
+    typeof inspection.code === 'string' &&
+    inspection.code.trim().length > 0;
+};
+
+const isLocationLocked = () => isPersistedInspectionWithCode(newInspection.value);
+
 const startAdd = () => {
   appState.value = 'editing';
   Object.assign(newInspection.value, DEFAULT_INSPECTION);
@@ -276,10 +285,14 @@ const startAdd = () => {
 const saveEdit = async (inspection) => {
 
   try {
-    if (inspection.id == 'new') {
-      await store.addInspection(inspection);  
+    const inspectionToSave = {
+      ...inspection,
+    };
+
+    if (inspectionToSave.id == 'new') {
+      await store.addInspection(inspectionToSave);  
     } else {
-      await store.updateInspection(inspection);
+      await store.updateInspection(inspectionToSave);
     }
     Object.assign(newInspection.value, DEFAULT_INSPECTION);
     appState.value = 'viewing';
