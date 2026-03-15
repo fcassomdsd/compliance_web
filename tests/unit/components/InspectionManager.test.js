@@ -55,7 +55,7 @@ describe('InspectionManager.vue', () => {
       inspections: [
         {
           id : "ID123",
-          code : "0225",
+          code : "ABCD-2025-01",
           startDate : '2025-03-26',
           endDate : '2025-03-27',
           objective : 'objective',
@@ -91,9 +91,11 @@ describe('InspectionManager.vue', () => {
       locations: [
         {
           id : "Location1",
+          icaoCode : "ABCD",
           name : "Location 1",
         },{
           id : "Location2",
+          icaoCode : "EFGH",
           name : "Location 2",
         }
       ],
@@ -184,7 +186,7 @@ describe('InspectionManager.vue', () => {
 
 
   it('renders row data correctly', () => {
-    expect(wrapper.find('td[id="code-ID123"]').text()).toBe('0225');
+    expect(wrapper.find('td[id="code-ID123"]').text()).toBe('ABCD-2025-01');
     expect(wrapper.find('td[id="location-ID123"]').text()).toBe('Location 1');
     expect(wrapper.find('td[id="startDate-ID123"]').text()).toBe('2025-03-26');
   });
@@ -372,9 +374,6 @@ describe('InspectionManager.vue', () => {
       const addBtn = wrapper.find('button[id="addBtn"]');
       await addBtn.trigger('click');
       
-      const codeInput = wrapper.find('input[id="code"]');
-      await codeInput.setValue('0226');
-      
       const locationSelect = wrapper.find('select[id="locationId"]');
       await locationSelect.setValue('Location1');
       
@@ -388,7 +387,10 @@ describe('InspectionManager.vue', () => {
       await saveBtn.trigger('click');
       await wrapper.vm.$nextTick();
       
-      expect(mockInspectionStore.addInspection).toHaveBeenCalled();
+      expect(mockInspectionStore.addInspection).toHaveBeenCalledWith(expect.objectContaining({
+        locationId: 'Location1',
+        startDate: '2025-04-01',
+      }));
       expect(mockToast.success).toHaveBeenCalledWith('Inspection data saved!');
     });
 
@@ -401,8 +403,8 @@ describe('InspectionManager.vue', () => {
       const editBtn = wrapper.find('button[id="editBtn"]');
       await editBtn.trigger('click');
       
-      const codeInput = wrapper.find('input[id="code"]');
-      await codeInput.setValue('0227');
+      const startDateInput = wrapper.find('input[id="startDate"]');
+      await startDateInput.setValue('2025-04-10');
       
       const saveBtn = wrapper.find('button[id="saveBtn"]');
       await saveBtn.trigger('click');
@@ -418,9 +420,6 @@ describe('InspectionManager.vue', () => {
       
       const addBtn = wrapper.find('button[id="addBtn"]');
       await addBtn.trigger('click');
-      
-      const codeInput = wrapper.find('input[id="code"]');
-      await codeInput.setValue('0226');
       
       const locationSelect = wrapper.find('select[id="locationId"]');
       await locationSelect.setValue('Location1');
@@ -442,8 +441,8 @@ describe('InspectionManager.vue', () => {
       const addBtn = wrapper.find('button[id="addBtn"]');
       await addBtn.trigger('click');
       
-      const codeInput = wrapper.find('input[id="code"]');
-      await codeInput.setValue('0226');
+      const objectiveInput = wrapper.find('textarea[id="objective"]');
+      await objectiveInput.setValue('temporary objective');
       
       const cancelBtn = wrapper.find('button[id="cancelBtn"]');
       await cancelBtn.trigger('click');
@@ -459,15 +458,59 @@ describe('InspectionManager.vue', () => {
       const editBtn = wrapper.find('button[id="editBtn"]');
       await editBtn.trigger('click');
       
-      const codeInput = wrapper.find('input[id="code"]');
-      const originalValue = codeInput.element.value;
-      await codeInput.setValue('MODIFIED');
+      const objectiveInput = wrapper.find('textarea[id="objective"]');
+      const originalValue = objectiveInput.element.value;
+      await objectiveInput.setValue('MODIFIED');
       
       const cancelBtn = wrapper.find('button[id="cancelBtn"]');
       await cancelBtn.trigger('click');
       await wrapper.vm.$nextTick();
       
-      expect(wrapper.find('input[id="code"]').element.value).toBe(originalValue);
+      expect(wrapper.find('textarea[id="objective"]').element.value).toBe(originalValue);
+    });
+
+    it('keeps inspection code input disabled while editing', async () => {
+      const addBtn = wrapper.find('button[id="addBtn"]');
+      await addBtn.trigger('click');
+      await wrapper.vm.$nextTick();
+
+      const codeInput = wrapper.find('input[id="code"]');
+      expect(codeInput.attributes('disabled')).toBeDefined();
+    });
+
+    it('keeps location disabled for persisted inspections while editing', async () => {
+      const viewBtn = wrapper.find('button[id="view-ID123"]');
+      await viewBtn.trigger('click');
+      await wrapper.vm.$nextTick();
+
+      const editBtn = wrapper.find('button[id="editBtn"]');
+      await editBtn.trigger('click');
+      await wrapper.vm.$nextTick();
+
+      const locationSelect = wrapper.find('select[id="locationId"]');
+      expect(locationSelect.attributes('disabled')).toBeDefined();
+    });
+
+    it('shows error when store rejects start date year mismatch', async () => {
+      vi.mocked(mockInspectionStore.updateInspection).mockRejectedValue(new Error('Start date year must match the year in the inspection code'));
+
+      const viewBtn = wrapper.find('button[id="view-ID123"]');
+      await viewBtn.trigger('click');
+      await wrapper.vm.$nextTick();
+
+      const editBtn = wrapper.find('button[id="editBtn"]');
+      await editBtn.trigger('click');
+      await wrapper.vm.$nextTick();
+
+      const startDateInput = wrapper.find('input[id="startDate"]');
+      await startDateInput.setValue('2026-01-05');
+
+      const saveBtn = wrapper.find('button[id="saveBtn"]');
+      await saveBtn.trigger('click');
+      await wrapper.vm.$nextTick();
+
+      expect(mockInspectionStore.updateInspection).toHaveBeenCalled();
+      expect(mockToast.error).toHaveBeenCalledWith(expect.stringContaining('Start date year must match the year in the inspection code'));
     });
   });
 
