@@ -21,10 +21,18 @@
         <button @click="currentView = 'Checklist'" :class="{ 'active-view': currentView === 'Checklist' }">
           Inspection Checklist
         </button>
+        <button @click="currentView = 'InspectionPlan'" :class="{ 'active-view': currentView === 'InspectionPlan' }">
+          Inspection Plan
+        </button>
+        <button @click="currentView = 'InspectionReport'" :class="{ 'active-view': currentView === 'InspectionReport' }">
+          Inspection Report
+        </button>
       </div>
     <InspectionManager v-if="currentView === 'Inspection'"/>
     <AssignInspectors v-if="currentView === 'AssignInspectors'"/>
     <ChecklistManager v-if="currentView === 'Checklist'"/>
+    <InspectionPlan v-if="currentView === 'InspectionPlan'"/>
+    <InspectionReport v-if="currentView === 'InspectionReport'"/>
   </div>
 </template>
 
@@ -34,6 +42,8 @@ import { ref } from 'vue'; // Import ref
 import InspectionManager from '@/views/InspectionManager.vue';
 import AssignInspectors from '@/views/AssignInspectors.vue';
 import ChecklistManager from '@/views/ChecklistManager.vue';
+import InspectionPlan from '@/views/InspectionPlan.vue';
+import InspectionReport from '@/views/InspectionReport.vue';
 
 // toast not used here; keep App minimal
 import logo from './assets/images/logos/compliance-logo.png'

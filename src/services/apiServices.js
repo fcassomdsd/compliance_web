@@ -216,3 +216,39 @@ export async function apiEntityLinks(method, entityName, entityId, linkName, ent
 
 }
 
+export async function apiInspectionPlan(inspectionCode) {
+  try {
+    if (!inspectionCode || typeof inspectionCode !== 'string' || inspectionCode.trim().length === 0) {
+      throw new Error('inspectionCode is required');
+    }
+    const result = await axios({
+      method: 'get',
+      url: `${apiServer}/inspectionPlan?inspection=${encodeURIComponent(inspectionCode.trim())}`
+    });
+    return { data: result.data, status: result.status };
+  } catch (error) {
+    throw new Error('apiInspectionPlan: ' + error.message);
+  }
+}
+
+export async function apiInspectionReport(inspectionCode, reportDate, serviceProviderId) {
+  try {
+    if (!inspectionCode || typeof inspectionCode !== 'string' || inspectionCode.trim().length === 0) {
+      throw new Error('inspectionCode is required');
+    }
+    if (!reportDate || typeof reportDate !== 'string' || reportDate.trim().length === 0) {
+      throw new Error('reportDate is required');
+    }
+    if (!serviceProviderId || typeof serviceProviderId !== 'string' || serviceProviderId.trim().length === 0) {
+      throw new Error('serviceProviderId is required');
+    }
+    const result = await axios({
+      method: 'get',
+      url: `${apiServer}/inspectionReport?inspection=${encodeURIComponent(inspectionCode.trim())}&reportDate=${encodeURIComponent(reportDate.trim())}&provider=${encodeURIComponent(serviceProviderId.trim())}`
+    });
+    return { data: result.data, status: result.status };
+  } catch (error) {
+    throw new Error('apiInspectionReport: ' + error.message);
+  }
+}
+
