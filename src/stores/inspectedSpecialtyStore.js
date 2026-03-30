@@ -153,6 +153,42 @@ export const useInspectedSpecialtyStore = defineStore('inspectedSpecialty', {
     }
   },
 
+  async getServiceProviders() {
+    try {
+      const locationServiceIds = Object.keys(this.inspectedServices);
+      if (locationServiceIds.length === 0) {
+        return [];
+      }
+
+      const { data: results } = await apiEntityCRUD('query', 'LocationService', null, { id: locationServiceIds });
+      if (!('list' in results)) {
+        throw new Error('API query failed');
+      }
+
+      const providerMap = new Map();
+
+      for (const locationService of results.list) {
+        const providerId = locationService.serviceProviderId || locationService.organizationId || locationService.providerId;
+        const providerName = locationService.serviceProviderName || locationService.organizationName || locationService.providerName || locationService.name;
+
+        if (!providerId || typeof providerId !== 'string') {
+          continue;
+        }
+
+        if (!providerMap.has(providerId)) {
+          providerMap.set(providerId, {
+            id: providerId,
+            name: (typeof providerName === 'string' && providerName.trim().length > 0) ? providerName : providerId,
+          });
+        }
+      }
+
+      return Array.from(providerMap.values());
+    } catch (error) {
+      throw new Error('getServiceProviders: ' + error.message);
+    }
+  },
+
 },
 
 
