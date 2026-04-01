@@ -3,7 +3,7 @@ const cookieParser = require('cookie-parser');
 
 const { createAuthRouter } = require('./auth/router.cjs');
 
-function createApp({ config, sessionRepository, alfrescoClient, logger }) {
+function createApp({ config, sessionRepository, alfrescoClient, logger, now }) {
   const app = express();
   app.use(express.json());
   app.use(cookieParser());
@@ -19,6 +19,7 @@ function createApp({ config, sessionRepository, alfrescoClient, logger }) {
       sessionRepository,
       alfrescoClient,
       logger,
+      now,
     })
   );
 

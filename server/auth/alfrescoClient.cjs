@@ -49,6 +49,32 @@ class AlfrescoClient {
       }
     );
   }
+
+  async getUserGroups({ username, ticket }) {
+    if (!this.baseUrl) {
+      throw new Error('ALFRESCO_BASE_URL is not configured');
+    }
+
+    if (!username || !ticket) {
+      return [];
+    }
+
+    const response = await axios.get(
+      `${this.baseUrl}/alfresco/api/-default-/public/alfresco/versions/1/people/${encodeURIComponent(username)}/groups`,
+      {
+        params: {
+          maxItems: 1000,
+          alf_ticket: ticket,
+        },
+        timeout: 10000,
+      }
+    );
+
+    const entries = response?.data?.list?.entries || [];
+    return entries
+      .map((entry) => entry?.entry?.id)
+      .filter(Boolean);
+  }
 }
 
 module.exports = {

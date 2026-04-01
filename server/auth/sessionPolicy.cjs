@@ -43,6 +43,12 @@ function slideIdleExpiry(session, now, config) {
   return nextIdle < absolute ? nextIdle : absolute;
 }
 
+function shouldRefreshRoles(session, now, config) {
+  const lastRefresh = new Date(session.lastRoleRefreshAt).getTime();
+  const refreshAt = lastRefresh + config.roleRefreshIntervalSeconds * 1000;
+  return now.getTime() >= refreshAt;
+}
+
 function buildSessionResponse(session, config) {
   return {
     authenticated: true,
@@ -69,5 +75,6 @@ module.exports = {
   isExpired,
   shouldSlideIdle,
   slideIdleExpiry,
+  shouldRefreshRoles,
   buildSessionResponse,
 };

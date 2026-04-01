@@ -8,6 +8,11 @@ const { createApp } = require('../../server/app.cjs');
 class InMemorySessionRepository {
   constructor() {
     this.sessions = new Map();
+    this.groupRoleMap = new Map([
+      ['group_inspector', ['inspector']],
+      ['group_planner', ['planner']],
+      ['group_admin', ['admin']],
+    ]);
   }
 
   async ping() {
@@ -47,9 +52,34 @@ class InMemorySessionRepository {
       revokedAt,
     });
   }
+
+  async resolveRolesForGroups(groups) {
+    const roleSet = new Set();
+    for (const group of groups || []) {
+      const key = String(group || '').trim().toLowerCase();
+      const mapped = this.groupRoleMap.get(key) || [];
+      for (const role of mapped) {
+        roleSet.add(role);
+      }
+    }
+    return Array.from(roleSet).sort();
+  }
+
+  async updateSessionRoles(sessionId, { roles, lastRoleRefreshAt }) {
+    const current = this.sessions.get(sessionId);
+    if (!current) {
+      return;
+    }
+
+    this.sessions.set(sessionId, {
+      ...current,
+      roles,
+      lastRoleRefreshAt,
+    });
+  }
 }
 
-function buildTestApp() {
+function buildTestApp({ now } = {}) {
   const repo = new InMemorySessionRepository();
   const alfrescoClient = {
     createTicket: vi.fn(async (username) => ({
@@ -59,7 +89,9 @@ function buildTestApp() {
         username,
         displayName: `Display ${username}`,
       },
+      groups: ['GROUP_INSPECTOR'],
     })),
+    getUserGroups: vi.fn(async () => ['GROUP_INSPECTOR']),
     revokeTicket: vi.fn(async () => undefined),
   };
 
@@ -78,7 +110,13 @@ function buildTestApp() {
     config,
     sessionRepository: repo,
     alfrescoClient,
-    logger: console,
+    logger: {
+      error: vi.fn(),
+      warn: vi.fn(),
+      info: vi.fn(),
+      log: vi.fn(),
+    },
+    now,
   });
 
   return { app, repo, alfrescoClient };
@@ -95,6 +133,7 @@ describe('Auth Router Chunk 2 foundation', () => {
     expect(loginResponse.status).toBe(200);
     expect(loginResponse.body.authenticated).toBe(true);
     expect(loginResponse.body.user.displayName).toBe('Display alice');
+    expect(loginResponse.body.roles).toEqual(['inspector']);
     expect(loginResponse.headers['set-cookie']).toBeDefined();
 
     const cookie = loginResponse.headers['set-cookie'][0].split(';')[0];
@@ -106,6 +145,7 @@ describe('Auth Router Chunk 2 foundation', () => {
     expect(sessionResponse.status).toBe(200);
     expect(sessionResponse.body.authenticated).toBe(true);
     expect(sessionResponse.body.user.username).toBe('alice');
+    expect(sessionResponse.body.roles).toEqual(['inspector']);
   });
 
   it('returns 401 for missing session cookie', async () => {
@@ -147,5 +187,59 @@ describe('Auth Router Chunk 2 foundation', () => {
     expect(response.status).toBe(200);
     expect(response.body.ok).toBe(true);
     expect(response.body.postgres).toBe('up');
+  });
+
+  it('refreshes roles from Alfresco groups on interval', async () => {
+    const clock = {
+      now: new Date('2026-03-31T10:00:00.000Z'),
+    };
+
+    const { app, alfrescoClient } = buildTestApp({
+      now: () => clock.now,
+    });
+
+    const loginResponse = await request(app)
+      .post('/api/auth/login')
+      .send({ username: 'carol', password: 'secret' });
+
+    expect(loginResponse.status).toBe(200);
+    expect(loginResponse.body.roles).toEqual(['inspector']);
+
+    alfrescoClient.getUserGroups.mockResolvedValueOnce(['GROUP_PLANNER']);
+    clock.now = new Date('2026-03-31T10:20:00.000Z');
+
+    const cookie = loginResponse.headers['set-cookie'][0].split(';')[0];
+    const sessionResponse = await request(app)
+      .get('/api/auth/session')
+      .set('Cookie', cookie);
+
+    expect(sessionResponse.status).toBe(200);
+    expect(sessionResponse.body.roles).toEqual(['planner']);
+  });
+
+  it('keeps cached roles when role refresh fails', async () => {
+    const clock = {
+      now: new Date('2026-03-31T11:00:00.000Z'),
+    };
+
+    const { app, alfrescoClient } = buildTestApp({
+      now: () => clock.now,
+    });
+
+    const loginResponse = await request(app)
+      .post('/api/auth/login')
+      .send({ username: 'david', password: 'secret' });
+
+    const cookie = loginResponse.headers['set-cookie'][0].split(';')[0];
+
+    alfrescoClient.getUserGroups.mockRejectedValueOnce(new Error('alfresco unavailable'));
+    clock.now = new Date('2026-03-31T11:20:00.000Z');
+
+    const sessionResponse = await request(app)
+      .get('/api/auth/session')
+      .set('Cookie', cookie);
+
+    expect(sessionResponse.status).toBe(200);
+    expect(sessionResponse.body.roles).toEqual(['inspector']);
   });
 });

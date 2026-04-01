@@ -6,6 +6,7 @@ const {
   isExpired,
   shouldSlideIdle,
   slideIdleExpiry,
+  shouldRefreshRoles,
   buildSessionResponse,
 } = require('./sessionPolicy.cjs');
 
@@ -38,6 +39,15 @@ function clearAuthCookie(res, cookieName, config) {
 function createAuthRouter({ config, sessionRepository, alfrescoClient, now = () => new Date(), logger = console }) {
   const router = express.Router();
 
+  async function resolveRoles(username, ticket, fallbackGroups = []) {
+    let groups = fallbackGroups;
+    if (!groups || groups.length === 0) {
+      groups = await alfrescoClient.getUserGroups({ username, ticket });
+    }
+
+    return sessionRepository.resolveRolesForGroups(groups);
+  }
+
   router.get('/diagnostics', async (req, res) => {
     try {
       await sessionRepository.ping();
@@ -65,6 +75,7 @@ function createAuthRouter({ config, sessionRepository, alfrescoClient, now = () 
       const nowTs = now();
       const times = buildSessionTimes(nowTs, config);
       const sessionId = crypto.randomUUID();
+      const roles = await resolveRoles(username, auth.ticket, auth.groups);
 
       const session = {
         sessionId,
@@ -73,7 +84,7 @@ function createAuthRouter({ config, sessionRepository, alfrescoClient, now = () 
         displayName: auth.user?.displayName || username,
         email: auth.user?.email,
         ticket: auth.ticket,
-        roles: [],
+        roles,
         createdAt: nowTs,
         lastSeenAt: nowTs,
         lastRoleRefreshAt: nowTs,
@@ -107,20 +118,38 @@ function createAuthRouter({ config, sessionRepository, alfrescoClient, now = () 
 
     const currentTime = now();
     let nextIdle = session.expiresAtIdle;
+    let nextRoles = session.roles;
+    let nextLastRoleRefreshAt = session.lastRoleRefreshAt;
+
     if (shouldSlideIdle(session, currentTime, config)) {
       nextIdle = slideIdleExpiry(session, currentTime, config);
+    }
+
+    if (shouldRefreshRoles(session, currentTime, config)) {
+      try {
+        nextRoles = await resolveRoles(session.username, session.ticket);
+        nextLastRoleRefreshAt = currentTime;
+        await sessionRepository.updateSessionRoles(session.sessionId, {
+          roles: nextRoles,
+          lastRoleRefreshAt: nextLastRoleRefreshAt,
+        });
+      } catch (error) {
+        logger.warn('Role refresh failed, using cached roles', error);
+      }
     }
 
     await sessionRepository.touchSession(session.sessionId, {
       lastSeenAt: currentTime,
       expiresAtIdle: nextIdle,
-      lastRoleRefreshAt: session.lastRoleRefreshAt,
+      lastRoleRefreshAt: nextLastRoleRefreshAt,
     });
 
     const hydrated = {
       ...session,
+      roles: nextRoles,
+      lastRoleRefreshAt: nextLastRoleRefreshAt,
       expiresAtIdle: nextIdle,
-      roleRefreshAt: new Date(new Date(session.lastRoleRefreshAt).getTime() + config.roleRefreshIntervalSeconds * 1000),
+      roleRefreshAt: new Date(new Date(nextLastRoleRefreshAt).getTime() + config.roleRefreshIntervalSeconds * 1000),
     };
 
     return res.status(200).json(buildSessionResponse(hydrated, config));

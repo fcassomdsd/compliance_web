@@ -108,6 +108,44 @@ class PgSessionRepository {
     );
   }
 
+  async updateSessionRoles(sessionId, { roles, lastRoleRefreshAt }) {
+    await this.pool.query(
+      `
+      UPDATE auth_session
+      SET
+        roles_json = $2::jsonb,
+        last_role_refresh_at = $3
+      WHERE session_id = $1
+      `,
+      [sessionId, JSON.stringify(roles || []), lastRoleRefreshAt]
+    );
+  }
+
+  async resolveRolesForGroups(groups) {
+    const normalizedGroups = (groups || [])
+      .map((group) => (typeof group === 'string' ? group.trim().toLowerCase() : ''))
+      .filter(Boolean);
+
+    if (normalizedGroups.length === 0) {
+      return [];
+    }
+
+    const result = await this.pool.query(
+      `
+      SELECT DISTINCT ar.role_key
+      FROM alfresco_group_role_map agrm
+      INNER JOIN app_role ar ON ar.id = agrm.role_id
+      WHERE agrm.is_active = TRUE
+        AND ar.is_active = TRUE
+        AND LOWER(TRIM(agrm.alfresco_group)) = ANY($1)
+      ORDER BY ar.role_key
+      `,
+      [normalizedGroups]
+    );
+
+    return result.rows.map((row) => row.role_key);
+  }
+
   async revokeSession(sessionId, revokedAt) {
     await this.pool.query(
       `
