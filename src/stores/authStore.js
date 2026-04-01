@@ -15,6 +15,7 @@ export const useAuthStore = defineStore('auth', {
     roles: [],
     session: null,
     error: null,
+    lastCheckedAt: null,
   }),
 
   getters: {
@@ -45,24 +46,33 @@ export const useAuthStore = defineStore('auth', {
       this.session = null;
     },
 
-    async init() {
+    async init(options = {}) {
+      const { force = false } = options;
+
+      if (!force && this.loading) {
+        return this.authenticated;
+      }
+
       this.loading = true;
       this.error = null;
       try {
         const { data } = await authSession();
         this.applyAuthPayload(data);
         this.initialized = true;
+        this.lastCheckedAt = Date.now();
         return this.authenticated;
       } catch (error) {
         const status = extractStatusCode(error);
         if (status === 401) {
           this.clearAuthState();
           this.initialized = true;
+          this.lastCheckedAt = Date.now();
           return false;
         }
 
         this.clearAuthState();
         this.initialized = true;
+        this.lastCheckedAt = Date.now();
         this.error = error.message;
         throw new Error('initAuth: ' + error.message);
       } finally {
@@ -77,9 +87,11 @@ export const useAuthStore = defineStore('auth', {
         const { data } = await authLogin(username, password);
         this.applyAuthPayload(data);
         this.initialized = true;
+        this.lastCheckedAt = Date.now();
         return true;
       } catch (error) {
         this.clearAuthState();
+        this.lastCheckedAt = Date.now();
         this.error = error.message;
         throw new Error('loginAuth: ' + error.message);
       } finally {
@@ -97,9 +109,18 @@ export const useAuthStore = defineStore('auth', {
       } finally {
         this.clearAuthState();
         this.initialized = true;
+        this.lastCheckedAt = Date.now();
         this.loading = false;
       }
       return true;
+    },
+
+    async ensureSessionFresh(maxAgeMs = 60000) {
+      const age = this.lastCheckedAt ? Date.now() - this.lastCheckedAt : Number.POSITIVE_INFINITY;
+      if (!this.initialized || age > maxAgeMs) {
+        await this.init({ force: true });
+      }
+      return this.authenticated;
     },
   },
 });

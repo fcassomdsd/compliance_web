@@ -91,4 +91,31 @@ describe('authStore', () => {
     expect(store.hasRole(['reporter', 'planner'])).toBe(true);
     expect(store.hasRole(['reporter', 'admin'])).toBe(false);
   });
+
+  it('ensureSessionFresh refreshes when store is stale', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-03-31T10:00:00Z'));
+
+    vi.mocked(authSession).mockResolvedValue({
+      status: 200,
+      data: {
+        authenticated: true,
+        user: { id: 'u5', username: 'fresh', displayName: 'Fresh' },
+        roles: ['inspector'],
+        session: { expiresAt: '2026-03-31T10:30:00Z' },
+      },
+    });
+
+    const store = useAuthStore();
+    store.initialized = true;
+    store.authenticated = true;
+    store.lastCheckedAt = Date.now() - 120000;
+
+    const initSpy = vi.spyOn(store, 'init');
+    const result = await store.ensureSessionFresh(60000);
+
+    expect(result).toBe(true);
+    expect(initSpy).toHaveBeenCalledTimes(1);
+    vi.useRealTimers();
+  });
 });

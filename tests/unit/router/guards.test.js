@@ -36,11 +36,12 @@ describe('router guards', () => {
     const store = useAuthStore();
     store.initialized = true;
     store.authenticated = false;
+    vi.spyOn(store, 'ensureSessionFresh').mockResolvedValue(false);
 
     const result = await requireAuth(buildRoute({ requiresAuth: true, fullPath: '/inspection' }), store);
     expect(result).toEqual({
       name: 'login',
-      query: { redirect: '/inspection' },
+      query: { redirect: '/inspection', reason: 'auth_required' },
     });
   });
 
@@ -48,6 +49,7 @@ describe('router guards', () => {
     const store = useAuthStore();
     store.initialized = true;
     store.authenticated = true;
+    vi.spyOn(store, 'ensureSessionFresh').mockResolvedValue(true);
 
     const result = await requireAuth(buildRoute({ requiresAuth: true }), store);
     expect(result).toBe(true);
@@ -58,6 +60,7 @@ describe('router guards', () => {
     store.initialized = true;
     store.authenticated = true;
     store.roles = ['planner'];
+    vi.spyOn(store, 'ensureSessionFresh').mockResolvedValue(true);
 
     const result = await requireRole(
       buildRoute({
@@ -76,6 +79,7 @@ describe('router guards', () => {
     store.initialized = true;
     store.authenticated = true;
     store.roles = ['inspector'];
+    vi.spyOn(store, 'ensureSessionFresh').mockResolvedValue(true);
 
     const result = await requireRole(
       buildRoute({
@@ -93,6 +97,7 @@ describe('router guards', () => {
     const store = useAuthStore();
     store.initialized = true;
     store.authenticated = false;
+    vi.spyOn(store, 'ensureSessionFresh').mockResolvedValue(false);
 
     const result = await requireRole(
       buildRoute({
@@ -112,7 +117,7 @@ describe('router guards', () => {
   it('initializes auth store on first protected navigation', async () => {
     const store = useAuthStore();
     store.initialized = false;
-    const initSpy = vi.spyOn(store, 'init').mockImplementation(async () => {
+    const freshSpy = vi.spyOn(store, 'ensureSessionFresh').mockImplementation(async () => {
       store.initialized = true;
       store.authenticated = true;
       return true;
@@ -120,7 +125,28 @@ describe('router guards', () => {
 
     const result = await requireAuth(buildRoute({ requiresAuth: true, fullPath: '/checklist' }), store);
 
-    expect(initSpy).toHaveBeenCalledTimes(1);
+    expect(freshSpy).toHaveBeenCalledTimes(1);
     expect(result).toBe(true);
+  });
+
+  it('requireAuth marks expired session reason when user was previously authenticated', async () => {
+    const store = useAuthStore();
+    store.initialized = true;
+    store.authenticated = true;
+
+    vi.spyOn(store, 'ensureSessionFresh').mockImplementation(async () => {
+      store.authenticated = false;
+      return false;
+    });
+
+    const result = await requireAuth(buildRoute({ requiresAuth: true, fullPath: '/inspection-plan' }), store);
+
+    expect(result).toEqual({
+      name: 'login',
+      query: {
+        redirect: '/inspection-plan',
+        reason: 'expired',
+      },
+    });
   });
 });

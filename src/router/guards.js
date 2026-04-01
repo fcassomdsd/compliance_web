@@ -7,12 +7,8 @@ function getRequiredRoles(to) {
 }
 
 async function ensureAuthInitialized(authStore) {
-  if (authStore.initialized) {
-    return;
-  }
-
   try {
-    await authStore.init();
+    await authStore.ensureSessionFresh();
   } catch {
     // Keep navigation deterministic even when bootstrap fails.
   }
@@ -24,6 +20,7 @@ export async function requireAuth(to, authStore) {
     return true;
   }
 
+  const wasAuthenticated = authStore.authenticated;
   await ensureAuthInitialized(authStore);
   if (authStore.authenticated) {
     return true;
@@ -33,6 +30,7 @@ export async function requireAuth(to, authStore) {
     name: 'login',
     query: {
       redirect: to.fullPath,
+      reason: wasAuthenticated ? 'expired' : 'auth_required',
     },
   };
 }
