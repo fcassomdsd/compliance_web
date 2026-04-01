@@ -6,60 +6,33 @@
         <h2>Operational Safety Compliance System</h2>
       </span>
     </div>
-    <div class="controls-container" style="justify-content: space-between;">
-      <button @click="currentView = 'Inspection'" :class="{ 'active-view': currentView === 'Inspection' }">
+    <div class="controls-container">
+      <RouterLink to="/inspection" class="nav-link" exact-active-class="active-view">
         Inspection Manager
-      </button>
+      </RouterLink>
+      <RouterLink to="/assign-inspectors" class="nav-link" exact-active-class="active-view">
+        Assign Inspectors
+      </RouterLink>
+      <RouterLink to="/checklist" class="nav-link" exact-active-class="active-view">
+        Inspection Checklist
+      </RouterLink>
+      <RouterLink to="/inspection-plan" class="nav-link" exact-active-class="active-view">
+        Inspection Plan
+      </RouterLink>
+      <RouterLink to="/inspection-report" class="nav-link" exact-active-class="active-view">
+        Inspection Report
+      </RouterLink>
     </div>
-      <div>
-        <button @click="currentView = 'Inspection'" :class="{ 'active-view': currentView === 'Inspection' }">
-          Inspection Manager
-        </button>
-        <button @click="currentView = 'AssignInspectors'" :class="{ 'active-view': currentView === 'AssignInspectors' }">
-          Assign Inspectors
-        </button>
-        <button @click="currentView = 'Checklist'" :class="{ 'active-view': currentView === 'Checklist' }">
-          Inspection Checklist
-        </button>
-        <button @click="currentView = 'InspectionPlan'" :class="{ 'active-view': currentView === 'InspectionPlan' }">
-          Inspection Plan
-        </button>
-        <button @click="currentView = 'InspectionReport'" :class="{ 'active-view': currentView === 'InspectionReport' }">
-          Inspection Report
-        </button>
-      </div>
-    <InspectionManager v-if="currentView === 'Inspection'"/>
-    <AssignInspectors v-if="currentView === 'AssignInspectors'"/>
-    <ChecklistManager v-if="currentView === 'Checklist'"/>
-    <InspectionPlan v-if="currentView === 'InspectionPlan'"/>
-    <InspectionReport v-if="currentView === 'InspectionReport'"/>
+    <RouterView />
   </div>
 </template>
 
 <script setup>
-import { ref } from 'vue'; // Import ref
-// Import the view components
-import InspectionManager from '@/views/InspectionManager.vue';
-import AssignInspectors from '@/views/AssignInspectors.vue';
-import ChecklistManager from '@/views/ChecklistManager.vue';
-import InspectionPlan from '@/views/InspectionPlan.vue';
-import InspectionReport from '@/views/InspectionReport.vue';
-
-// toast not used here; keep App minimal
 import logo from './assets/images/logos/compliance-logo.png'
-
-// Access the Pinia store
-// no-op
-
-// NEW: State variable to track the current view
-const currentView = ref('Inspection'); 
 
 </script>
 
 <style scoped>
-/* Include existing styles and add a style for active buttons */
-
-/* Scoped styles from style.css */
 .header {
   display: flex;
   align-items: center;
@@ -69,33 +42,40 @@ const currentView = ref('Inspection');
   margin-bottom: 2rem;
 }
 
-/* ... (rest of the existing .header and .controls-container styles) ... */
+.controls-container {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 1.5rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid var(--border-color);
+  margin-bottom: 2rem;
+}
 
-/* NEW: Style for the active navigation button */
-.active-view {
-  background-color: #1565c0 !important; /* Darker secondary color */
+.nav-link {
+  display: inline-block;
+  text-decoration: none;
+  background-color: var(--secondary-color);
+  border: none;
+  color: white;
+  padding: 0.75rem 1.5rem;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 1rem;
+  font-weight: 500;
+  transition: all 0.3s ease;
+  box-shadow: 0 4px 8px rgba(30, 136, 229, 0.2);
+}
+
+.nav-link:hover {
+  background-color: #1565c0;
   transform: translateY(-2px);
   box-shadow: 0 6px 12px rgba(30, 136, 229, 0.3);
 }
 
-/* Ensure the main button container uses flex-start/space-between for navigation */
-.controls-container:first-of-type { /* Target the nav container */
-    display: flex;
-    justify-content: space-between; /* Spread buttons out */
-    gap: 1rem;
-    padding-bottom: 1rem;
-    border-bottom: 1px solid var(--border-color);
-    margin-bottom: 2rem;
+.active-view {
+  background-color: #1565c0 !important;
+  transform: translateY(-2px);
+  box-shadow: 0 6px 12px rgba(30, 136, 229, 0.3);
 }
-
-/* Adjustments for the inner controls container */
-.controls-container:nth-of-type(2) {
-    display: flex;
-    align-items: center;
-    flex-wrap: wrap;
-    gap: 1.5rem;
-    border-bottom: none; /* Remove border from second container */
-}
-
-/* ... (rest of the media query styles) ... */
 </style>
