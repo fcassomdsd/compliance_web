@@ -22,6 +22,12 @@ Optional:
 4. AUTH_ABSOLUTE_TIMEOUT_SECONDS (default: 43200)
 5. AUTH_ROLE_REFRESH_INTERVAL_SECONDS (default: 900)
 6. AUTH_SLIDING_RENEW_THRESHOLD_SECONDS (default: 900)
+7. AUTH_SESSION_ROTATION_INTERVAL_SECONDS (default: 3600)
+8. AUTH_LOGIN_RATE_LIMIT_WINDOW_SECONDS (default: 300)
+9. AUTH_LOGIN_RATE_LIMIT_BLOCK_SECONDS (default: 600)
+10. AUTH_LOGIN_RATE_LIMIT_MAX_ATTEMPTS (default: 5)
+11. AUTH_CSRF_HEADER_NAME (default: x-csrf-token)
+12. AUTH_TICKET_ENCRYPTION_KEY (required in production)
 
 ## Prerequisites
 
@@ -42,5 +48,7 @@ npm run test:server
 
 ## Notes
 
-1. Ticket storage currently uses plain persisted value placeholder and must be replaced with encryption/secret-management in hardening chunk.
-2. Role mapping from Alfresco groups to app roles is planned for Chunk 3.
+1. Logout is CSRF-protected. Send the csrf token returned by login/session in header x-csrf-token.
+2. Provider ticket is stored encrypted at rest using AUTH_TICKET_ENCRYPTION_KEY.
+3. Login endpoint includes IP+username in-memory rate limiting.
+4. Session id is rotated periodically and when roles change during refresh.

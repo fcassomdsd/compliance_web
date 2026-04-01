@@ -2,6 +2,7 @@ const { createApp } = require('./app.cjs');
 const { AUTH_CONFIG } = require('./auth/config.cjs');
 const { PgSessionRepository } = require('./auth/pgSessionRepository.cjs');
 const { AlfrescoClient } = require('./auth/alfrescoClient.cjs');
+const { createTicketProtector } = require('./auth/ticketProtector.cjs');
 
 const port = Number(process.env.AUTH_SERVER_PORT || 4000);
 
@@ -13,9 +14,14 @@ async function start() {
 
   const sessionRepository = new PgSessionRepository({ connectionString });
   const alfrescoClient = new AlfrescoClient({ baseUrl: AUTH_CONFIG.alfrescoBaseUrl });
+  const ticketProtector = createTicketProtector({ secret: AUTH_CONFIG.ticketEncryptionKey });
+  const runtimeConfig = {
+    ...AUTH_CONFIG,
+    ticketProtector,
+  };
 
   const app = createApp({
-    config: AUTH_CONFIG,
+    config: runtimeConfig,
     sessionRepository,
     alfrescoClient,
     logger: console,

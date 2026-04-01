@@ -18,6 +18,7 @@ class PgSessionRepository {
         display_name,
         email,
         alfresco_ticket_encrypted,
+        csrf_secret,
         roles_json,
         created_at,
         last_seen_at,
@@ -26,7 +27,7 @@ class PgSessionRepository {
         expires_at_absolute,
         metadata_json
       ) VALUES (
-        $1,$2,$3,$4,$5,$6,$7::jsonb,$8,$9,$10,$11,$12,$13::jsonb
+        $1,$2,$3,$4,$5,$6,$7,$8::jsonb,$9,$10,$11,$12,$13,$14::jsonb
       )
     `;
 
@@ -37,6 +38,7 @@ class PgSessionRepository {
       session.displayName,
       session.email || null,
       session.ticket,
+      session.csrfSecret,
       JSON.stringify(session.roles || []),
       session.createdAt,
       session.lastSeenAt,
@@ -57,6 +59,7 @@ class PgSessionRepository {
         display_name,
         email,
         alfresco_ticket_encrypted,
+        csrf_secret,
         roles_json,
         created_at,
         last_seen_at,
@@ -83,6 +86,7 @@ class PgSessionRepository {
       displayName: row.display_name,
       email: row.email,
       ticket: row.alfresco_ticket_encrypted,
+      csrfSecret: row.csrf_secret,
       roles: row.roles_json || [],
       createdAt: row.created_at,
       lastSeenAt: row.last_seen_at,
@@ -119,6 +123,45 @@ class PgSessionRepository {
       `,
       [sessionId, JSON.stringify(roles || []), lastRoleRefreshAt]
     );
+  }
+
+  async rotateSession(oldSessionId, nextSession) {
+    const client = await this.pool.connect();
+    try {
+      await client.query('BEGIN');
+
+      await client.query(
+        `
+        UPDATE auth_session
+        SET
+          session_id = $2,
+          csrf_secret = $3,
+          roles_json = $4::jsonb,
+          last_seen_at = $5,
+          last_role_refresh_at = $6,
+          expires_at_idle = $7,
+          metadata_json = $8::jsonb
+        WHERE session_id = $1
+        `,
+        [
+          oldSessionId,
+          nextSession.sessionId,
+          nextSession.csrfSecret,
+          JSON.stringify(nextSession.roles || []),
+          nextSession.lastSeenAt,
+          nextSession.lastRoleRefreshAt,
+          nextSession.expiresAtIdle,
+          JSON.stringify(nextSession.metadata || {}),
+        ]
+      );
+
+      await client.query('COMMIT');
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
   }
 
   async resolveRolesForGroups(groups) {

@@ -27,6 +27,25 @@ class InMemorySessionRepository {
     return this.sessions.get(sessionId) || null;
   }
 
+  async rotateSession(oldSessionId, nextSession) {
+    const current = this.sessions.get(oldSessionId);
+    if (!current) {
+      return;
+    }
+
+    this.sessions.delete(oldSessionId);
+    this.sessions.set(nextSession.sessionId, {
+      ...current,
+      sessionId: nextSession.sessionId,
+      csrfSecret: nextSession.csrfSecret,
+      roles: nextSession.roles,
+      lastSeenAt: nextSession.lastSeenAt,
+      lastRoleRefreshAt: nextSession.lastRoleRefreshAt,
+      expiresAtIdle: nextSession.expiresAtIdle,
+      metadata: nextSession.metadata || current.metadata || {},
+    });
+  }
+
   async touchSession(sessionId, patch) {
     const current = this.sessions.get(sessionId);
     if (!current) {
@@ -104,6 +123,11 @@ function buildTestApp({ now } = {}) {
     absoluteTimeoutSeconds: 43200,
     roleRefreshIntervalSeconds: 900,
     slidingRenewThresholdSeconds: 900,
+    sessionRotationIntervalSeconds: 3600,
+    csrfHeaderName: 'x-csrf-token',
+    loginRateLimitWindowSeconds: 300,
+    loginRateLimitBlockSeconds: 600,
+    loginRateLimitMaxAttempts: 5,
   };
 
   const app = createApp({
@@ -134,6 +158,7 @@ describe('Auth Router Chunk 2 foundation', () => {
     expect(loginResponse.body.authenticated).toBe(true);
     expect(loginResponse.body.user.displayName).toBe('Display alice');
     expect(loginResponse.body.roles).toEqual(['inspector']);
+    expect(loginResponse.body.csrfToken).toBeTruthy();
     expect(loginResponse.headers['set-cookie']).toBeDefined();
 
     const cookie = loginResponse.headers['set-cookie'][0].split(';')[0];
@@ -164,9 +189,11 @@ describe('Auth Router Chunk 2 foundation', () => {
       .send({ username: 'bob', password: 'secret' });
 
     const cookie = loginResponse.headers['set-cookie'][0].split(';')[0];
+    const csrfToken = loginResponse.body.csrfToken;
     const logoutResponse = await request(app)
       .post('/api/auth/logout')
-      .set('Cookie', cookie);
+      .set('Cookie', cookie)
+      .set('x-csrf-token', csrfToken);
 
     expect(logoutResponse.status).toBe(200);
     expect(logoutResponse.body.ok).toBe(true);
@@ -174,7 +201,8 @@ describe('Auth Router Chunk 2 foundation', () => {
 
     const secondLogout = await request(app)
       .post('/api/auth/logout')
-      .set('Cookie', cookie);
+      .set('Cookie', cookie)
+      .set('x-csrf-token', csrfToken);
 
     expect(secondLogout.status).toBe(200);
     expect(secondLogout.body.ok).toBe(true);
@@ -215,6 +243,8 @@ describe('Auth Router Chunk 2 foundation', () => {
 
     expect(sessionResponse.status).toBe(200);
     expect(sessionResponse.body.roles).toEqual(['planner']);
+    expect(sessionResponse.body.csrfToken).toBeTruthy();
+    expect(sessionResponse.headers['set-cookie']).toBeDefined();
   });
 
   it('keeps cached roles when role refresh fails', async () => {
@@ -241,5 +271,22 @@ describe('Auth Router Chunk 2 foundation', () => {
 
     expect(sessionResponse.status).toBe(200);
     expect(sessionResponse.body.roles).toEqual(['inspector']);
+  });
+
+  it('rejects logout when csrf token is invalid', async () => {
+    const { app } = buildTestApp();
+
+    const loginResponse = await request(app)
+      .post('/api/auth/login')
+      .send({ username: 'erin', password: 'secret' });
+
+    const cookie = loginResponse.headers['set-cookie'][0].split(';')[0];
+    const logoutResponse = await request(app)
+      .post('/api/auth/logout')
+      .set('Cookie', cookie)
+      .set('x-csrf-token', 'invalid-token');
+
+    expect(logoutResponse.status).toBe(403);
+    expect(logoutResponse.body.code).toBe('AUTH_FORBIDDEN');
   });
 });
