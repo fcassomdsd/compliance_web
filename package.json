@@ -10,6 +10,9 @@
     "preview": "vite preview",
     "test": "vitest",
     "test:server": "vitest run tests/server",
+    "test:e2e": "vitest run tests/e2e",
+    "test:auth:all": "vitest run tests/server tests/e2e tests/unit/router/guards.test.js tests/unit/stores/authStore.test.js",
+    "load:auth:probe": "node scripts/auth-session-load-probe.cjs",
     "test:ui": "vitest --ui",
     "lint": "eslint . --ext .js,.vue,.json --format json --output-file eslint-report.json || true && eslint . --ext .js,.vue,.json",
     "lint:fix": "eslint . --ext .js,.vue,.json --fix"

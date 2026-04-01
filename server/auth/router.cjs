@@ -20,6 +20,20 @@ function buildError(code, message) {
   };
 }
 
+function isProviderUnavailableError(error) {
+  const status = error?.response?.status;
+  if (status >= 500) {
+    return true;
+  }
+
+  const text = String(error?.message || '').toLowerCase();
+  if (text.includes('unavailable') || text.includes('timeout') || text.includes('econnrefused') || text.includes('enotfound')) {
+    return true;
+  }
+
+  return false;
+}
+
 function setAuthCookie(res, cookieName, sessionId, config) {
   res.cookie(cookieName, sessionId, {
     httpOnly: true,
@@ -108,6 +122,11 @@ function createAuthRouter({ config, sessionRepository, alfrescoClient, now = () 
         auth = await alfrescoClient.createTicket(username, password);
       } catch (error) {
         rateLimiter.registerFailure(requestIp, username);
+        if (isProviderUnavailableError(error)) {
+          auditAuthEvent(logger, 'login_provider_unavailable', { username, ip: requestIp });
+          return res.status(503).json(buildError('AUTH_IDP_UNAVAILABLE', 'Identity provider unavailable'));
+        }
+
         auditAuthEvent(logger, 'login_failed', { username, ip: requestIp });
         return res.status(401).json(buildError('AUTH_INVALID_CREDENTIALS', 'Invalid credentials'));
       }
