@@ -5,16 +5,21 @@
   "private": true,
   "scripts": {
     "dev": "vite",
+    "server": "node server/index.cjs",
     "build": "vite build",
     "preview": "vite preview",
     "test": "vitest",
+    "test:server": "vitest run tests/server",
     "test:ui": "vitest --ui",
     "lint": "eslint . --ext .js,.vue,.json --format json --output-file eslint-report.json || true && eslint . --ext .js,.vue,.json",
     "lint:fix": "eslint . --ext .js,.vue,.json --fix"
   },
   "dependencies": {
     "axios": "^1.12.2",
+    "cookie-parser": "^1.4.7",
     "eslint": "^9.36.0",
+    "express": "^5.2.1",
+    "pg": "^8.20.0",
     "pinia": "^2.1.7",
     "vue": "^3.4.21",
     "vue-router": "^4.6.4",
@@ -30,6 +35,7 @@
     "eslint": "^9.35.0",
     "eslint-plugin-vue": "^10.4.0",
     "jsdom": "^27.0.0",
+    "supertest": "^7.2.2",
     "vite": "^5.2.8",
     "vitest": "^3.2.4",
     "vue-eslint-parser": "^10.2.0"
