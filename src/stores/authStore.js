@@ -1,0 +1,126 @@
+import { defineStore } from 'pinia';
+import { authLogin, authLogout, authSession } from '@/services/authServices';
+
+function extractStatusCode(error) {
+  const match = String(error?.message || '').match(/status code (\d{3})/i);
+  return match ? Number(match[1]) : null;
+}
+
+export const useAuthStore = defineStore('auth', {
+  state: () => ({
+    initialized: false,
+    loading: false,
+    authenticated: false,
+    user: null,
+    roles: [],
+    session: null,
+    error: null,
+    lastCheckedAt: null,
+  }),
+
+  getters: {
+    hasRole: (state) => (roleOrRoles) => {
+      if (!roleOrRoles) return false;
+
+      const required = Array.isArray(roleOrRoles) ? roleOrRoles : [roleOrRoles];
+      if (required.length === 0) return false;
+
+      const roleSet = new Set((state.roles || []).map((role) => String(role).trim().toLowerCase()));
+      return required.some((role) => roleSet.has(String(role).trim().toLowerCase()));
+    },
+  },
+
+  actions: {
+    applyAuthPayload(payload) {
+      this.authenticated = Boolean(payload?.authenticated);
+      this.user = payload?.user || null;
+      this.roles = Array.isArray(payload?.roles) ? payload.roles : [];
+      this.session = payload?.session || null;
+      this.error = null;
+    },
+
+    clearAuthState() {
+      this.authenticated = false;
+      this.user = null;
+      this.roles = [];
+      this.session = null;
+    },
+
+    async init(options = {}) {
+      const { force = false } = options;
+
+      if (!force && this.loading) {
+        return this.authenticated;
+      }
+
+      this.loading = true;
+      this.error = null;
+      try {
+        const { data } = await authSession();
+        this.applyAuthPayload(data);
+        this.initialized = true;
+        this.lastCheckedAt = Date.now();
+        return this.authenticated;
+      } catch (error) {
+        const status = extractStatusCode(error);
+        if (status === 401) {
+          this.clearAuthState();
+          this.initialized = true;
+          this.lastCheckedAt = Date.now();
+          return false;
+        }
+
+        this.clearAuthState();
+        this.initialized = true;
+        this.lastCheckedAt = Date.now();
+        this.error = error.message;
+        throw new Error('initAuth: ' + error.message);
+      } finally {
+        this.loading = false;
+      }
+    },
+
+    async login(username, password) {
+      this.loading = true;
+      this.error = null;
+      try {
+        const { data } = await authLogin(username, password);
+        this.applyAuthPayload(data);
+        this.initialized = true;
+        this.lastCheckedAt = Date.now();
+        return true;
+      } catch (error) {
+        this.clearAuthState();
+        this.lastCheckedAt = Date.now();
+        this.error = error.message;
+        throw new Error('loginAuth: ' + error.message);
+      } finally {
+        this.loading = false;
+      }
+    },
+
+    async logout() {
+      this.loading = true;
+      this.error = null;
+      try {
+        await authLogout();
+      } catch (error) {
+        this.error = error.message;
+      } finally {
+        this.clearAuthState();
+        this.initialized = true;
+        this.lastCheckedAt = Date.now();
+        this.loading = false;
+      }
+      return true;
+    },
+
+    async ensureSessionFresh(maxAgeMs = 60000) {
+      const age = this.lastCheckedAt ? Date.now() - this.lastCheckedAt : Number.POSITIVE_INFINITY;
+      if (!this.initialized || age > maxAgeMs) {
+        await this.init({ force: true });
+      }
+      return this.authenticated;
+    },
+  },
+});
