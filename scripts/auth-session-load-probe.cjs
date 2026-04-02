@@ -1,4 +1,3 @@
-/* eslint-disable no-console */
 const request = require('supertest');
 const { createApp } = require('../server/app.cjs');
 
