@@ -21,5 +21,14 @@ export default defineConfig({
   // Optional: Customize development server options
   server: {
     port: 3000, // Use a custom port for the dev server
+    host: '0.0.0.0',
+    proxy: process.env.VITE_AUTH_PROXY_TARGET
+      ? {
+          '/api/auth': {
+            target: process.env.VITE_AUTH_PROXY_TARGET,
+            changeOrigin: true,
+          },
+        }
+      : undefined,
   },
 })
