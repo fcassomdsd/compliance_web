@@ -252,3 +252,51 @@ export async function apiInspectionReport(inspectionCode, reportDate, servicePro
   }
 }
 
+export async function apiInspectorByAlfrescoUser(alfrescoUserId) {
+  try {
+    if (!alfrescoUserId || typeof alfrescoUserId !== 'string' || alfrescoUserId.trim().length === 0) {
+      throw new Error('alfrescoUserId is required');
+    }
+
+    const result = await axios({
+      method: 'get',
+      url: `${apiServer}/inspector/${encodeURIComponent(alfrescoUserId.trim())}`,
+    });
+    return { data: result.data, status: result.status };
+  } catch (error) {
+    throw new Error('apiInspectorByAlfrescoUser: ' + error.message);
+  }
+}
+
+export async function apiInspectionByIdOrCode(inspectionRef) {
+  try {
+    if (!inspectionRef || typeof inspectionRef !== 'string' || inspectionRef.trim().length === 0) {
+      throw new Error('inspectionRef is required');
+    }
+
+    const result = await axios({
+      method: 'get',
+      url: `${apiServer}/inspection/${encodeURIComponent(inspectionRef.trim())}`,
+    });
+    return { data: result.data, status: result.status };
+  } catch (error) {
+    throw new Error('apiInspectionByIdOrCode: ' + error.message);
+  }
+}
+
+export async function apiAssignmentGroup(alfrescoGroup) {
+  try {
+    if (!alfrescoGroup || typeof alfrescoGroup !== 'string' || alfrescoGroup.trim().length === 0) {
+      throw new Error('alfrescoGroup is required');
+    }
+
+    const result = await axios({
+      method: 'get',
+      url: `${apiServer}/assignmentGroup/${encodeURIComponent(alfrescoGroup.trim())}`,
+    });
+    return { data: result.data, status: result.status };
+  } catch (error) {
+    throw new Error('apiAssignmentGroup: ' + error.message);
+  }
+}
+

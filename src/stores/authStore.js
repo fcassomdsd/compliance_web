@@ -1,5 +1,6 @@
 import { defineStore } from 'pinia';
 import { authLogin, authLogout, authSession } from '@/services/authServices';
+import { apiAssignmentGroup, apiInspectorByAlfrescoUser } from '@/services/apiServices';
 
 function extractStatusCode(error) {
   const match = String(error?.message || '').match(/status code (\d{3})/i);
@@ -13,6 +14,9 @@ export const useAuthStore = defineStore('auth', {
     authenticated: false,
     user: null,
     roles: [],
+    groups: [],
+    inspectorProfile: null,
+    assignerSpecialties: [],
     session: null,
     error: null,
     lastCheckedAt: null,
@@ -28,6 +32,9 @@ export const useAuthStore = defineStore('auth', {
       const roleSet = new Set((state.roles || []).map((role) => String(role).trim().toLowerCase()));
       return required.some((role) => roleSet.has(String(role).trim().toLowerCase()));
     },
+    assignerSpecialtyIds: (state) => {
+      return new Set((state.assignerSpecialties || []).map((specialty) => specialty?.id).filter(Boolean));
+    },
   },
 
   actions: {
@@ -35,6 +42,7 @@ export const useAuthStore = defineStore('auth', {
       this.authenticated = Boolean(payload?.authenticated);
       this.user = payload?.user || null;
       this.roles = Array.isArray(payload?.roles) ? payload.roles : [];
+      this.groups = Array.isArray(payload?.groups) ? payload.groups : [];
       this.session = payload?.session || null;
       this.error = null;
     },
@@ -43,7 +51,55 @@ export const useAuthStore = defineStore('auth', {
       this.authenticated = false;
       this.user = null;
       this.roles = [];
+      this.groups = [];
+      this.inspectorProfile = null;
+      this.assignerSpecialties = [];
       this.session = null;
+    },
+
+    async refreshDomainContext() {
+      this.inspectorProfile = null;
+      this.assignerSpecialties = [];
+
+      if (!this.authenticated || !this.user?.username) {
+        return;
+      }
+
+      try {
+        const { data } = await apiInspectorByAlfrescoUser(this.user.username);
+        this.inspectorProfile = data || null;
+      } catch {
+        // Domain context is optional and should not block authentication.
+      }
+
+      if (!this.hasRole('assigner')) {
+        return;
+      }
+
+      const scopedAssignerGroups = (this.groups || []).filter((group) => {
+        const normalized = String(group || '').trim().toUpperCase();
+        return normalized.startsWith('GROUP_U-VSO-IN_ASSIGNER') && normalized !== 'GROUP_U-VSO-IN_ASSIGNER';
+      });
+
+      if (scopedAssignerGroups.length === 0) {
+        return;
+      }
+
+      const specialtyMap = new Map();
+      for (const group of scopedAssignerGroups) {
+        try {
+          const { data } = await apiAssignmentGroup(group);
+          for (const specialty of data?.specialties || []) {
+            if (specialty?.id) {
+              specialtyMap.set(specialty.id, specialty);
+            }
+          }
+        } catch {
+          // Keep partial scope resolution when one mapping call fails.
+        }
+      }
+
+      this.assignerSpecialties = Array.from(specialtyMap.values());
     },
 
     async init(options = {}) {
@@ -58,6 +114,7 @@ export const useAuthStore = defineStore('auth', {
       try {
         const { data } = await authSession();
         this.applyAuthPayload(data);
+        void this.refreshDomainContext();
         this.initialized = true;
         this.lastCheckedAt = Date.now();
         return this.authenticated;
@@ -86,6 +143,7 @@ export const useAuthStore = defineStore('auth', {
       try {
         const { data } = await authLogin(username, password);
         this.applyAuthPayload(data);
+        void this.refreshDomainContext();
         this.initialized = true;
         this.lastCheckedAt = Date.now();
         return true;

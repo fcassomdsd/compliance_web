@@ -50,6 +50,8 @@ function shouldRefreshRoles(session, now, config) {
 }
 
 function buildSessionResponse(session, config) {
+  const groups = Array.isArray(session.metadata?.groups) ? session.metadata.groups : [];
+
   return {
     authenticated: true,
     user: {
@@ -59,6 +61,7 @@ function buildSessionResponse(session, config) {
       email: session.email || undefined,
     },
     roles: Array.isArray(session.roles) ? session.roles : [],
+    groups,
     session: {
       issuedAt: toIso(session.createdAt),
       expiresAt: toIso(session.expiresAtIdle),

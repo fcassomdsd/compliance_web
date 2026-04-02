@@ -41,6 +41,9 @@
             {{ spec.specialtyName }}
           </option>
         </select>
+        <p v-if="isInspectorScopeFiltered" class="info-text">
+          Showing only specialties assigned to you for this inspection.
+        </p>
       </div>
 
       <!-- Global Control Buttons -->
@@ -118,12 +121,14 @@ import { useProtocolQuestionStore } from '@/stores/protocolQuestionStore';
 import { useInspectionQuestionStore } from '@/stores/inspectionQuestionStore';
 import { useInspectedSpecialtyStore } from '@/stores/inspectedSpecialtyStore';
 import { useInspectionStore } from '@/stores/inspectionStore';
+import { useAuthStore } from '@/stores/authStore';
 import { useToast } from 'vue-toastification';
 
 const protocolQuestionStore = useProtocolQuestionStore();
 const inspectionQuestionStore = useInspectionQuestionStore();
 const inspectedSpecialtyStore = useInspectedSpecialtyStore();
 const inspectionStore = useInspectionStore();
+const authStore = useAuthStore();
 const toast = useToast();
 
 const selectedInspectionId = ref('NONE');
@@ -168,11 +173,30 @@ const availableInspectedSpecialties = computed(() => {
     return [];
   }
 
+  const shouldFilterInspectorAssignments = authStore.hasRole('inspector')
+    && !authStore.hasRole(['admin', 'planner']);
+
+  const inspectorId = authStore.inspectorProfile?.id;
+  const actingInspectorsByInspectedSpecialty = inspectedSpecialtyStore.inspectors || {};
+
   const specialties = [];
   for (const locServiceId in inspectedSpecialtyStore.inspectedServices) {
     const locService = inspectedSpecialtyStore.inspectedServices[locServiceId];
     for (const specialtyId in locService.specialties) {
       const specialty = locService.specialties[specialtyId];
+
+      if (shouldFilterInspectorAssignments) {
+        const assignedInspectors = actingInspectorsByInspectedSpecialty[specialty.id] || [];
+        const isAssigned = assignedInspectors.some((inspector) => inspector?.id === inspectorId);
+        if (!isAssigned) {
+          continue;
+        }
+      }
+
+      if (!specialty) {
+        continue;
+      }
+
       specialties.push({
         id: specialty.id,
         specialtyName: specialty.name,
@@ -181,6 +205,10 @@ const availableInspectedSpecialties = computed(() => {
     }
   }
   return specialties;
+});
+
+const isInspectorScopeFiltered = computed(() => {
+  return authStore.hasRole('inspector') && !authStore.hasRole(['admin', 'planner']);
 });
 
 /**
@@ -200,8 +228,27 @@ const onInspectionChange = async () => {
 
     loading.value = true;
 
+    // Refresh in-session Atrocore inspector context when available.
+    await authStore.refreshDomainContext();
+
     // Load inspected services/specialties for this inspection
     await inspectedSpecialtyStore.getInspectedServices(selectedInspectionId.value);
+
+    // Load assignment map so inspectors only see specialties assigned to them in this inspection.
+    const inspectedSpecialtyIds = [];
+    for (const locServiceId in inspectedSpecialtyStore.inspectedServices) {
+      const locService = inspectedSpecialtyStore.inspectedServices[locServiceId];
+      for (const specialtyId in locService.specialties) {
+        const specialty = locService.specialties[specialtyId];
+        if (specialty?.id) {
+          inspectedSpecialtyIds.push(specialty.id);
+        }
+      }
+    }
+
+    if (inspectedSpecialtyIds.length > 0 && typeof inspectedSpecialtyStore.loadActingInspectors === 'function') {
+      await inspectedSpecialtyStore.loadActingInspectors({ inspectedSpecialtyId: inspectedSpecialtyIds });
+    }
   } catch (err) {
     error.value = 'Failed to load inspected specialties: ' + err.message;
     console.error('Error loading inspected specialties:', err);
@@ -448,6 +495,12 @@ const totalQuestionCount = computed(() => {
   font-weight: 600;
   color: var(--primary-color);
   font-size: 0.95rem;
+}
+
+.info-text {
+  margin-top: 0.45rem;
+  color: #546e7a;
+  font-size: 0.85rem;
 }
 
 .grid-cell1 select {
