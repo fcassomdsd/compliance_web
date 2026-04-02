@@ -32,6 +32,22 @@
     <p v-if="selectedInspection && serviceProviders.length === 0 && !loading" class="warning-text">
       No service providers found for this inspection.
     </p>
+    <p v-if="selectedInspection && !hasReportPermission && !loading" class="warning-text">
+      Only the main or secondary inspector assigned to this inspection can generate reports.
+    </p>
+    <div v-if="selectedInspection && !loading && authorityContext" class="authority-info" :class="{ authorized: hasReportPermission }">
+      <p>
+        Main inspector: <strong>{{ authorityContext.mainInspectorName || 'Not assigned' }}</strong>
+        | Secondary inspector: <strong>{{ authorityContext.secondaryInspectorName || 'Not assigned' }}</strong>
+      </p>
+      <p>
+        Your inspector profile: <strong>{{ authorityContext.currentInspectorName || 'Not linked' }}</strong>
+        ({{ authorityContext.currentInspectorId || 'N/A' }})
+      </p>
+      <p>
+        Authorization: <strong>{{ hasReportPermission ? 'Allowed' : 'Not allowed for this inspection' }}</strong>
+      </p>
+    </div>
     <div v-if="loading" class="loader"></div>
 
     <div class="data-table">
@@ -75,12 +91,14 @@ import { ref, computed, onBeforeMount } from 'vue';
 import BaseManager from '@/components/base/BaseManager.vue';
 import { useInspectionStore } from '@/stores/inspectionStore';
 import { useInspectedSpecialtyStore } from '@/stores/inspectedSpecialtyStore';
+import { useAuthStore } from '@/stores/authStore';
 import { useToast } from 'vue-toastification';
-import { apiInspectionReport } from '@/services/apiServices';
+import { apiInspectionByIdOrCode, apiInspectionReport } from '@/services/apiServices';
 import viewImg from '@/assets/images/icons/view.png';
 
 const inspectionStore = useInspectionStore();
 const inspectedStore = useInspectedSpecialtyStore();
+const authStore = useAuthStore();
 const toast = useToast();
 
 const selectedInspection = ref(null);
@@ -88,8 +106,15 @@ const reportDate = ref('');
 const selectedServiceProviderId = ref('');
 const serviceProviders = ref([]);
 const loading = ref(false);
+const hasInspectionAuthority = ref(false);
+const authorityContext = ref(null);
+
+const hasReportPermission = computed(() => {
+  return authStore.hasRole('admin') || hasInspectionAuthority.value;
+});
 
 const canGenerate = computed(() =>
+  hasReportPermission.value &&
   !!selectedInspection.value &&
   reportDate.value.trim().length > 0 &&
   selectedServiceProviderId.value !== ''
@@ -103,8 +128,24 @@ const selectInspection = async (inspection) => {
   selectedInspection.value = inspection;
   selectedServiceProviderId.value = '';
   serviceProviders.value = [];
+  hasInspectionAuthority.value = false;
+  authorityContext.value = null;
   loading.value = true;
   try {
+    await authStore.refreshDomainContext();
+    const { data: inspectionDetails } = await apiInspectionByIdOrCode(inspection.id || inspection.code);
+    const inspectorId = authStore.inspectorProfile?.id;
+    hasInspectionAuthority.value = Boolean(
+      inspectorId &&
+      (inspectionDetails?.mainInspectorId === inspectorId || inspectionDetails?.secondaryInspectorId === inspectorId)
+    );
+    authorityContext.value = {
+      mainInspectorName: inspectionDetails?.mainInspectorName,
+      secondaryInspectorName: inspectionDetails?.secondaryInspectorName,
+      currentInspectorId: inspectorId,
+      currentInspectorName: authStore.inspectorProfile?.name,
+    };
+
     await inspectedStore.getInspectedServices(inspection.id);
     serviceProviders.value = await inspectedStore.getServiceProviders();
   } catch (error) {
@@ -146,6 +187,23 @@ const generateReport = async () => {
   color: var(--warning-color, #e65100);
   font-size: 0.9rem;
   margin-top: 0.5rem;
+}
+.authority-info {
+  margin-top: 0.75rem;
+  border: 1px solid #d8e3ef;
+  border-radius: 8px;
+  padding: 0.75rem;
+  background: #f7fbff;
+  color: #33485f;
+}
+
+.authority-info.authorized {
+  border-color: #b6dfbc;
+  background: #f2fbf3;
+}
+
+.authority-info p {
+  margin: 0.2rem 0;
 }
 .selected-row {
   background-color: var(--highlight-color, #e3f2fd);

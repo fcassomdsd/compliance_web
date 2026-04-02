@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createPinia, setActivePinia } from 'pinia';
 
 import { useAuthStore } from '@/stores/authStore';
-import { requireAuth, requireRole } from '@/router/guards';
+import { applyAuthGuards, requireAuth, requireRole } from '@/router/guards';
 
 function buildRoute({ requiresAuth = false, requiredRoles = [], fullPath = '/inspection' } = {}) {
   return {
@@ -114,6 +114,12 @@ describe('router guards', () => {
     });
   });
 
+  it('requireRole allows routes without role requirements', async () => {
+    const store = useAuthStore();
+    const result = await requireRole(buildRoute({ requiresAuth: true, requiredRoles: [] }), store);
+    expect(result).toBe(true);
+  });
+
   it('initializes auth store on first protected navigation', async () => {
     const store = useAuthStore();
     store.initialized = false;
@@ -148,5 +154,46 @@ describe('router guards', () => {
         reason: 'expired',
       },
     });
+  });
+
+  it('guard helpers tolerate session refresh errors', async () => {
+    const store = useAuthStore();
+    store.initialized = true;
+    store.authenticated = false;
+    vi.spyOn(store, 'ensureSessionFresh').mockRejectedValue(new Error('boom'));
+
+    const authResult = await requireAuth(buildRoute({ requiresAuth: true, fullPath: '/inspection' }), store);
+    const roleResult = await requireRole(buildRoute({ requiresAuth: true, requiredRoles: ['admin'], fullPath: '/inspection' }), store);
+
+    expect(authResult).toEqual({
+      name: 'login',
+      query: { redirect: '/inspection', reason: 'auth_required' },
+    });
+    expect(roleResult).toEqual({
+      name: 'login',
+      query: { redirect: '/inspection' },
+    });
+  });
+
+  it('applyAuthGuards wires router beforeEach and returns role redirect', async () => {
+    const store = useAuthStore();
+    store.initialized = true;
+    store.authenticated = true;
+    store.roles = ['inspector'];
+    vi.spyOn(store, 'ensureSessionFresh').mockResolvedValue(true);
+
+    let guard;
+    const router = {
+      beforeEach: vi.fn((callback) => {
+        guard = callback;
+      }),
+    };
+
+    applyAuthGuards(router, () => store);
+
+    expect(router.beforeEach).toHaveBeenCalledTimes(1);
+
+    const result = await guard(buildRoute({ requiresAuth: true, requiredRoles: ['admin'], fullPath: '/inspection-report' }));
+    expect(result).toEqual({ name: 'forbidden' });
   });
 });

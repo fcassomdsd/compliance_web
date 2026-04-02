@@ -61,6 +61,7 @@ class PgSessionRepository {
         alfresco_ticket_encrypted,
         csrf_secret,
         roles_json,
+        metadata_json,
         created_at,
         last_seen_at,
         last_role_refresh_at,
@@ -88,6 +89,7 @@ class PgSessionRepository {
       ticket: row.alfresco_ticket_encrypted,
       csrfSecret: row.csrf_secret,
       roles: row.roles_json || [],
+      metadata: row.metadata_json || {},
       createdAt: row.created_at,
       lastSeenAt: row.last_seen_at,
       lastRoleRefreshAt: row.last_role_refresh_at,
@@ -112,7 +114,22 @@ class PgSessionRepository {
     );
   }
 
-  async updateSessionRoles(sessionId, { roles, lastRoleRefreshAt }) {
+  async updateSessionRoles(sessionId, { roles, lastRoleRefreshAt, metadata }) {
+    if (metadata && typeof metadata === 'object') {
+      await this.pool.query(
+        `
+        UPDATE auth_session
+        SET
+          roles_json = $2::jsonb,
+          last_role_refresh_at = $3,
+          metadata_json = $4::jsonb
+        WHERE session_id = $1
+        `,
+        [sessionId, JSON.stringify(roles || []), lastRoleRefreshAt, JSON.stringify(metadata)]
+      );
+      return;
+    }
+
     await this.pool.query(
       `
       UPDATE auth_session

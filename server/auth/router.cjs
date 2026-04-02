@@ -91,7 +91,11 @@ function createAuthRouter({ config, sessionRepository, alfrescoClient, now = () 
       groups = await alfrescoClient.getUserGroups({ username, ticket });
     }
 
-    return sessionRepository.resolveRolesForGroups(groups);
+    const roles = await sessionRepository.resolveRolesForGroups(groups);
+    return {
+      roles,
+      groups: Array.isArray(groups) ? groups : [],
+    };
   }
 
   router.get('/diagnostics', async (req, res) => {
@@ -137,7 +141,7 @@ function createAuthRouter({ config, sessionRepository, alfrescoClient, now = () 
       const times = buildSessionTimes(nowTs, config);
       const sessionId = crypto.randomUUID();
       const csrfSecret = crypto.randomBytes(24).toString('base64url');
-      const roles = await resolveRoles(username, auth.ticket, auth.groups);
+      const { roles, groups } = await resolveRoles(username, auth.ticket, auth.groups);
       const encryptedTicket = ticketProtector.encrypt(auth.ticket);
 
       const session = {
@@ -155,7 +159,9 @@ function createAuthRouter({ config, sessionRepository, alfrescoClient, now = () 
         roleRefreshAt: times.roleRefreshAt,
         expiresAtIdle: times.expiresAtIdle,
         expiresAtAbsolute: times.expiresAtAbsolute,
-        metadata: {},
+        metadata: {
+          groups,
+        },
       };
 
       await sessionRepository.createSession(session);
@@ -195,6 +201,7 @@ function createAuthRouter({ config, sessionRepository, alfrescoClient, now = () 
     let nextLastRoleRefreshAt = session.lastRoleRefreshAt;
     let nextSessionId = session.sessionId;
     let nextCsrfSecret = session.csrfSecret;
+    let nextGroups = Array.isArray(session.metadata?.groups) ? session.metadata.groups : [];
 
     if (shouldSlideIdle(session, currentTime, config)) {
       nextIdle = slideIdleExpiry(session, currentTime, config);
@@ -203,11 +210,17 @@ function createAuthRouter({ config, sessionRepository, alfrescoClient, now = () 
     if (shouldRefreshRoles(session, currentTime, config)) {
       try {
         const ticket = ticketProtector.decrypt(session.ticket);
-        nextRoles = await resolveRoles(session.username, ticket);
+        const resolvedAuth = await resolveRoles(session.username, ticket);
+        nextRoles = resolvedAuth.roles;
+        nextGroups = resolvedAuth.groups;
         nextLastRoleRefreshAt = currentTime;
         await sessionRepository.updateSessionRoles(session.sessionId, {
           roles: nextRoles,
           lastRoleRefreshAt: nextLastRoleRefreshAt,
+          metadata: {
+            ...(session.metadata || {}),
+            groups: nextGroups,
+          },
         });
 
         auditAuthEvent(logger, 'roles_refreshed', {
@@ -259,6 +272,10 @@ function createAuthRouter({ config, sessionRepository, alfrescoClient, now = () 
       lastRoleRefreshAt: nextLastRoleRefreshAt,
       expiresAtIdle: nextIdle,
       roleRefreshAt: new Date(new Date(nextLastRoleRefreshAt).getTime() + config.roleRefreshIntervalSeconds * 1000),
+      metadata: {
+        ...(session.metadata || {}),
+        groups: nextGroups,
+      },
     };
 
     const response = buildSessionResponse(hydrated, config);

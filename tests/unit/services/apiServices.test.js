@@ -1,6 +1,14 @@
 // fileServices.test.js
 import { describe, it, expect, vi } from 'vitest';
-import { apiEntityCRUD, apiEntityLinks } from '@/services/apiServices';
+import {
+  apiAssignmentGroup,
+  apiEntityCRUD,
+  apiEntityLinks,
+  apiInspectionByIdOrCode,
+  apiInspectionPlan,
+  apiInspectionReport,
+  apiInspectorByAlfrescoUser,
+} from '@/services/apiServices';
 import { default as axios } from 'axios';
 
 // Mock the axios module
@@ -212,5 +220,49 @@ describe('apiServices', () => {
     });
 
   }); 
-  
+
+  describe('domain endpoints', () => {
+    it('calls inspector lookup endpoint correctly', async () => {
+      const result = await apiInspectorByAlfrescoUser('fernando.casso');
+      expect(result.data).toEqual({
+        method: 'get',
+        url: 'http://localhost:1880/inspector/fernando.casso',
+      });
+    });
+
+    it('calls inspection lookup endpoint correctly', async () => {
+      const result = await apiInspectionByIdOrCode('MDPP-2026-01');
+      expect(result.data).toEqual({
+        method: 'get',
+        url: 'http://localhost:1880/inspection/MDPP-2026-01',
+      });
+    });
+
+    it('calls assignment group lookup endpoint correctly', async () => {
+      const result = await apiAssignmentGroup('GROUP_U-VSO-IN_AssignerAGA');
+      expect(result.data).toEqual({
+        method: 'get',
+        url: 'http://localhost:1880/assignmentGroup/GROUP_U-VSO-IN_AssignerAGA',
+      });
+    });
+
+    it('validates required params for domain endpoints', async () => {
+      await expect(apiInspectorByAlfrescoUser('')).rejects.toThrow('apiInspectorByAlfrescoUser: alfrescoUserId is required');
+      await expect(apiInspectionByIdOrCode('')).rejects.toThrow('apiInspectionByIdOrCode: inspectionRef is required');
+      await expect(apiAssignmentGroup('')).rejects.toThrow('apiAssignmentGroup: alfrescoGroup is required');
+    });
+
+    it('wraps axios failure for domain endpoints', async () => {
+      vi.mocked(axios).mockImplementationOnce(() => {
+        throw new Error('Axios failure');
+      });
+      await expect(apiInspectorByAlfrescoUser('fernando.casso')).rejects.toThrow('apiInspectorByAlfrescoUser: Axios failure');
+    });
+
+    it('validates inspection plan and report input branches', async () => {
+      await expect(apiInspectionPlan('')).rejects.toThrow('apiInspectionPlan: inspectionCode is required');
+      await expect(apiInspectionReport('CODE', '', 'provider')).rejects.toThrow('apiInspectionReport: reportDate is required');
+      await expect(apiInspectionReport('CODE', '2026-04-02', '')).rejects.toThrow('apiInspectionReport: serviceProviderId is required');
+    });
+  });
 });

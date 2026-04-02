@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { mount } from '@vue/test-utils';
 import { createPinia, setActivePinia } from 'pinia';
 import ChecklistManager from '@/views/ChecklistManager.vue';
+import { useAuthStore } from '@/stores/authStore';
 import { useProtocolQuestionStore } from '@/stores/protocolQuestionStore';
 import { useInspectionQuestionStore } from '@/stores/inspectionQuestionStore';
 import { useInspectedSpecialtyStore } from '@/stores/inspectedSpecialtyStore';
@@ -89,6 +90,7 @@ describe('ChecklistManager Component', () => {
 
     mockInspectedSpecialtyStore = {
       getInspectedServices: vi.fn().mockResolvedValue(true),
+      loadActingInspectors: vi.fn().mockResolvedValue(true),
       inspectedServices: {
         LS1: {
           id: 'IS1',
@@ -97,8 +99,16 @@ describe('ChecklistManager Component', () => {
               id: 'IS1',
               name: 'Air Traffic Services',
             },
+            S2: {
+              id: 'IS2',
+              name: 'Aerodrome Safety',
+            },
           },
         },
+      },
+      inspectors: {
+        IS1: [{ id: 'INSPECTOR-1', name: 'Inspector One' }],
+        IS2: [{ id: 'INSPECTOR-2', name: 'Inspector Two' }],
       },
     };
 
@@ -207,6 +217,30 @@ describe('ChecklistManager Component', () => {
       await wrapper.vm.$nextTick();
       const selects = wrapper.findAll('select');
       expect(selects.length).toBeGreaterThan(1);
+    });
+
+    it('should filter specialties to inspector assignment scope for selected inspection', async () => {
+      wrapper = createWrapper();
+      await wrapper.vm.$nextTick();
+
+      const authStore = useAuthStore();
+      authStore.authenticated = true;
+      vi.spyOn(authStore, 'refreshDomainContext').mockResolvedValue(undefined);
+      authStore.roles = ['inspector'];
+      authStore.inspectorProfile = {
+        id: 'INSPECTOR-1',
+        specialties: [
+          { id: 'S1', code: 'ATS', name: 'Air Traffic Services' },
+          { id: 'S2', code: 'AGA', name: 'Aerodrome Safety' },
+        ],
+      };
+
+      wrapper.vm.selectedInspectionId = 'INS1';
+      await wrapper.vm.onInspectionChange();
+      await wrapper.vm.$nextTick();
+
+      expect(wrapper.vm.availableInspectedSpecialties).toHaveLength(1);
+      expect(wrapper.vm.availableInspectedSpecialties[0].specialtyId).toBe('S1');
     });
 
     it('should load questions when specialty is selected', async () => {
