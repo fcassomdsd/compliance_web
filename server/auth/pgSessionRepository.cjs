@@ -165,9 +165,29 @@ class PgSessionRepository {
   }
 
   async resolveRolesForGroups(groups) {
-    const normalizedGroups = (groups || [])
-      .map((group) => (typeof group === 'string' ? group.trim().toLowerCase() : ''))
-      .filter(Boolean);
+    const normalizedGroups = Array.from(
+      new Set(
+        (groups || [])
+          .flatMap((group) => {
+            if (typeof group !== 'string') {
+              return [];
+            }
+
+            const normalized = group.trim().toLowerCase();
+            if (!normalized) {
+              return [];
+            }
+
+            // Alfresco authorities are often returned as GROUP_<name>,
+            // while DB mappings may store only <name>.
+            const withoutPrefix = normalized.replace(/^group_/, '');
+            return withoutPrefix && withoutPrefix !== normalized
+              ? [normalized, withoutPrefix]
+              : [normalized];
+          })
+          .filter(Boolean)
+      )
+    );
 
     if (normalizedGroups.length === 0) {
       return [];

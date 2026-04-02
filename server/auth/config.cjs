@@ -1,8 +1,10 @@
+const cookieSecureOverride = process.env.AUTH_COOKIE_SECURE;
+
 const AUTH_CONFIG = {
   cookieName: process.env.AUTH_COOKIE_NAME || 'compliance_session_id',
   cookiePath: process.env.AUTH_COOKIE_PATH || '/',
   cookieSameSite: process.env.AUTH_COOKIE_SAMESITE || 'lax',
-  cookieSecure: process.env.NODE_ENV === 'production',
+  cookieSecure: typeof cookieSecureOverride === 'string' ? cookieSecureOverride === 'true' : process.env.NODE_ENV === 'production',
   csrfHeaderName: process.env.AUTH_CSRF_HEADER_NAME || 'x-csrf-token',
   idleTimeoutSeconds: Number(process.env.AUTH_IDLE_TIMEOUT_SECONDS || 1800),
   absoluteTimeoutSeconds: Number(process.env.AUTH_ABSOLUTE_TIMEOUT_SECONDS || 43200),
