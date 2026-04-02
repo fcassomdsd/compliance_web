@@ -4,6 +4,7 @@ import { createPinia } from 'pinia';
 import { createRouter, createMemoryHistory } from 'vue-router';
 
 import App from '@/App.vue';
+import { useAuthStore } from '@/stores/authStore';
 
 const routes = [
   { path: '/', redirect: '/inspection' },
@@ -12,6 +13,7 @@ const routes = [
   { path: '/checklist', component: { template: '<div id="checklist-page">Checklist</div>' } },
   { path: '/inspection-plan', component: { template: '<div id="plan-page">Plan</div>' } },
   { path: '/inspection-report', component: { template: '<div id="report-page">Report</div>' } },
+  { path: '/login', name: 'login', component: { template: '<div id="login-page">Login</div>' } },
   { path: '/:pathMatch(.*)*', component: { template: '<div id="not-found-page">Not Found</div>' } },
 ];
 
@@ -100,5 +102,40 @@ describe('App.vue (router navigation)', () => {
     const { wrapper } = await mountAppAt('/some/unknown/path');
 
     expect(wrapper.find('#not-found-page').exists()).toBe(true);
+  });
+
+  it('hides logout control when user is not authenticated', async () => {
+    const { wrapper } = await mountAppAt('/inspection');
+
+    expect(wrapper.find('.logout-button').exists()).toBe(false);
+  });
+
+  it('shows logout control for authenticated user and redirects to login on sign out', async () => {
+    const router = createTestRouter();
+    const pinia = createPinia();
+    const authStore = useAuthStore(pinia);
+    authStore.authenticated = true;
+    authStore.user = { username: 'fernando.casso' };
+    const logoutSpy = vi.spyOn(authStore, 'logout').mockResolvedValue(true);
+    const pushSpy = vi.spyOn(router, 'push');
+
+    router.push('/inspection');
+    await router.isReady();
+
+    const wrapper = mount(App, {
+      global: {
+        plugins: [pinia, router],
+      },
+    });
+
+    expect(wrapper.find('.signed-in-user').text()).toContain('fernando.casso');
+    const logoutButton = wrapper.find('.logout-button');
+    expect(logoutButton.exists()).toBe(true);
+
+    await logoutButton.trigger('click');
+    await wrapper.vm.$nextTick();
+
+    expect(logoutSpy).toHaveBeenCalledTimes(1);
+    expect(pushSpy).toHaveBeenCalledWith({ name: 'login' });
   });
 });
