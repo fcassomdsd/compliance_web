@@ -18,6 +18,7 @@ export const useAuthStore = defineStore('auth', {
     inspectorProfile: null,
     assignerSpecialties: [],
     session: null,
+    csrfToken: null,
     error: null,
     lastCheckedAt: null,
   }),
@@ -44,6 +45,7 @@ export const useAuthStore = defineStore('auth', {
       this.roles = Array.isArray(payload?.roles) ? payload.roles : [];
       this.groups = Array.isArray(payload?.groups) ? payload.groups : [];
       this.session = payload?.session || null;
+      this.csrfToken = payload?.csrfToken || null;
       this.error = null;
     },
 
@@ -55,6 +57,7 @@ export const useAuthStore = defineStore('auth', {
       this.inspectorProfile = null;
       this.assignerSpecialties = [];
       this.session = null;
+      this.csrfToken = null;
     },
 
     async refreshDomainContext() {
@@ -161,7 +164,7 @@ export const useAuthStore = defineStore('auth', {
       this.loading = true;
       this.error = null;
       try {
-        await authLogout();
+        await authLogout(this.csrfToken);
       } catch (error) {
         this.error = error.message;
       } finally {

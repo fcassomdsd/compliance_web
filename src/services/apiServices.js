@@ -1,6 +1,7 @@
 import { default as axios } from 'axios';
 
 const apiServer = 'http://localhost:1880';
+const complianceApiServer = import.meta.env.VITE_COMPLIANCE_API_BASE_URL || '/api';
 
 /*
 const apiQueryOps = [
@@ -297,6 +298,129 @@ export async function apiAssignmentGroup(alfrescoGroup) {
     return { data: result.data, status: result.status };
   } catch (error) {
     throw new Error('apiAssignmentGroup: ' + error.message);
+  }
+}
+
+function buildCsrfHeader(csrfToken) {
+  return csrfToken ? { 'x-csrf-token': csrfToken } : {};
+}
+
+export async function apiFindings(filters = {}) {
+  try {
+    const result = await axios({
+      method: 'get',
+      url: `${complianceApiServer}/findings`,
+      params: filters,
+      withCredentials: true,
+    });
+    return { data: result.data, status: result.status };
+  } catch (error) {
+    throw new Error('apiFindings: ' + error.message);
+  }
+}
+
+export async function apiFindingDetail(findingId) {
+  try {
+    if (!findingId || typeof findingId !== 'string') {
+      throw new Error('findingId is required');
+    }
+
+    const result = await axios({
+      method: 'get',
+      url: `${complianceApiServer}/findings/${encodeURIComponent(findingId)}`,
+      withCredentials: true,
+    });
+    return { data: result.data, status: result.status };
+  } catch (error) {
+    throw new Error('apiFindingDetail: ' + error.message);
+  }
+}
+
+export async function apiSubmitCap(findingId, payload, csrfToken) {
+  try {
+    if (!findingId || typeof findingId !== 'string') {
+      throw new Error('findingId is required');
+    }
+
+    const result = await axios({
+      method: 'post',
+      url: `${complianceApiServer}/findings/${encodeURIComponent(findingId)}/caps`,
+      data: payload,
+      headers: buildCsrfHeader(csrfToken),
+      withCredentials: true,
+    });
+    return { data: result.data, status: result.status };
+  } catch (error) {
+    throw new Error('apiSubmitCap: ' + error.message);
+  }
+}
+
+export async function apiCaps(filters = {}) {
+  try {
+    const result = await axios({
+      method: 'get',
+      url: `${complianceApiServer}/caps`,
+      params: filters,
+      withCredentials: true,
+    });
+    return { data: result.data, status: result.status };
+  } catch (error) {
+    throw new Error('apiCaps: ' + error.message);
+  }
+}
+
+export async function apiCapDetail(capId) {
+  try {
+    if (!capId || typeof capId !== 'string') {
+      throw new Error('capId is required');
+    }
+
+    const result = await axios({
+      method: 'get',
+      url: `${complianceApiServer}/caps/${encodeURIComponent(capId)}`,
+      withCredentials: true,
+    });
+    return { data: result.data, status: result.status };
+  } catch (error) {
+    throw new Error('apiCapDetail: ' + error.message);
+  }
+}
+
+export async function apiReviewCap(capId, acceptanceStatus, csrfToken) {
+  try {
+    if (!capId || typeof capId !== 'string') {
+      throw new Error('capId is required');
+    }
+
+    const result = await axios({
+      method: 'patch',
+      url: `${complianceApiServer}/caps/${encodeURIComponent(capId)}/review`,
+      data: { acceptanceStatus },
+      headers: buildCsrfHeader(csrfToken),
+      withCredentials: true,
+    });
+    return { data: result.data, status: result.status };
+  } catch (error) {
+    throw new Error('apiReviewCap: ' + error.message);
+  }
+}
+
+export async function apiCreateFollowUpReport(capId, payload, csrfToken) {
+  try {
+    if (!capId || typeof capId !== 'string') {
+      throw new Error('capId is required');
+    }
+
+    const result = await axios({
+      method: 'post',
+      url: `${complianceApiServer}/caps/${encodeURIComponent(capId)}/follow-up-reports`,
+      data: payload,
+      headers: buildCsrfHeader(csrfToken),
+      withCredentials: true,
+    });
+    return { data: result.data, status: result.status };
+  } catch (error) {
+    throw new Error('apiCreateFollowUpReport: ' + error.message);
   }
 }
 

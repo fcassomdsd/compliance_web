@@ -37,6 +37,18 @@ const routes = [
     meta: { requiresAuth: true, requiredRoles: ['inspector', 'admin'] },
   },
   {
+    path: '/findings',
+    name: 'findings',
+    component: () => import('@/views/FindingManager.vue'),
+    meta: { requiresAuth: true, requiredRoles: ['inspector', 'planner', 'cap_entry', 'admin'] },
+  },
+  {
+    path: '/corrective-actions',
+    name: 'correctiveActions',
+    component: () => import('@/views/CorrectiveActionManager.vue'),
+    meta: { requiresAuth: true, requiredRoles: ['inspector', 'planner', 'cap_entry', 'admin'] },
+  },
+  {
     path: '/login',
     name: 'login',
     component: () => import('@/views/LoginView.vue'),

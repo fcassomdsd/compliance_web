@@ -14,6 +14,17 @@ CREATE TABLE IF NOT EXISTS app_role (
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+-- Optional seed data for baseline application roles.
+INSERT INTO app_role (role_key, role_name)
+VALUES
+  ('admin', 'Administrator'),
+  ('inspector', 'Inspector'),
+  ('planner', 'Planner'),
+  ('reporter', 'Reporter'),
+  ('assigner', 'Assigner'),
+  ('cap_entry', 'CAP Entry')
+ON CONFLICT (role_key) DO NOTHING;
+
 -- 2) Mapping between Alfresco groups and application roles
 CREATE TABLE IF NOT EXISTS alfresco_group_role_map (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
