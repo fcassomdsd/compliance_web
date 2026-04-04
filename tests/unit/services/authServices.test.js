@@ -24,7 +24,7 @@ describe('authServices', () => {
 
     expect(axios).toHaveBeenCalledWith({
       method: 'post',
-      url: 'http://localhost:4000/api/auth/login',
+      url: '/api/auth/login',
       data: {
         username: 'alice',
         password: 'secret',
@@ -41,7 +41,7 @@ describe('authServices', () => {
 
     expect(axios).toHaveBeenCalledWith({
       method: 'get',
-      url: 'http://localhost:4000/api/auth/session',
+      url: '/api/auth/session',
       withCredentials: true,
     });
     expect(result.status).toBe(200);
@@ -54,7 +54,8 @@ describe('authServices', () => {
 
     expect(axios).toHaveBeenCalledWith({
       method: 'post',
-      url: 'http://localhost:4000/api/auth/logout',
+      url: '/api/auth/logout',
+      headers: {},
       withCredentials: true,
     });
     expect(result).toEqual({ data: { ok: true }, status: 200 });

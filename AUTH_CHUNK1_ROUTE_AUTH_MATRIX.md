@@ -24,6 +24,12 @@ Pseudo-rule:
 | /checklist | checklist | true | inspector, planner, admin | Checklist access |
 | /inspection-plan | inspectionPlan | true | planner, admin | Planning route |
 | /inspection-report | inspectionReport | true | reporter, admin | Reporting route |
+| /api/findings | findingsApi | true | inspector, planner, cap_entry, admin | Findings list and filters |
+| /api/findings/:findingId | findingDetailApi | true | inspector, planner, cap_entry, admin | Finding detail |
+| /api/findings/:findingId/caps | capSubmitApi | true | cap_entry, admin | CAP submission |
+| /api/caps | capsApi | true | inspector, planner, cap_entry, admin | CAP list and filters |
+| /api/caps/:capId | capDetailApi | true | inspector, planner, cap_entry, admin | CAP detail |
+| /api/caps/:capId/review | capReviewApi | true | inspector, admin | CAP review decision |
 | /forbidden | forbidden | true | (none) | UX page for denied role |
 | /login | login | false | (none) | Login entry point |
 | /:pathMatch(.*)* | notFound | false | (none) | Catch-all |
@@ -40,6 +46,7 @@ Pseudo-rule:
 2. inspector: inspection execution and checklist operations
 3. planner: assignment and planning operations
 4. reporter: report generation and report views
+5. cap_entry: corrective action entry operations
 
 ## 5. Mapping Source
 

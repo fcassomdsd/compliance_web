@@ -56,11 +56,11 @@ describe('App.vue (router navigation)', () => {
     expect(logo.attributes('src')).toContain('compliance-logo');
   });
 
-  it('renders five navigation links', async () => {
+  it('renders seven navigation links', async () => {
     const { wrapper } = await mountAppAt();
 
     const links = wrapper.findAll('a.nav-link');
-    expect(links).toHaveLength(5);
+    expect(links).toHaveLength(7);
 
     const labels = links.map((link) => link.text().trim());
     expect(labels).toEqual([
@@ -69,6 +69,8 @@ describe('App.vue (router navigation)', () => {
       'Inspection Checklist',
       'Inspection Plan',
       'Inspection Report',
+      'Findings',
+      'Corrective Actions',
     ]);
   });
 

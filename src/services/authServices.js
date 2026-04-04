@@ -1,6 +1,6 @@
 import { default as axios } from 'axios';
 
-const authApiServer = import.meta.env.VITE_AUTH_API_BASE_URL || 'http://localhost:4000/api/auth';
+const authApiServer = import.meta.env.VITE_AUTH_API_BASE_URL || '/api/auth';
 
 export async function authLogin(username, password) {
   try {
@@ -41,11 +41,12 @@ export async function authSession() {
   }
 }
 
-export async function authLogout() {
+export async function authLogout(csrfToken = null) {
   try {
     const result = await axios({
       method: 'post',
       url: `${authApiServer}/logout`,
+      headers: csrfToken ? { 'x-csrf-token': csrfToken } : {},
       withCredentials: true,
     });
 

@@ -30,6 +30,12 @@
       <RouterLink to="/inspection-report" class="nav-link" exact-active-class="active-view">
         Inspection Report
       </RouterLink>
+      <RouterLink to="/findings" class="nav-link" exact-active-class="active-view">
+        Findings
+      </RouterLink>
+      <RouterLink to="/corrective-actions" class="nav-link" exact-active-class="active-view">
+        Corrective Actions
+      </RouterLink>
     </div>
     <RouterView />
   </div>
