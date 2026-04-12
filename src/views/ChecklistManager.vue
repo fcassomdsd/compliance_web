@@ -295,8 +295,12 @@ const onSpecialtyChange = async () => {
 
     // Create a map of protocolQuestionId -> sequence from inspection questions
     const sequenceMap = {};
+    const riskLevelMap = {};
     existingQuestions.forEach((q) => {
       sequenceMap[q.protocolQuestionId] = q.sequence;
+      if (q.riskLevel) {
+        riskLevelMap[q.protocolQuestionId] = q.riskLevel;
+      }
     });
 
     // Reorder protocol questions within each topic to match saved sequence
@@ -323,11 +327,22 @@ const onSpecialtyChange = async () => {
       }
     }
 
+    // Keep saved risk level visible even if legacy protocol records do not include it.
+    for (const topicId in groupedQuestions.value) {
+      const topic = groupedQuestions.value[topicId];
+      for (const question of topic.questions) {
+        if (!question.riskLevel && riskLevelMap[question.id]) {
+          question.riskLevel = riskLevelMap[question.id];
+        }
+      }
+    }
+
     // Pre-populate selected questions with their sequence
     selectedQuestionIds.value = existingQuestions.map((q) => ({
       id: q.protocolQuestionId,
       code: q.code,
       sequence: q.sequence,
+      riskLevel: q.riskLevel || null,
     }));
   } catch (err) {
     error.value = 'Failed to load questions: ' + err.message;
@@ -368,7 +383,11 @@ const selectAllQuestions = () => {
   for (const topicId in groupedQuestions.value) {
     const topic = groupedQuestions.value[topicId];
     for (const question of topic.questions) {
-      allQuestionIds.push({ id: question.id, code: question.code });
+      allQuestionIds.push({
+        id: question.id,
+        code: question.code,
+        riskLevel: question.riskLevel || null,
+      });
     }
   }
   selectedQuestionIds.value = allQuestionIds;
@@ -407,6 +426,7 @@ const saveChecklist = async () => {
             id: item.id,
             code: item.code,
             sequence: index + 1,
+            riskLevel: item.riskLevel || null,
           });
         });
       } else {
@@ -422,6 +442,7 @@ const saveChecklist = async () => {
                 id: question.id,
                 code: question.code,
                 sequence,
+                riskLevel: question.riskLevel || null,
               });
               sequence += 1;
             }

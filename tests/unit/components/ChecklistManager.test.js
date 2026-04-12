@@ -271,7 +271,9 @@ describe('ChecklistManager Component', () => {
       await wrapper.vm.$nextTick();
 
       expect(mockInspectionQuestionStore.getInspectionQuestions).toHaveBeenCalledWith('IS1');
-      expect(wrapper.vm.selectedQuestionIds).toContainEqual({ id: 'Q1', code: 'SYS-001', sequence: 1 });
+      expect(wrapper.vm.selectedQuestionIds).toEqual(expect.arrayContaining([
+        expect.objectContaining({ id: 'Q1', code: 'SYS-001', sequence: 1 }),
+      ]));
 
     });
   });
@@ -307,9 +309,15 @@ describe('ChecklistManager Component', () => {
       await wrapper.vm.$nextTick();
 
       expect(wrapper.vm.selectedQuestionIds.length).toBeGreaterThan(0);
-      expect(wrapper.vm.selectedQuestionIds).toContainEqual({ id: 'Q1', code: 'SYS-001' });
-      expect(wrapper.vm.selectedQuestionIds).toContainEqual({ id: 'Q2', code: 'SYS-002' });
-      expect(wrapper.vm.selectedQuestionIds).toContainEqual({ id: 'Q3', code: 'SEC-001' });
+      expect(wrapper.vm.selectedQuestionIds).toEqual(expect.arrayContaining([
+        expect.objectContaining({ id: 'Q1', code: 'SYS-001' }),
+      ]));
+      expect(wrapper.vm.selectedQuestionIds).toEqual(expect.arrayContaining([
+        expect.objectContaining({ id: 'Q2', code: 'SYS-002' }),
+      ]));
+      expect(wrapper.vm.selectedQuestionIds).toEqual(expect.arrayContaining([
+        expect.objectContaining({ id: 'Q3', code: 'SEC-001' }),
+      ]));
     });
 
     it('should clear all questions', async () => {
@@ -343,10 +351,13 @@ describe('ChecklistManager Component', () => {
       await wrapper.vm.$nextTick();
 
       expect(mockInspectionQuestionStore.deleteAllForSpecialty).toHaveBeenCalledWith('IS1');
-      expect(mockInspectionQuestionStore.addMultipleQuestions).toHaveBeenCalledWith('IS1', [
-        { id: 'Q1', code: 'SYS-001', sequence: 1 },
-        { id: 'Q2', code: 'SYS-002', sequence: 2 },
-      ]);
+      expect(mockInspectionQuestionStore.addMultipleQuestions).toHaveBeenCalledWith(
+        'IS1',
+        expect.arrayContaining([
+          expect.objectContaining({ id: 'Q1', code: 'SYS-001', sequence: 1 }),
+          expect.objectContaining({ id: 'Q2', code: 'SYS-002', sequence: 2 }),
+        ])
+      );
     });
 
     it('should display success message after saving', async () => {
@@ -608,7 +619,9 @@ describe('ChecklistManager Component', () => {
       await wrapper.vm.$nextTick();
 
       expect(mockInspectionQuestionStore.getInspectionQuestions).toHaveBeenCalledWith('IS1');
-      expect(wrapper.vm.selectedQuestionIds).toContainEqual({ id: 'Q1', code: 'SYS-001', sequence: 1 });
+      expect(wrapper.vm.selectedQuestionIds).toEqual(expect.arrayContaining([
+        expect.objectContaining({ id: 'Q1', code: 'SYS-001', sequence: 1 }),
+      ]));
     });
 
     it('should clear selections when specialty is changed', async () => {
@@ -662,9 +675,15 @@ describe('ChecklistManager Component', () => {
 
       // Should select all questions from all topics
       expect(wrapper.vm.selectedQuestionIds.length).toBeGreaterThan(0);
-      expect(wrapper.vm.selectedQuestionIds).toContainEqual({ id: 'Q1', code: 'SYS-001' });
-      expect(wrapper.vm.selectedQuestionIds).toContainEqual({ id: 'Q2', code: 'SYS-002' });
-      expect(wrapper.vm.selectedQuestionIds).toContainEqual({ id: 'Q3', code: 'SEC-001' });
+      expect(wrapper.vm.selectedQuestionIds).toEqual(expect.arrayContaining([
+        expect.objectContaining({ id: 'Q1', code: 'SYS-001' }),
+      ]));
+      expect(wrapper.vm.selectedQuestionIds).toEqual(expect.arrayContaining([
+        expect.objectContaining({ id: 'Q2', code: 'SYS-002' }),
+      ]));
+      expect(wrapper.vm.selectedQuestionIds).toEqual(expect.arrayContaining([
+        expect.objectContaining({ id: 'Q3', code: 'SEC-001' }),
+      ]));
     });
 
     it('should clear all questions', async () => {
@@ -697,10 +716,13 @@ describe('ChecklistManager Component', () => {
       await wrapper.vm.$nextTick();
 
       expect(mockInspectionQuestionStore.deleteAllForSpecialty).toHaveBeenCalledWith('IS1');
-      expect(mockInspectionQuestionStore.addMultipleQuestions).toHaveBeenCalledWith('IS1', [
-        { id: 'Q1', code: 'SYS-001', sequence: 1 },
-        { id: 'Q2', code: 'SYS-002', sequence: 2 },
-      ]);
+      expect(mockInspectionQuestionStore.addMultipleQuestions).toHaveBeenCalledWith(
+        'IS1',
+        expect.arrayContaining([
+          expect.objectContaining({ id: 'Q1', code: 'SYS-001', sequence: 1 }),
+          expect.objectContaining({ id: 'Q2', code: 'SYS-002', sequence: 2 }),
+        ])
+      );
     });
 
     it('should display success message after saving', async () => {

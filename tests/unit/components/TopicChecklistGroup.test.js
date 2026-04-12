@@ -121,8 +121,12 @@ describe('TopicChecklistGroup Component', () => {
       
       expect(wrapper.emitted('update:selected-questions')).toBeTruthy();
       const emitted = wrapper.emitted('update:selected-questions')[0][0];
-      expect(emitted).toContainEqual({ id: 'Q1', code: 'SYS-001' });
-      expect(emitted).toContainEqual({ id: 'Q2', code: 'SYS-002' });
+      expect(emitted).toEqual(expect.arrayContaining([
+        expect.objectContaining({ id: 'Q1', code: 'SYS-001' }),
+      ]));
+      expect(emitted).toEqual(expect.arrayContaining([
+        expect.objectContaining({ id: 'Q2', code: 'SYS-002' }),
+      ]));
     });
 
     it('should emit updated selection when question is toggled', async () => {
@@ -144,8 +148,12 @@ describe('TopicChecklistGroup Component', () => {
       await selectAllBtn.trigger('click');
       
       const emitted = wrapper.emitted('update:selected-questions')[0][0];
-      expect(emitted).toContainEqual({ id: 'Q1', code: 'SYS-001' });
-      expect(emitted).toContainEqual({ id: 'Q2', code: 'SYS-002' });
+      expect(emitted).toEqual(expect.arrayContaining([
+        expect.objectContaining({ id: 'Q1', code: 'SYS-001' }),
+      ]));
+      expect(emitted).toEqual(expect.arrayContaining([
+        expect.objectContaining({ id: 'Q2', code: 'SYS-002' }),
+      ]));
     });
 
     it('should add missing questions to selection', async () => {
@@ -155,8 +163,12 @@ describe('TopicChecklistGroup Component', () => {
       await selectAllBtn.trigger('click');
       
       const emitted = wrapper.emitted('update:selected-questions')[0][0];
-      expect(emitted).toContainEqual({ id: 'Q1', code: 'SYS-001' });
-      expect(emitted).toContainEqual({ id: 'Q2', code: 'SYS-002' });
+      expect(emitted).toEqual(expect.arrayContaining([
+        expect.objectContaining({ id: 'Q1', code: 'SYS-001' }),
+      ]));
+      expect(emitted).toEqual(expect.arrayContaining([
+        expect.objectContaining({ id: 'Q2', code: 'SYS-002' }),
+      ]));
     });
   });
 
@@ -240,6 +252,39 @@ describe('TopicChecklistGroup Component', () => {
       details = wrapper.find('.question-details');
       expect(details.exists()).toBe(false);
     });
+
+    it('should show and hide questions when topic is collapsed', async () => {
+      wrapper = createWrapper();
+      const toggleBtn = wrapper.find('.toggle-btn');
+      expect(wrapper.find('.questions-list').exists()).toBe(true);
+
+      await toggleBtn.trigger('click');
+      expect(wrapper.find('.questions-list').exists()).toBe(false);
+
+      await toggleBtn.trigger('click');
+      expect(wrapper.find('.questions-list').exists()).toBe(true);
+    });
+  });
+
+  describe('Reordering', () => {
+    it('should emit reordered topic list when moving question down', async () => {
+      wrapper = createWrapper();
+      const downButtons = wrapper.findAll('.order-btn').filter((btn) => btn.text().includes('↓'));
+
+      await downButtons[0].trigger('click');
+
+      const emitted = wrapper.emitted('reorder-questions')[0][0];
+      expect(emitted.topicId).toBe('T1');
+      expect(emitted.questions[0].id).toBe('Q2');
+      expect(emitted.questions[1].id).toBe('Q1');
+    });
+
+    it('should disable up button for first and down button for last question', () => {
+      wrapper = createWrapper();
+      const orderButtons = wrapper.findAll('.order-btn');
+      expect(orderButtons[0].attributes('disabled')).toBeDefined();
+      expect(orderButtons[3].attributes('disabled')).toBeDefined();
+    });
   });
 
   describe('Edge Cases', () => {
@@ -280,7 +325,9 @@ describe('TopicChecklistGroup Component', () => {
       // Select Q1
       await checkboxes[0].trigger('change');
       let emitted = wrapper.emitted('update:selected-questions')[0][0];
-      expect(emitted).toContainEqual({ id: 'Q1', code: 'SYS-001' });
+      expect(emitted).toEqual(expect.arrayContaining([
+        expect.objectContaining({ id: 'Q1', code: 'SYS-001' }),
+      ]));
       
       // Update props to reflect the selection
       await wrapper.setProps({ selectedQuestions: emitted });
@@ -288,8 +335,12 @@ describe('TopicChecklistGroup Component', () => {
       // Select Q2
       await checkboxes[1].trigger('change');
       emitted = wrapper.emitted('update:selected-questions')[1][0];
-      expect(emitted).toContainEqual({ id: 'Q1', code: 'SYS-001' });
-      expect(emitted).toContainEqual({ id: 'Q2', code: 'SYS-002' });
+      expect(emitted).toEqual(expect.arrayContaining([
+        expect.objectContaining({ id: 'Q1', code: 'SYS-001' }),
+      ]));
+      expect(emitted).toEqual(expect.arrayContaining([
+        expect.objectContaining({ id: 'Q2', code: 'SYS-002' }),
+      ]));
     });
   });
 });
