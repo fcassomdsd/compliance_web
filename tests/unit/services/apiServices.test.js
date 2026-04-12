@@ -2,12 +2,19 @@
 import { describe, it, expect, vi } from 'vitest';
 import {
   apiAssignmentGroup,
+  apiCapDetail,
+  apiCaps,
+  apiCreateFollowUpReport,
   apiEntityCRUD,
   apiEntityLinks,
+  apiFindingDetail,
+  apiFindings,
   apiInspectionByIdOrCode,
   apiInspectionPlan,
   apiInspectionReport,
   apiInspectorByAlfrescoUser,
+  apiReviewCap,
+  apiSubmitCap,
 } from '@/services/apiServices';
 import { default as axios } from 'axios';
 
@@ -263,6 +270,143 @@ describe('apiServices', () => {
       await expect(apiInspectionPlan('')).rejects.toThrow('apiInspectionPlan: inspectionCode is required');
       await expect(apiInspectionReport('CODE', '', 'provider')).rejects.toThrow('apiInspectionReport: reportDate is required');
       await expect(apiInspectionReport('CODE', '2026-04-02', '')).rejects.toThrow('apiInspectionReport: serviceProviderId is required');
+    });
+
+    it('calls inspection plan/report endpoints on valid payloads', async () => {
+      const plan = await apiInspectionPlan(' CODE-001 ');
+      expect(plan.data).toEqual({
+        method: 'get',
+        url: 'http://localhost:1880/inspectionPlan?inspection=CODE-001',
+      });
+
+      const report = await apiInspectionReport(' CODE-001 ', ' 2026-04-02 ', ' PROVIDER-1 ');
+      expect(report.data).toEqual({
+        method: 'get',
+        url: 'http://localhost:1880/inspectionReport?inspection=CODE-001&reportDate=2026-04-02&provider=PROVIDER-1',
+      });
+    });
+
+    it('wraps axios failures for inspection plan/report', async () => {
+      vi.mocked(axios).mockImplementationOnce(() => { throw new Error('Axios failure'); });
+      await expect(apiInspectionPlan('CODE')).rejects.toThrow('apiInspectionPlan: Axios failure');
+
+      vi.mocked(axios).mockImplementationOnce(() => { throw new Error('Axios failure'); });
+      await expect(apiInspectionReport('CODE', '2026-04-02', 'PROVIDER')).rejects.toThrow('apiInspectionReport: Axios failure');
+    });
+  });
+
+  describe('compliance API endpoints', () => {
+    it('calls findings listing endpoint with filters', async () => {
+      const result = await apiFindings({ status: 'Open', overdueOnly: 'true' });
+      expect(result.data).toEqual({
+        method: 'get',
+        url: '/api/findings',
+        params: { status: 'Open', overdueOnly: 'true' },
+        withCredentials: true,
+      });
+    });
+
+    it('wraps findings listing failures', async () => {
+      vi.mocked(axios).mockImplementationOnce(() => { throw new Error('Axios failure'); });
+      await expect(apiFindings({})).rejects.toThrow('apiFindings: Axios failure');
+    });
+
+    it('validates and calls finding detail endpoint', async () => {
+      await expect(apiFindingDetail('')).rejects.toThrow('apiFindingDetail: findingId is required');
+
+      const result = await apiFindingDetail('F-001');
+      expect(result.data).toEqual({
+        method: 'get',
+        url: '/api/findings/F-001',
+        withCredentials: true,
+      });
+    });
+
+    it('wraps finding detail failures', async () => {
+      vi.mocked(axios).mockImplementationOnce(() => { throw new Error('Axios failure'); });
+      await expect(apiFindingDetail('F-1')).rejects.toThrow('apiFindingDetail: Axios failure');
+    });
+
+    it('validates and calls submit CAP endpoint with csrf header', async () => {
+      await expect(apiSubmitCap('', { capId: 'CAP-1' }, 'csrf')).rejects.toThrow('apiSubmitCap: findingId is required');
+
+      const result = await apiSubmitCap('F-1', { capId: 'CAP-1' }, 'csrf-token');
+      expect(result.data).toEqual({
+        method: 'post',
+        url: '/api/findings/F-1/caps',
+        data: { capId: 'CAP-1' },
+        headers: { 'x-csrf-token': 'csrf-token' },
+        withCredentials: true,
+      });
+    });
+
+    it('uses empty headers when csrf token is missing', async () => {
+      const result = await apiSubmitCap('F-2', { capId: 'CAP-2' });
+      expect(result.data.headers).toEqual({});
+    });
+
+    it('calls caps listing and cap detail endpoints with validations', async () => {
+      const list = await apiCaps({ acceptanceStatus: 'Accepted' });
+      expect(list.data).toEqual({
+        method: 'get',
+        url: '/api/caps',
+        params: { acceptanceStatus: 'Accepted' },
+        withCredentials: true,
+      });
+
+      await expect(apiCapDetail('')).rejects.toThrow('apiCapDetail: capId is required');
+
+      const detail = await apiCapDetail('CAP-1');
+      expect(detail.data).toEqual({
+        method: 'get',
+        url: '/api/caps/CAP-1',
+        withCredentials: true,
+      });
+    });
+
+    it('wraps caps listing and cap detail failures', async () => {
+      vi.mocked(axios).mockImplementationOnce(() => { throw new Error('Axios failure'); });
+      await expect(apiCaps({})).rejects.toThrow('apiCaps: Axios failure');
+
+      vi.mocked(axios).mockImplementationOnce(() => { throw new Error('Axios failure'); });
+      await expect(apiCapDetail('CAP-9')).rejects.toThrow('apiCapDetail: Axios failure');
+    });
+
+    it('validates and calls review CAP endpoint', async () => {
+      await expect(apiReviewCap('')).rejects.toThrow('apiReviewCap: capId is required');
+
+      const result = await apiReviewCap('CAP-1', 'Accepted', 'csrf-token');
+      expect(result.data).toEqual({
+        method: 'patch',
+        url: '/api/caps/CAP-1/review',
+        data: { acceptanceStatus: 'Accepted' },
+        headers: { 'x-csrf-token': 'csrf-token' },
+        withCredentials: true,
+      });
+    });
+
+    it('validates and calls follow-up report endpoint', async () => {
+      await expect(apiCreateFollowUpReport('')).rejects.toThrow('apiCreateFollowUpReport: capId is required');
+
+      const result = await apiCreateFollowUpReport('CAP-1', { percentComplete: 55 }, 'csrf-token');
+      expect(result.data).toEqual({
+        method: 'post',
+        url: '/api/caps/CAP-1/follow-up-reports',
+        data: { percentComplete: 55 },
+        headers: { 'x-csrf-token': 'csrf-token' },
+        withCredentials: true,
+      });
+    });
+
+    it('wraps compliance endpoint failures for submit/review/follow-up', async () => {
+      vi.mocked(axios).mockImplementationOnce(() => { throw new Error('Axios failure'); });
+      await expect(apiSubmitCap('F-1', {})).rejects.toThrow('apiSubmitCap: Axios failure');
+
+      vi.mocked(axios).mockImplementationOnce(() => { throw new Error('Axios failure'); });
+      await expect(apiReviewCap('CAP-1', 'Accepted')).rejects.toThrow('apiReviewCap: Axios failure');
+
+      vi.mocked(axios).mockImplementationOnce(() => { throw new Error('Axios failure'); });
+      await expect(apiCreateFollowUpReport('CAP-1', {})).rejects.toThrow('apiCreateFollowUpReport: Axios failure');
     });
   });
 });

@@ -46,6 +46,9 @@
           <label :for="`question-${question.id}`" class="question-label">
             <span class="question-code">{{ question.code }}</span>
             <span class="question-text">{{ question.texto }}</span>
+            <span v-if="question.riskLevel" class="risk-level-chip" :class="`risk-level-${question.riskLevel.toLowerCase()}`">
+              Risk: {{ question.riskLevel }}
+            </span>
           </label>
           <div class="question-order-controls">
             <button
@@ -167,7 +170,11 @@ const toggleQuestion = (question) => {
   if (index > -1) {
     updated.splice(index, 1);
   } else {
-    updated.push({ id: question.id, code: question.code });
+    updated.push({
+      id: question.id,
+      code: question.code,
+      riskLevel: question.riskLevel || null,
+    });
   }
   
   emit('update:selected-questions', updated);
@@ -181,7 +188,11 @@ const selectAllInTopic = () => {
   
   for (const question of props.topic.questions) {
     if (!updated.some((item) => item.id === question.id)) {
-      updated.push({ id: question.id, code: question.code });
+      updated.push({
+        id: question.id,
+        code: question.code,
+        riskLevel: question.riskLevel || null,
+      });
     }
   }
   
@@ -361,6 +372,36 @@ const moveQuestion = (questionId, direction) => {
   color: var(--text-dark);
   font-size: 0.95rem;
   line-height: 1.4;
+}
+
+.risk-level-chip {
+  display: inline-flex;
+  width: fit-content;
+  padding: 0.2rem 0.55rem;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+}
+
+.risk-level-low {
+  color: #1b5e20;
+  background-color: #e8f5e9;
+}
+
+.risk-level-medium {
+  color: #e65100;
+  background-color: #fff3e0;
+}
+
+.risk-level-high {
+  color: #b71c1c;
+  background-color: #ffebee;
+}
+
+.risk-level-critical {
+  color: #ffffff;
+  background-color: #b71c1c;
 }
 
 .question-details {

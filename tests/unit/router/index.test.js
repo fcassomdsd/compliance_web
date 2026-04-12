@@ -29,4 +29,20 @@ describe('router index', () => {
     expect(inspectionPlan.meta.requiredRoles).toEqual(['planner', 'inspector', 'admin']);
     expect(inspectionReport.meta.requiredRoles).toEqual(['inspector', 'admin']);
   });
+
+  it('executes lazy route component factories', async () => {
+    const { default: router } = await import('@/router/index.js');
+
+    const lazyRoutes = router
+      .getRoutes()
+      .filter((route) => route.components?.default && typeof route.components.default === 'function');
+
+    const loaded = await Promise.all(lazyRoutes.map((route) => route.components.default()));
+
+    expect(loaded).toHaveLength(lazyRoutes.length);
+    loaded.forEach((module) => {
+      expect(module).toBeTruthy();
+      expect(module.default).toBeTruthy();
+    });
+  });
 });

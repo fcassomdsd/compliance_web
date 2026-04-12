@@ -1,6 +1,22 @@
 import { defineStore } from 'pinia';
 import { apiEntityCRUD } from '@/services/apiServices';
 
+const VALID_RISK_LEVELS = ['Low', 'Medium', 'High', 'Critical'];
+
+const normalizeRiskLevel = (riskLevel) => {
+  if (typeof riskLevel !== 'string') {
+    return null;
+  }
+
+  const normalized = riskLevel.trim().toLowerCase();
+  if (normalized.length === 0) {
+    return null;
+  }
+
+  const matched = VALID_RISK_LEVELS.find((level) => level.toLowerCase() === normalized);
+  return matched || null;
+};
+
 export const useProtocolQuestionStore = defineStore('protocolQuestion', {
 
   state: () => ({
@@ -61,6 +77,7 @@ export const useProtocolQuestionStore = defineStore('protocolQuestion', {
             topic: question.topicId,
             topicName: question.topicName,
             sequence: question.sequence || 0,
+            riskLevel: normalizeRiskLevel(question.riskLevelName),
             verification: question.verification || '',
             normativas: question.normativas || '',
             references: question.references || '',
@@ -85,6 +102,7 @@ export const useProtocolQuestionStore = defineStore('protocolQuestion', {
             topic: question.topicId,
             topicName: question.topicName,
             sequence: question.sequence || 0,
+            riskLevel: normalizeRiskLevel(question.riskLevel),
             verification: question.verification || '',
             normativas: question.normativas || '',
             references: question.references || '',
@@ -133,6 +151,7 @@ export const useProtocolQuestionStore = defineStore('protocolQuestion', {
           topic: question.topicId,
           topicName: question.topicName,
           sequence: question.sequence || 0,
+          riskLevel: normalizeRiskLevel(question.riskLevel),
           verification: question.verification || '',
           normativas: question.normativas || '',
           references: question.references || '',
@@ -170,6 +189,7 @@ export const useProtocolQuestionStore = defineStore('protocolQuestion', {
             topic: question.topicId,
             topicName: question.topicName,
             sequence: question.sequence || 0,
+            riskLevel: normalizeRiskLevel(question.riskLevel),
             verification: question.verification || '',
             normativas: question.normativas || '',
             references: question.references || '',
