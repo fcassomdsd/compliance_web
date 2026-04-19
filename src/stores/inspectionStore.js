@@ -1,15 +1,7 @@
 import { defineStore } from 'pinia';
 import { apiEntityCRUD } from '@/services/apiServices';
 
-const GENERATED_CODE_PATTERN = /^([A-Za-z0-9]{4})-(\d{4})-(\d+)$/;
-
-const parseYearFromDate = (dateValue) => {
-  if (!dateValue || typeof dateValue !== 'string') return null;
-  const trimmed = dateValue.trim();
-  if (trimmed.length < 4) return null;
-  const year = trimmed.slice(0, 4);
-  return /^\d{4}$/.test(year) ? year : null;
-};
+const GENERATED_CODE_PATTERN = /^([A-Za-z0-9]{4})-(\d{3})$/;
 
 const parseCodeParts = (codeValue) => {
   if (!codeValue || typeof codeValue !== 'string') return null;
@@ -17,8 +9,7 @@ const parseCodeParts = (codeValue) => {
   if (!match) return null;
   return {
     icaoCode: match[1].toUpperCase(),
-    year: match[2],
-    sequence: Number.parseInt(match[3], 10),
+    sequence: Number.parseInt(match[2], 10),
   };
 };
 
@@ -62,11 +53,6 @@ export const useInspectionStore = defineStore('inspection', {
           throw new Error('Selected location has an invalid ICAO code');
         }
 
-        const startYear = parseYearFromDate(addData.startDate);
-        if (!startYear) {
-          throw new Error('Start date is invalid for inspection code generation');
-        }
-
         const { data: inspectionQueryResults } = await apiEntityCRUD('query', 'Inspection', null, { deleted: false, locationId: addData.locationId });
         if (!('list' in inspectionQueryResults)) {
           throw new Error('Could not query existing inspections for code generation');
@@ -77,14 +63,13 @@ export const useInspectionStore = defineStore('inspection', {
           const codeParts = parseCodeParts(existingInspection.code);
           if (!codeParts) continue;
           if (codeParts.icaoCode !== locationIcaoCode) continue;
-          if (codeParts.year !== startYear) continue;
           if (Number.isInteger(codeParts.sequence) && codeParts.sequence > maxSequence) {
             maxSequence = codeParts.sequence;
           }
         }
 
-        const nextSequence = (maxSequence + 1).toString().padStart(2, '0');
-        addData.code = `${locationIcaoCode}-${startYear}-${nextSequence}`;
+        const nextSequence = (maxSequence + 1).toString().padStart(3, '0');
+        addData.code = `${locationIcaoCode}-${nextSequence}`;
 
         const { data: addedInspection } = await apiEntityCRUD('add', 'Inspection', null, addData);
         if (!addedInspection || !('id' in addedInspection)) {
@@ -153,13 +138,6 @@ export const useInspectionStore = defineStore('inspection', {
         }
 
         updateData.code = currentInspection.code;
-
-        const finalStartDate = ('startDate' in updateData) ? updateData.startDate : currentInspection.startDate;
-        const currentCodeParts = parseCodeParts(currentInspection.code);
-        const finalStartYear = parseYearFromDate(finalStartDate);
-        if (currentCodeParts && finalStartYear && currentCodeParts.year !== finalStartYear) {
-          throw new Error('Start date year must match the year in the inspection code');
-        }
 
         const result = await apiEntityCRUD('update', 'Inspection', updateId, updateData);
         // check result for a not modified status.  If not modified, do not update local record.
