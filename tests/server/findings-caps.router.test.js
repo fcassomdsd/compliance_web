@@ -19,12 +19,15 @@ function buildFixture() {
   const findingNode = {
     id: 'finding-node-1',
     properties: {
-      'vso:findingId': 'F-001',
+      'vso:findingId': 'MDPP001-AYVIS-01',
       'vso:findingStatus': 'Open',
       'vso:submissionDeadline': '2026-04-01',
-      'vso:inspectionId': 'INSP-01',
+      'vso:inspectionId': 'MDPP-001',
       'vso:locationId': 'LOC-01',
       'vso:locationName': 'Main Airport',
+      'vso:specialtyCode': 'AYVIS',
+      'vso:specialtyId': 'spec-ayvis',
+      'vso:specialtyName': 'Aviation Safety',
       'vso:domain': 'OPS',
       'vso:providerId': 'PR-01',
       'vso:providerName': 'Provider 1',
@@ -36,12 +39,12 @@ function buildFixture() {
     id: 'cap-node-1',
     parentId: 'finding-node-1',
     properties: {
-      'vso:capId': 'CAP-001',
+      'vso:capId': 'CA-MDPP001AYVIS-01-01',
       'vso:proposedAction': 'Action A',
       'vso:responsibleEntity': 'Provider 1',
       'vso:dueDate': '2026-05-01',
       'vso:acceptanceStatus': 'Pending Review',
-      'vso:inspectionId': 'INSP-01',
+      'vso:inspectionId': 'MDPP-001',
       'vso:locationId': 'LOC-01',
       'vso:providerId': 'PR-01',
     },
@@ -81,10 +84,10 @@ function buildApp({ roles = ['cap_entry'], now = new Date('2026-04-03T10:00:00.0
       return [];
     },
     searchFindingByBusinessId: async ({ findingId }) => {
-      return findingId === 'F-001' ? fixture.findingNode : null;
+      return findingId === 'MDPP001-AYVIS-01' ? fixture.findingNode : null;
     },
     searchCapByBusinessId: async ({ capId }) => {
-      return capId === 'CAP-001' ? fixture.capNode : null;
+      return capId === 'CA-MDPP001AYVIS-01-01' ? fixture.capNode : null;
     },
     listChildrenByType: async ({ parentNodeId, nodeType }) => {
       if (nodeType === 'vso:correctiveAction' && parentNodeId === fixture.findingNode.id) {
@@ -183,11 +186,10 @@ describe('Findings and CAP API', () => {
     const { app } = buildApp({ roles: ['cap_entry'] });
 
     const response = await request(app)
-      .post('/api/findings/F-001/caps')
+      .post('/api/findings/MDPP001-AYVIS-01/caps')
       .set('Cookie', 'compliance_session_id=session-1')
       .set('x-csrf-token', 'csrf-token-1')
       .send({
-        capId: 'CAP-NEW',
         proposedAction: 'New corrective action',
         responsibleEntity: 'Provider 1',
         dueDate: '2026-06-01',
@@ -195,7 +197,7 @@ describe('Findings and CAP API', () => {
       });
 
     expect(response.status).toBe(201);
-    expect(response.body.cap.capId).toBe('CAP-NEW');
+    expect(response.body.cap.capId).toBe('CA-MDPP001AYVIS-01-02');
     expect(response.body.cap.acceptanceStatus).toBe('Pending Review');
   });
 
@@ -203,7 +205,7 @@ describe('Findings and CAP API', () => {
     const { app } = buildApp({ roles: ['inspector'] });
 
     const response = await request(app)
-      .patch('/api/caps/CAP-001/review')
+      .patch('/api/caps/CA-MDPP001AYVIS-01-01/review')
       .set('Cookie', 'compliance_session_id=session-1')
       .set('x-csrf-token', 'csrf-token-1')
       .send({
@@ -218,7 +220,7 @@ describe('Findings and CAP API', () => {
     const { app, fixture } = buildApp({ roles: ['inspector'] });
 
     const response = await request(app)
-      .post('/api/caps/CAP-001/follow-up-reports')
+      .post('/api/caps/CA-MDPP001AYVIS-01-01/follow-up-reports')
       .set('Cookie', 'compliance_session_id=session-1')
       .set('x-csrf-token', 'csrf-token-1')
       .send({
@@ -232,6 +234,7 @@ describe('Findings and CAP API', () => {
 
     expect(response.status).toBe(201);
     expect(response.body.followUpReport.effectivenessConfirmed).toBe(true);
+    expect(response.body.followUpReport.followUpId).toBe('FU-MDPP001AYVIS-01-260403');
     expect(fixture.findingNode.properties['vso:findingStatus']).toBe('Closed');
   });
 });
