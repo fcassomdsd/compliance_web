@@ -17,7 +17,9 @@ function mapFindingNode(node) {
     inspectionId: nodeProperty(node, 'vso:inspectionId'),
     locationId: nodeProperty(node, 'vso:locationId'),
     locationName: nodeProperty(node, 'vso:locationName'),
-    domain: nodeProperty(node, 'vso:domain'),
+    specialtyCode: nodeProperty(node, 'vso:specialtyCode'),
+    specialtyId: nodeProperty(node, 'vso:specialtyId'),
+    specialtyName: nodeProperty(node, 'vso:specialtyName'),
     providerId: nodeProperty(node, 'vso:providerId'),
     providerName: nodeProperty(node, 'vso:providerName'),
   };
@@ -34,7 +36,9 @@ function mapCorrectiveActionNode(node) {
     inspectionId: nodeProperty(node, 'vso:inspectionId'),
     locationId: nodeProperty(node, 'vso:locationId'),
     locationName: nodeProperty(node, 'vso:locationName'),
-    domain: nodeProperty(node, 'vso:domain'),
+    specialtyCode: nodeProperty(node, 'vso:specialtyCode'),
+    specialtyId: nodeProperty(node, 'vso:specialtyId'),
+    specialtyName: nodeProperty(node, 'vso:specialtyName'),
     providerId: nodeProperty(node, 'vso:providerId'),
     providerName: nodeProperty(node, 'vso:providerName'),
   };
@@ -43,6 +47,7 @@ function mapCorrectiveActionNode(node) {
 function mapFollowUpReportNode(node) {
   return {
     nodeId: node?.id || null,
+    followUpId: nodeProperty(node, 'vso:followUpId'),
     followUpDate: nodeProperty(node, 'vso:followUpDate'),
     findingClosed: Boolean(nodeProperty(node, 'vso:findingClosed', false)),
     percentComplete: nodeProperty(node, 'vso:percentComplete'),
