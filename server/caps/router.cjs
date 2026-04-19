@@ -3,6 +3,12 @@ const express = require('express');
 const { buildError } = require('../auth/sessionAuth.cjs');
 const { mapCorrectiveActionNode, mapFindingNode, mapFollowUpReportNode } = require('../domain/alfrescoMappers.cjs');
 const {
+  parseCapId,
+  parseFindingId,
+  buildCapIdFromFinding,
+  buildFollowUpIdFromCap,
+} = require('../domain/idFormats.cjs');
+const {
   FINDING_STATUS,
   CAP_ACCEPTANCE_STATUS,
   computeEffectiveFindingStatus,
@@ -31,8 +37,8 @@ function buildCapQuery(filters = {}) {
   if (filters.providerId) {
     predicates.push(`=vso:providerId:"${escapeAftsValue(filters.providerId)}"`);
   }
-  if (filters.domain) {
-    predicates.push(`=vso:domain:"${escapeAftsValue(filters.domain)}"`);
+  if (filters.specialtyCode) {
+    predicates.push(`=vso:specialtyCode:"${escapeAftsValue(filters.specialtyCode)}"`);
   }
   if (filters.inspectionId) {
     predicates.push(`=vso:inspectionId:"${escapeAftsValue(filters.inspectionId)}"`);
@@ -120,13 +126,57 @@ function createCapsRouter({ auth, alfrescoClient, now = () => new Date() }) {
         const responsibleEntity = req.body?.responsibleEntity;
         const dueDate = req.body?.dueDate;
 
-        if (!capId || !proposedAction || !responsibleEntity || !dueDate) {
-          return res.status(400).json(buildError('CAP_BAD_REQUEST', 'capId, proposedAction, responsibleEntity and dueDate are required'));
+        if (!proposedAction || !responsibleEntity || !dueDate) {
+          return res.status(400).json(buildError('CAP_BAD_REQUEST', 'proposedAction, responsibleEntity and dueDate are required'));
+        }
+
+        const findingIdParts = parseFindingId(finding.findingId);
+        if (!findingIdParts) {
+          return res.status(400).json(buildError('CAP_BAD_REQUEST', 'Finding ID does not match expected format XXXXNNN-YYY-MM'));
+        }
+
+        let effectiveCapId = capId ? String(capId).trim().toUpperCase() : '';
+        if (!effectiveCapId) {
+          const siblingCaps = await alfrescoClient.listChildrenByType({
+            ticket: req.auth.ticket,
+            parentNodeId: finding.nodeId,
+            nodeType: 'vso:correctiveAction',
+          });
+
+          let maxCapSequence = 0;
+          for (const siblingCap of siblingCaps) {
+            const siblingCapId = siblingCap?.properties?.['vso:capId'];
+            const parsedCap = parseCapId(siblingCapId);
+            if (!parsedCap) continue;
+            if (parsedCap.compactInspectionId !== findingIdParts.compactInspectionId) continue;
+            if (parsedCap.specialtyCode !== findingIdParts.specialtyCode) continue;
+            if (parsedCap.findingSequence !== findingIdParts.findingSequence) continue;
+            if (parsedCap.capSequence > maxCapSequence) {
+              maxCapSequence = parsedCap.capSequence;
+            }
+          }
+
+          effectiveCapId = buildCapIdFromFinding({
+            findingId: finding.findingId,
+            capSequence: maxCapSequence + 1,
+          });
+        } else {
+          const parsedCap = parseCapId(effectiveCapId);
+          if (!parsedCap) {
+            return res.status(400).json(buildError('CAP_BAD_REQUEST', 'capId must match CA-XXXXNNNYYY-MM-SS'));
+          }
+          if (
+            parsedCap.compactInspectionId !== findingIdParts.compactInspectionId ||
+            parsedCap.specialtyCode !== findingIdParts.specialtyCode ||
+            parsedCap.findingSequence !== findingIdParts.findingSequence
+          ) {
+            return res.status(400).json(buildError('CAP_BAD_REQUEST', 'capId must belong to the provided findingId'));
+          }
         }
 
         const existingCap = await alfrescoClient.searchCapByBusinessId({
           ticket: req.auth.ticket,
-          capId,
+          capId: effectiveCapId,
         });
         if (existingCap) {
           return res.status(409).json(buildError('CAP_ALREADY_EXISTS', 'CAP identifier already exists'));
@@ -136,10 +186,10 @@ function createCapsRouter({ auth, alfrescoClient, now = () => new Date() }) {
           ticket: req.auth.ticket,
           parentNodeId: finding.nodeId,
           nodeType: 'vso:correctiveAction',
-          name: `CAP-${capId}`,
+          name: effectiveCapId,
           associationType: 'vso:hasCorrectiveAction',
           properties: {
-            'vso:capId': capId,
+            'vso:capId': effectiveCapId,
             'vso:proposedAction': proposedAction,
             'vso:responsibleEntity': responsibleEntity,
             'vso:dueDate': dueDate,
@@ -147,7 +197,9 @@ function createCapsRouter({ auth, alfrescoClient, now = () => new Date() }) {
             'vso:inspectionId': finding.inspectionId,
             'vso:locationId': finding.locationId,
             'vso:locationName': finding.locationName,
-            'vso:domain': finding.domain,
+            'vso:specialtyCode': finding.specialtyCode,
+            'vso:specialtyId': finding.specialtyId,
+            'vso:specialtyName': finding.specialtyName,
             'vso:providerId': finding.providerId,
             'vso:providerName': finding.providerName,
           },
@@ -184,7 +236,7 @@ function createCapsRouter({ auth, alfrescoClient, now = () => new Date() }) {
             acceptanceStatus: req.query?.acceptanceStatus,
             locationId: req.query?.locationId,
             providerId: req.query?.providerId,
-            domain: req.query?.domain,
+            specialtyCode: req.query?.specialtyCode,
             inspectionId: req.query?.inspectionId,
           }),
           maxItems: 1000,
@@ -315,13 +367,37 @@ function createCapsRouter({ auth, alfrescoClient, now = () => new Date() }) {
           return res.status(400).json(buildError('FOLLOW_UP_BAD_REQUEST', 'percentComplete must be between 0 and 100'));
         }
 
+        let followUpId;
+        try {
+          followUpId = buildFollowUpIdFromCap({
+            capId: req.params.capId,
+            followUpDate,
+          });
+        } catch (error) {
+          return res.status(400).json(buildError('FOLLOW_UP_BAD_REQUEST', error.message));
+        }
+
+        const existingFollowUps = await alfrescoClient.listChildrenByType({
+          ticket: req.auth.ticket,
+          parentNodeId: capNode.id,
+          nodeType: 'vso:followUpReport',
+        });
+        const duplicateByDate = existingFollowUps.some((entry) => {
+          const existingId = entry?.properties?.['vso:followUpId'];
+          return typeof existingId === 'string' && existingId.trim().toUpperCase() === followUpId;
+        });
+        if (duplicateByDate) {
+          return res.status(409).json(buildError('FOLLOW_UP_ALREADY_EXISTS', 'A follow-up report for this CAP and date already exists'));
+        }
+
         const created = await alfrescoClient.createChildNode({
           ticket: req.auth.ticket,
           parentNodeId: capNode.id,
           nodeType: 'vso:followUpReport',
-          name: `FOLLOWUP-${req.params.capId}-${Date.now()}`,
+          name: followUpId,
           associationType: 'vso:verifiedBy',
           properties: {
+            'vso:followUpId': followUpId,
             'vso:followUpDate': followUpDate,
             'vso:findingClosed': findingClosed,
             'vso:percentComplete': percentComplete,

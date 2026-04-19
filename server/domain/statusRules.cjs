@@ -9,10 +9,10 @@ const FINDING_STATUS = Object.freeze({
 });
 
 const CAP_ACCEPTANCE_STATUS = Object.freeze({
-  PENDING_REVIEW: 'Pending Review',
+  PENDING_REVIEW: 'Pending review',
   ACCEPTED: 'Accepted',
   REJECTED: 'Rejected',
-  RETURNED_FOR_REVISION: 'Returned for Revision',
+  RETURNED_FOR_REVISION: 'Returned',
 });
 
 function parseIsoDate(value) {
