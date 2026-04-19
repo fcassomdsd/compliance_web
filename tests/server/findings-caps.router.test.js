@@ -198,7 +198,7 @@ describe('Findings and CAP API', () => {
 
     expect(response.status).toBe(201);
     expect(response.body.cap.capId).toBe('CA-MDPP001AYVIS-01-02');
-    expect(response.body.cap.acceptanceStatus).toBe('Pending Review');
+    expect(response.body.cap.acceptanceStatus).toBe('Pending review');
   });
 
   it('allows inspector review and updates CAP acceptance status', async () => {
