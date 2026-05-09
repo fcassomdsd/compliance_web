@@ -97,7 +97,7 @@ describe('FindingManager.vue', () => {
     mockFindingStore.selectedFinding = {
       findingId: 'F-2',
       description: 'Issue found',
-      regulationBreached: 'REG-1',
+      requirementBreached: 'REG-1',
       openedDate: '2026-01-02',
       lastStatusChange: '2026-02-03',
       statusDivergence: true,
@@ -136,7 +136,7 @@ describe('FindingManager.vue', () => {
     mockFindingStore.selectedFinding = {
       findingId: 'F-9',
       description: 'Needs CAP',
-      regulationBreached: 'REG-X',
+      requirementBreached: 'REG-X',
       openedDate: '2026-02-01',
       lastStatusChange: '2026-02-15',
       statusDivergence: false,

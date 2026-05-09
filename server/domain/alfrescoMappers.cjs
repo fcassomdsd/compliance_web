@@ -7,7 +7,7 @@ function mapFindingNode(node) {
     nodeId: node?.id || null,
     findingId: nodeProperty(node, 'vso:findingId'),
     findingLevel: nodeProperty(node, 'vso:findingLevel'),
-    regulationBreached: nodeProperty(node, 'vso:regulationBreached'),
+    requirementBreached: nodeProperty(node, 'vso:requirementBreached'),
     description: nodeProperty(node, 'vso:description'),
     findingStatus: nodeProperty(node, 'vso:findingStatus'),
     submissionDeadline: nodeProperty(node, 'vso:submissionDeadline'),

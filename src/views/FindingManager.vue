@@ -52,7 +52,7 @@
     <div v-if="findingStore.selectedFinding" class="detail-panel">
       <h3>Finding Detail: {{ findingStore.selectedFinding.findingId }}</h3>
       <p><strong>Description:</strong> {{ findingStore.selectedFinding.description || '-' }}</p>
-      <p><strong>Regulation breached:</strong> {{ findingStore.selectedFinding.regulationBreached || '-' }}</p>
+      <p><strong>Requirement breached:</strong> {{ findingStore.selectedFinding.requirementBreached || '-' }}</p>
       <p><strong>Opened:</strong> {{ findingStore.selectedFinding.openedDate || '-' }}</p>
       <p><strong>Last status change:</strong> {{ findingStore.selectedFinding.lastStatusChange || '-' }}</p>
       <p v-if="findingStore.selectedFinding.statusDivergence" class="warning-text">
