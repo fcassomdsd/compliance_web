@@ -36,6 +36,9 @@
       <RouterLink to="/corrective-actions" class="nav-link" exact-active-class="active-view">
         Corrective Actions
       </RouterLink>
+      <RouterLink to="/follow-ups" class="nav-link" exact-active-class="active-view">
+        Follow-ups
+      </RouterLink>
     </div>
     <RouterView />
   </div>

@@ -6,7 +6,6 @@ import {
   apiCapDetail,
   apiSubmitCap,
   apiReviewCap,
-  apiCreateFollowUpReport,
 } from '@/services/apiServices';
 
 vi.mock('../../../src/services/apiServices.js');
@@ -78,18 +77,6 @@ describe('capStore', () => {
     vi.mocked(apiReviewCap).mockRejectedValueOnce(new Error('review failed'));
     await expect(store.reviewCap(payload)).rejects.toThrow('review failed');
     expect(store.error).toBe('review failed');
-  });
-
-  it('createFollowUp returns API data and tracks errors', async () => {
-    const payload = { capId: 'CAP-6', payload: { percentComplete: 10 }, csrfToken: 'csrf' };
-    vi.mocked(apiCreateFollowUpReport).mockResolvedValue({ data: { followUpId: 'FU-1' } });
-
-    await expect(store.createFollowUp(payload)).resolves.toEqual({ followUpId: 'FU-1' });
-    expect(apiCreateFollowUpReport).toHaveBeenCalledWith('CAP-6', { percentComplete: 10 }, 'csrf');
-
-    vi.mocked(apiCreateFollowUpReport).mockRejectedValueOnce(new Error('follow-up failed'));
-    await expect(store.createFollowUp(payload)).rejects.toThrow('follow-up failed');
-    expect(store.error).toBe('follow-up failed');
   });
 
   it('setFilter updates only known filters', () => {

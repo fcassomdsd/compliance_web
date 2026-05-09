@@ -94,14 +94,14 @@ function buildCapIdFromFinding({ findingId, capSequence }) {
   return `CA-${finding.compactInspectionId}${finding.specialtyCode}-${String(finding.findingSequence).padStart(2, '0')}-${String(seq).padStart(2, '0')}`;
 }
 
-function buildFollowUpIdFromCap({ capId, followUpDate }) {
-  const cap = parseCapId(capId);
-  if (!cap) {
-    throw new Error('capId does not match expected format CA-XXXXNNNYYY-MM-SS');
+function buildFollowUpIdFromFinding({ findingId, followUpDate }) {
+  const finding = parseFindingId(findingId);
+  if (!finding) {
+    throw new Error('findingId does not match expected format XXXXNNN-YYY-MM');
   }
   const dateCode = toDateCode(followUpDate);
 
-  return `FU-${cap.compactInspectionId}${cap.specialtyCode}-${String(cap.findingSequence).padStart(2, '0')}-${dateCode}`;
+  return `FU-${finding.compactInspectionId}${finding.specialtyCode}-${String(finding.findingSequence).padStart(2, '0')}-${dateCode}`;
 }
 
 module.exports = {
@@ -117,5 +117,5 @@ module.exports = {
   buildInspectionId,
   buildChecklistId,
   buildCapIdFromFinding,
-  buildFollowUpIdFromCap,
+  buildFollowUpIdFromFinding,
 };

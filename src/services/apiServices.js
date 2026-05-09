@@ -424,3 +424,36 @@ export async function apiCreateFollowUpReport(capId, payload, csrfToken) {
   }
 }
 
+export async function apiFollowUps(filters = {}) {
+  try {
+    const result = await axios({
+      method: 'get',
+      url: `${complianceApiServer}/findings/follow-ups`,
+      params: filters,
+      withCredentials: true,
+    });
+    return { data: result.data, status: result.status };
+  } catch (error) {
+    throw new Error('apiFollowUps: ' + error.message);
+  }
+}
+
+export async function apiCreateFindingFollowUp(findingId, payload, csrfToken) {
+  try {
+    if (!findingId || typeof findingId !== 'string') {
+      throw new Error('findingId is required');
+    }
+
+    const result = await axios({
+      method: 'post',
+      url: `${complianceApiServer}/findings/${encodeURIComponent(findingId)}/follow-ups`,
+      data: payload,
+      headers: buildCsrfHeader(csrfToken),
+      withCredentials: true,
+    });
+    return { data: result.data, status: result.status };
+  } catch (error) {
+    throw new Error('apiCreateFindingFollowUp: ' + error.message);
+  }
+}
+

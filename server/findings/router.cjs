@@ -2,6 +2,8 @@ const express = require('express');
 
 const { buildError } = require('../auth/sessionAuth.cjs');
 const { mapFindingNode, mapFollowUpReportNode } = require('../domain/alfrescoMappers.cjs');
+const { parseFollowUpId, buildFollowUpIdFromFinding } = require('../domain/idFormats.cjs');
+const { FINDING_STATUS } = require('../domain/statusRules.cjs');
 const { computeEffectiveFindingStatus } = require('../domain/statusRules.cjs');
 
 const FINDINGS_LIBRARY_PATH = "Sites/vigilancia-de-la-so/documentLibrary/Vigilancia/Hallazgos";
@@ -35,31 +37,56 @@ function buildFindingsQuery(filters = {}) {
   return predicates.join(' AND ');
 }
 
-async function getFollowUpReportsForCap({ alfrescoClient, ticket, capNodeId }) {
+function buildFollowUpQuery(filters = {}) {
+  const predicates = [
+    "TYPE:'vso:followUpReport'",
+    `PATH:'/app:company_home/st:sites/cm:vigilancia-de-la-so/cm:documentLibrary/cm:Vigilancia/cm:Hallazgos//*'`,
+  ];
+
+  if (filters.followUpType) {
+    predicates.push(`=vso:followUpType:"${escapeAftsValue(filters.followUpType)}"`);
+  }
+  if (filters.locationId) {
+    predicates.push(`=vso:locationId:"${escapeAftsValue(filters.locationId)}"`);
+  }
+  if (filters.specialtyCode) {
+    predicates.push(`=vso:specialtyCode:"${escapeAftsValue(filters.specialtyCode)}"`);
+  }
+
+  return predicates.join(' AND ');
+}
+
+async function getFollowUpReportsForFinding({ alfrescoClient, ticket, findingNodeId }) {
   const followUpNodes = await alfrescoClient.listChildrenByType({
     ticket,
-    parentNodeId: capNodeId,
+    parentNodeId: findingNodeId,
     nodeType: 'vso:followUpReport',
   });
   return followUpNodes.map(mapFollowUpReportNode);
 }
 
-async function getFollowUpReportsForFinding({ alfrescoClient, ticket, findingNodeId }) {
-  const capNodes = await alfrescoClient.listChildrenByType({
-    ticket,
-    parentNodeId: findingNodeId,
-    nodeType: 'vso:correctiveAction',
-  });
-
-  if (capNodes.length === 0) {
-    return [];
+function resolveFindingStatusFromFollowUp({ report }) {
+  const percentComplete = Number(report.percentComplete || 0);
+  const closed = Boolean(report.findingClosed) && Boolean(report.effectivenessConfirmed);
+  if (closed) {
+    return FINDING_STATUS.CLOSED;
   }
+  if (percentComplete >= 100) {
+    return FINDING_STATUS.PENDING_CLOSURE_REVIEW;
+  }
+  return FINDING_STATUS.IN_PROGRESS;
+}
 
-  const allReports = await Promise.all(
-    capNodes.map((capNode) => getFollowUpReportsForCap({ alfrescoClient, ticket, capNodeId: capNode.id }))
-  );
+function toDateOnly(now = new Date()) {
+  return now.toISOString().slice(0, 10);
+}
 
-  return allReports.flat();
+function findingIdFromFollowUpId(followUpId) {
+  const parsed = parseFollowUpId(followUpId);
+  if (!parsed) {
+    return null;
+  }
+  return `${parsed.compactInspectionId}-${parsed.specialtyCode}-${String(parsed.findingSequence).padStart(2, '0')}`;
 }
 
 function applyFindingFilters({ findings, status, overdueOnly }) {
@@ -132,6 +159,176 @@ function createFindingsRouter({ auth, alfrescoClient, now = () => new Date() }) 
         });
       } catch (error) {
         return res.status(502).json(buildError('FINDING_QUERY_FAILED', error.message));
+      }
+    }
+  );
+
+  router.get(
+    '/follow-ups',
+    auth.authenticate,
+    auth.authorize(['inspector', 'planner', 'admin', 'cap_entry']),
+    async (req, res) => {
+      try {
+        const followUpNodes = await alfrescoClient.searchNodes({
+          ticket: req.auth.ticket,
+          query: buildFollowUpQuery({
+            locationId: req.query?.locationId,
+            specialtyCode: req.query?.specialtyCode,
+            followUpType: req.query?.followUpType,
+          }),
+          maxItems: 1000,
+        });
+
+        let list = followUpNodes.map((node) => {
+          const mapped = mapFollowUpReportNode(node);
+          return {
+            ...mapped,
+            findingId: findingIdFromFollowUpId(mapped.followUpId),
+          };
+        });
+
+        if (req.query?.findingId) {
+          const targetFindingId = String(req.query.findingId).trim().toUpperCase();
+          list = list.filter((entry) => String(entry.findingId || '').trim().toUpperCase() === targetFindingId);
+        }
+
+        return res.status(200).json({ list });
+      } catch (error) {
+        return res.status(502).json(buildError('FOLLOW_UP_QUERY_FAILED', error.message));
+      }
+    }
+  );
+
+  router.post(
+    '/:findingId/follow-ups',
+    auth.authenticate,
+    auth.authorize(['inspector', 'admin']),
+    auth.requireCsrf(),
+    async (req, res) => {
+      try {
+        const findingNode = await alfrescoClient.searchFindingByBusinessId({
+          ticket: req.auth.ticket,
+          findingId: req.params.findingId,
+        });
+
+        if (!findingNode) {
+          return res.status(404).json(buildError('FINDING_NOT_FOUND', 'Finding not found'));
+        }
+
+        const finding = mapFindingNode(findingNode);
+        const followUpType = String(req.body?.followUpType || '').trim();
+        if (!followUpType) {
+          return res.status(400).json(buildError('FOLLOW_UP_BAD_REQUEST', 'followUpType is required'));
+        }
+
+        const followUpDate = req.body?.followUpDate || new Date(now()).toISOString();
+        const findingClosed = Boolean(req.body?.findingClosed);
+        const percentComplete = Number(req.body?.percentComplete ?? 0);
+        const followUpClosureDate = req.body?.followUpClosureDate || null;
+        const closureVerificationMethod = req.body?.closureVerificationMethod || null;
+        const effectivenessConfirmed = Boolean(req.body?.effectivenessConfirmed);
+
+        if (Number.isNaN(percentComplete) || percentComplete < 0 || percentComplete > 100) {
+          return res.status(400).json(buildError('FOLLOW_UP_BAD_REQUEST', 'percentComplete must be between 0 and 100'));
+        }
+
+        let followUpId;
+        try {
+          followUpId = buildFollowUpIdFromFinding({
+            findingId: finding.findingId,
+            followUpDate,
+          });
+        } catch (error) {
+          return res.status(400).json(buildError('FOLLOW_UP_BAD_REQUEST', error.message));
+        }
+
+        const existingFollowUps = await alfrescoClient.listChildrenByType({
+          ticket: req.auth.ticket,
+          parentNodeId: finding.nodeId,
+          nodeType: 'vso:followUpReport',
+        });
+        const duplicateByDate = existingFollowUps.some((entry) => {
+          const existingId = entry?.properties?.['vso:followUpId'];
+          return typeof existingId === 'string' && existingId.trim().toUpperCase() === followUpId;
+        });
+        if (duplicateByDate) {
+          return res.status(409).json(buildError('FOLLOW_UP_ALREADY_EXISTS', 'A follow-up report for this finding and date already exists'));
+        }
+
+        const siblingCaps = await alfrescoClient.listChildrenByType({
+          ticket: req.auth.ticket,
+          parentNodeId: finding.nodeId,
+          nodeType: 'vso:correctiveAction',
+        });
+        const requestedCapId = String(req.body?.inheritedCapId || '').trim().toUpperCase();
+        const selectedCap = requestedCapId
+          ? siblingCaps.find((entry) => String(entry?.properties?.['vso:capId'] || '').trim().toUpperCase() === requestedCapId)
+          : siblingCaps[0] || null;
+
+        if (requestedCapId && !selectedCap) {
+          return res.status(400).json(buildError('FOLLOW_UP_BAD_REQUEST', 'inheritedCapId must belong to the provided findingId'));
+        }
+
+        const inheritedCapId = selectedCap?.properties?.['vso:capId'] || null;
+        const created = await alfrescoClient.createChildNode({
+          ticket: req.auth.ticket,
+          parentNodeId: finding.nodeId,
+          nodeType: 'vso:followUpReport',
+          name: followUpId,
+          associationType: 'vso:hasFollowUp',
+          properties: {
+            'vso:followUpId': followUpId,
+            'vso:followUpType': followUpType,
+            'vso:followUpDate': followUpDate,
+            'vso:findingClosed': findingClosed,
+            'vso:percentComplete': percentComplete,
+            'vso:followUpClosureDate': followUpClosureDate,
+            'vso:closureVerificationMethod': closureVerificationMethod,
+            'vso:effectivenessConfirmed': effectivenessConfirmed,
+            'vso:inheritedCapId': inheritedCapId,
+            'vso:inspectionId': finding.inspectionId,
+            'vso:locationId': finding.locationId,
+            'vso:locationName': finding.locationName,
+            'vso:specialtyCode': finding.specialtyCode,
+            'vso:specialtyId': finding.specialtyId,
+            'vso:specialtyName': finding.specialtyName,
+            'vso:providerId': finding.providerId,
+            'vso:providerName': finding.providerName,
+          },
+        });
+
+        const nextFindingStatus = resolveFindingStatusFromFollowUp({
+          report: {
+            findingClosed,
+            effectivenessConfirmed,
+            percentComplete,
+          },
+        });
+
+        const statusProperties = {
+          'vso:findingStatus': nextFindingStatus,
+          'vso:lastStatusChange': toDateOnly(now()),
+        };
+
+        if (nextFindingStatus === FINDING_STATUS.CLOSED) {
+          statusProperties['vso:findingClosureDate'] = followUpClosureDate || toDateOnly(now());
+        }
+
+        await alfrescoClient.updateNodeProperties({
+          ticket: req.auth.ticket,
+          nodeId: finding.nodeId,
+          properties: statusProperties,
+        });
+
+        return res.status(201).json({
+          followUpReport: {
+            ...mapFollowUpReportNode(created),
+            findingId: finding.findingId,
+            inheritedCapId,
+          },
+        });
+      } catch (error) {
+        return res.status(502).json(buildError('FOLLOW_UP_CREATE_FAILED', error.message));
       }
     }
   );

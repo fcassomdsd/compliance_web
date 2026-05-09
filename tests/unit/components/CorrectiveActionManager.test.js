@@ -39,7 +39,6 @@ describe('CorrectiveActionManager.vue', () => {
       fetchCaps: vi.fn().mockResolvedValue(undefined),
       submitCap: vi.fn().mockResolvedValue({ ok: true }),
       reviewCap: vi.fn().mockResolvedValue({ ok: true }),
-      createFollowUp: vi.fn().mockResolvedValue({ ok: true }),
       fetchCapDetail: vi.fn().mockResolvedValue(undefined),
     };
     mockAuthStore = { csrfToken: 'csrf-token' };
@@ -120,56 +119,6 @@ describe('CorrectiveActionManager.vue', () => {
     expect(wrapper.vm.message).toContain('review updated');
   });
 
-  it('createFollowUp converts date and resets form values', async () => {
-    const wrapper = mountComponent();
-    await wrapper.vm.$nextTick();
-
-    wrapper.vm.followForm.capId = 'CAP-30';
-    wrapper.vm.followForm.followUpDate = '2026-06-01T10:30';
-    wrapper.vm.followForm.percentComplete = 55;
-    wrapper.vm.followForm.findingClosed = true;
-    wrapper.vm.followForm.effectivenessConfirmed = true;
-    wrapper.vm.followForm.followUpClosureDate = '2026-06-02';
-    wrapper.vm.followForm.closureVerificationMethod = 'Onsite';
-
-    await wrapper.vm.createFollowUp();
-
-    expect(mockCapStore.createFollowUp).toHaveBeenCalledWith(expect.objectContaining({
-      capId: 'CAP-30',
-      csrfToken: 'csrf-token',
-      payload: expect.objectContaining({
-        percentComplete: 55,
-        findingClosed: true,
-        effectivenessConfirmed: true,
-        followUpClosureDate: '2026-06-02',
-        closureVerificationMethod: 'Onsite',
-      }),
-    }));
-    expect(wrapper.vm.followForm.capId).toBe('');
-    expect(wrapper.vm.followForm.percentComplete).toBe(0);
-    expect(wrapper.vm.message).toContain('Follow-up report created');
-  });
-
-  it('createFollowUp handles blank optional fields', async () => {
-    const wrapper = mountComponent();
-    await wrapper.vm.$nextTick();
-
-    wrapper.vm.followForm.capId = 'CAP-31';
-    wrapper.vm.followForm.followUpDate = '';
-    wrapper.vm.followForm.followUpClosureDate = '';
-    wrapper.vm.followForm.closureVerificationMethod = '';
-
-    await wrapper.vm.createFollowUp();
-
-    expect(mockCapStore.createFollowUp).toHaveBeenCalledWith(expect.objectContaining({
-      payload: expect.objectContaining({
-        followUpDate: undefined,
-        followUpClosureDate: null,
-        closureVerificationMethod: null,
-      }),
-    }));
-  });
-
   it('viewCap fetches selected CAP detail', async () => {
     const wrapper = mountComponent();
     await wrapper.vm.$nextTick();
@@ -182,14 +131,12 @@ describe('CorrectiveActionManager.vue', () => {
     const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
     mockCapStore.submitCap.mockRejectedValueOnce(new Error('submit error'));
     mockCapStore.reviewCap.mockRejectedValueOnce(new Error('review error'));
-    mockCapStore.createFollowUp.mockRejectedValueOnce(new Error('follow-up error'));
 
     const wrapper = mountComponent();
     await wrapper.vm.$nextTick();
 
     await wrapper.vm.submitCap();
     await wrapper.vm.reviewCap();
-    await wrapper.vm.createFollowUp();
 
     expect(consoleSpy).toHaveBeenCalled();
     consoleSpy.mockRestore();

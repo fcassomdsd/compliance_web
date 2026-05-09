@@ -6,7 +6,6 @@ const {
   parseCapId,
   parseFindingId,
   buildCapIdFromFinding,
-  buildFollowUpIdFromCap,
 } = require('../domain/idFormats.cjs');
 const {
   FINDING_STATUS,
@@ -58,37 +57,17 @@ async function getFollowUpReportsForCap({ alfrescoClient, ticket, capNodeId }) {
 }
 
 async function getFollowUpReportsForFinding({ alfrescoClient, ticket, findingNodeId }) {
-  const capNodes = await alfrescoClient.listChildrenByType({
+  const followUpNodes = await alfrescoClient.listChildrenByType({
     ticket,
     parentNodeId: findingNodeId,
-    nodeType: 'vso:correctiveAction',
+    nodeType: 'vso:followUpReport',
   });
 
-  if (capNodes.length === 0) {
-    return [];
-  }
-
-  const allReports = await Promise.all(
-    capNodes.map((capNode) => getFollowUpReportsForCap({ alfrescoClient, ticket, capNodeId: capNode.id }))
-  );
-
-  return allReports.flat();
+  return followUpNodes.map(mapFollowUpReportNode);
 }
 
 function nowIsoDate(now = new Date()) {
   return now.toISOString().slice(0, 10);
-}
-
-function resolveFindingStatusFromFollowUp({ report }) {
-  const percentComplete = Number(report.percentComplete || 0);
-  const closed = Boolean(report.findingClosed) && Boolean(report.effectivenessConfirmed);
-  if (closed) {
-    return FINDING_STATUS.CLOSED;
-  }
-  if (percentComplete >= 100) {
-    return FINDING_STATUS.PENDING_CLOSURE_REVIEW;
-  }
-  return FINDING_STATUS.IN_PROGRESS;
 }
 
 function createCapsRouter({ auth, alfrescoClient, now = () => new Date() }) {
@@ -337,118 +316,6 @@ function createCapsRouter({ auth, alfrescoClient, now = () => new Date() }) {
         });
       } catch (error) {
         return res.status(502).json(buildError('CAP_REVIEW_FAILED', error.message));
-      }
-    }
-  );
-
-  router.post(
-    '/caps/:capId/follow-up-reports',
-    auth.authenticate,
-    auth.authorize(['inspector', 'admin']),
-    auth.requireCsrf(),
-    async (req, res) => {
-      try {
-        const capNode = await alfrescoClient.searchCapByBusinessId({
-          ticket: req.auth.ticket,
-          capId: req.params.capId,
-        });
-        if (!capNode) {
-          return res.status(404).json(buildError('CAP_NOT_FOUND', 'Corrective action not found'));
-        }
-
-        const followUpDate = req.body?.followUpDate || new Date(now()).toISOString();
-        const findingClosed = Boolean(req.body?.findingClosed);
-        const percentComplete = Number(req.body?.percentComplete ?? 0);
-        const followUpClosureDate = req.body?.followUpClosureDate || null;
-        const closureVerificationMethod = req.body?.closureVerificationMethod || null;
-        const effectivenessConfirmed = Boolean(req.body?.effectivenessConfirmed);
-
-        if (Number.isNaN(percentComplete) || percentComplete < 0 || percentComplete > 100) {
-          return res.status(400).json(buildError('FOLLOW_UP_BAD_REQUEST', 'percentComplete must be between 0 and 100'));
-        }
-
-        let followUpId;
-        try {
-          followUpId = buildFollowUpIdFromCap({
-            capId: req.params.capId,
-            followUpDate,
-          });
-        } catch (error) {
-          return res.status(400).json(buildError('FOLLOW_UP_BAD_REQUEST', error.message));
-        }
-
-        const existingFollowUps = await alfrescoClient.listChildrenByType({
-          ticket: req.auth.ticket,
-          parentNodeId: capNode.id,
-          nodeType: 'vso:followUpReport',
-        });
-        const duplicateByDate = existingFollowUps.some((entry) => {
-          const existingId = entry?.properties?.['vso:followUpId'];
-          return typeof existingId === 'string' && existingId.trim().toUpperCase() === followUpId;
-        });
-        if (duplicateByDate) {
-          return res.status(409).json(buildError('FOLLOW_UP_ALREADY_EXISTS', 'A follow-up report for this CAP and date already exists'));
-        }
-
-        const created = await alfrescoClient.createChildNode({
-          ticket: req.auth.ticket,
-          parentNodeId: capNode.id,
-          nodeType: 'vso:followUpReport',
-          name: followUpId,
-          associationType: 'vso:verifiedBy',
-          properties: {
-            'vso:followUpId': followUpId,
-            'vso:followUpDate': followUpDate,
-            'vso:findingClosed': findingClosed,
-            'vso:percentComplete': percentComplete,
-            'vso:followUpClosureDate': followUpClosureDate,
-            'vso:closureVerificationMethod': closureVerificationMethod,
-            'vso:effectivenessConfirmed': effectivenessConfirmed,
-            'vso:inspectionId': capNode?.properties?.['vso:inspectionId'] || null,
-            'vso:locationId': capNode?.properties?.['vso:locationId'] || null,
-            'vso:locationName': capNode?.properties?.['vso:locationName'] || null,
-            'vso:domain': capNode?.properties?.['vso:domain'] || null,
-            'vso:providerId': capNode?.properties?.['vso:providerId'] || null,
-            'vso:providerName': capNode?.properties?.['vso:providerName'] || null,
-          },
-        });
-
-        const capDetails = await alfrescoClient.getNodeById({
-          ticket: req.auth.ticket,
-          nodeId: capNode.id,
-        });
-        const findingNodeId = capDetails?.parentId || capNode?.parentId;
-
-        if (findingNodeId) {
-          const nextFindingStatus = resolveFindingStatusFromFollowUp({
-            report: {
-              findingClosed,
-              effectivenessConfirmed,
-              percentComplete,
-            },
-          });
-
-          const statusProperties = {
-            'vso:findingStatus': nextFindingStatus,
-            'vso:lastStatusChange': nowIsoDate(now()),
-          };
-
-          if (nextFindingStatus === FINDING_STATUS.CLOSED) {
-            statusProperties['vso:findingClosureDate'] = followUpClosureDate || nowIsoDate(now());
-          }
-
-          await alfrescoClient.updateNodeProperties({
-            ticket: req.auth.ticket,
-            nodeId: findingNodeId,
-            properties: statusProperties,
-          });
-        }
-
-        return res.status(201).json({
-          followUpReport: mapFollowUpReportNode(created),
-        });
-      } catch (error) {
-        return res.status(502).json(buildError('FOLLOW_UP_CREATE_FAILED', error.message));
       }
     }
   );

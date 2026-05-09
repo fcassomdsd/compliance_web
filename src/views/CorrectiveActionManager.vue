@@ -40,33 +40,6 @@
     </div>
 
     <section class="card">
-      <h3>Register Follow-up Report</h3>
-      <div class="form-grid follow-grid">
-        <label for="followCapId">CAP ID</label>
-        <input id="followCapId" v-model="followForm.capId" type="text" />
-
-        <label for="followDate">Follow-up Date</label>
-        <input id="followDate" v-model="followForm.followUpDate" type="datetime-local" />
-
-        <label for="followPercent">Percent Complete</label>
-        <input id="followPercent" v-model.number="followForm.percentComplete" type="number" min="0" max="100" />
-
-        <label for="followClosed">Finding Closed</label>
-        <input id="followClosed" v-model="followForm.findingClosed" type="checkbox" />
-
-        <label for="followEffective">Effectiveness Confirmed</label>
-        <input id="followEffective" v-model="followForm.effectivenessConfirmed" type="checkbox" />
-
-        <label for="followClosureDate">Closure Date</label>
-        <input id="followClosureDate" v-model="followForm.followUpClosureDate" type="date" />
-
-        <label for="followMethod">Verification Method</label>
-        <input id="followMethod" v-model="followForm.closureVerificationMethod" type="text" />
-      </div>
-      <button @click="createFollowUp" :disabled="capStore.loading">Create Follow-up</button>
-    </section>
-
-    <section class="card">
       <h3>CAP Listing</h3>
       <div class="toolbar">
         <label for="filterStatus">Status</label>
@@ -150,16 +123,6 @@ const reviewForm = reactive({
   acceptanceStatus: 'Accepted',
 });
 
-const followForm = reactive({
-  capId: '',
-  followUpDate: '',
-  percentComplete: 0,
-  findingClosed: false,
-  effectivenessConfirmed: false,
-  followUpClosureDate: '',
-  closureVerificationMethod: '',
-});
-
 const filters = reactive({
   acceptanceStatus: '',
   locationId: '',
@@ -217,36 +180,6 @@ async function reviewCap() {
   } catch (error) {
     // Error is already set in capStore.error
     console.error('CAP review failed:', error);
-  }
-}
-
-async function createFollowUp() {
-  message.value = '';
-  try {
-    await capStore.createFollowUp({
-      capId: followForm.capId,
-      payload: {
-        followUpDate: followForm.followUpDate ? new Date(followForm.followUpDate).toISOString() : undefined,
-        percentComplete: followForm.percentComplete,
-        findingClosed: followForm.findingClosed,
-        effectivenessConfirmed: followForm.effectivenessConfirmed,
-        followUpClosureDate: followForm.followUpClosureDate || null,
-        closureVerificationMethod: followForm.closureVerificationMethod || null,
-      },
-      csrfToken: authStore.csrfToken,
-    });
-    message.value = 'Follow-up report created.';
-    followForm.capId = '';
-    followForm.followUpDate = '';
-    followForm.percentComplete = 0;
-    followForm.findingClosed = false;
-    followForm.effectivenessConfirmed = false;
-    followForm.followUpClosureDate = '';
-    followForm.closureVerificationMethod = '';
-    await loadCaps();
-  } catch (error) {
-    // Error is already set in capStore.error
-    console.error('Follow-up creation failed:', error);
   }
 }
 

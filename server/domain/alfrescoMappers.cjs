@@ -48,12 +48,23 @@ function mapFollowUpReportNode(node) {
   return {
     nodeId: node?.id || null,
     followUpId: nodeProperty(node, 'vso:followUpId'),
+    findingId: nodeProperty(node, 'vso:findingId'),
+    inheritedCapId: nodeProperty(node, 'vso:inheritedCapId'),
+    followUpType: nodeProperty(node, 'vso:followUpType'),
     followUpDate: nodeProperty(node, 'vso:followUpDate'),
     findingClosed: Boolean(nodeProperty(node, 'vso:findingClosed', false)),
     percentComplete: nodeProperty(node, 'vso:percentComplete'),
     followUpClosureDate: nodeProperty(node, 'vso:followUpClosureDate'),
     closureVerificationMethod: nodeProperty(node, 'vso:closureVerificationMethod'),
     effectivenessConfirmed: Boolean(nodeProperty(node, 'vso:effectivenessConfirmed', false)),
+    inspectionId: nodeProperty(node, 'vso:inspectionId'),
+    locationId: nodeProperty(node, 'vso:locationId'),
+    locationName: nodeProperty(node, 'vso:locationName'),
+    specialtyCode: nodeProperty(node, 'vso:specialtyCode'),
+    specialtyId: nodeProperty(node, 'vso:specialtyId'),
+    specialtyName: nodeProperty(node, 'vso:specialtyName'),
+    providerId: nodeProperty(node, 'vso:providerId'),
+    providerName: nodeProperty(node, 'vso:providerName'),
   };
 }
 

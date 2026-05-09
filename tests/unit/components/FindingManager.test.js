@@ -93,6 +93,14 @@ describe('FindingManager.vue', () => {
     expect(mockRouter.push).toHaveBeenCalledWith({ name: 'correctiveActions', query: { findingId: 'F-7' } });
   });
 
+  it('goToFollowUps navigates to follow-up manager with query', async () => {
+    const wrapper = mountComponent();
+    await wrapper.vm.$nextTick();
+
+    wrapper.vm.goToFollowUps('F-8');
+    expect(mockRouter.push).toHaveBeenCalledWith({ name: 'followUps', query: { findingId: 'F-8' } });
+  });
+
   it('renders detail panel and warning text for selected finding divergence', async () => {
     mockFindingStore.selectedFinding = {
       findingId: 'F-2',
@@ -148,5 +156,28 @@ describe('FindingManager.vue', () => {
     await openCapsBtn.trigger('click');
 
     expect(mockRouter.push).toHaveBeenCalledWith({ name: 'correctiveActions', query: { findingId: 'F-9' } });
+  });
+
+  it('triggers follow-up navigation from row and detail actions', async () => {
+    mockFindingStore.selectedFinding = {
+      findingId: 'F-9',
+      description: 'Needs follow-up',
+      requirementBreached: 'REG-X',
+      openedDate: '2026-02-01',
+      lastStatusChange: '2026-02-15',
+      statusDivergence: false,
+    };
+    const wrapper = mountComponent();
+    await wrapper.vm.$nextTick();
+
+    const followUpButtons = wrapper.findAll('button').filter((btn) =>
+      btn.text() === 'Manage Follow-ups' || btn.text() === 'Open Follow-up Manager'
+    );
+
+    await followUpButtons[0].trigger('click');
+    await followUpButtons[1].trigger('click');
+
+    expect(mockRouter.push).toHaveBeenNthCalledWith(1, { name: 'followUps', query: { findingId: 'F-1' } });
+    expect(mockRouter.push).toHaveBeenNthCalledWith(2, { name: 'followUps', query: { findingId: 'F-9' } });
   });
 });

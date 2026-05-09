@@ -93,18 +93,22 @@ function buildApp({ roles = ['cap_entry'], now = new Date('2026-04-03T10:00:00.0
       if (nodeType === 'vso:correctiveAction' && parentNodeId === fixture.findingNode.id) {
         return [fixture.capNode];
       }
-      if (nodeType === 'vso:followUpReport' && parentNodeId === fixture.capNode.id) {
+      if (nodeType === 'vso:followUpReport' && parentNodeId === fixture.findingNode.id) {
         return fixture.followUpNodes;
       }
       return [];
     },
-    createChildNode: async ({ parentNodeId, properties }) => {
+    createChildNode: async ({ parentNodeId, nodeType, properties }) => {
       const next = {
-        id: 'cap-node-created',
+        id: nodeType === 'vso:followUpReport' ? 'follow-up-node-created' : 'cap-node-created',
         parentId: parentNodeId,
         properties,
       };
-      fixture.capNode = next;
+      if (nodeType === 'vso:followUpReport') {
+        fixture.followUpNodes = [...fixture.followUpNodes, next];
+      } else {
+        fixture.capNode = next;
+      }
       return next;
     },
     updateNodeProperties: async ({ nodeId, properties }) => {
@@ -220,10 +224,12 @@ describe('Findings and CAP API', () => {
     const { app, fixture } = buildApp({ roles: ['inspector'] });
 
     const response = await request(app)
-      .post('/api/caps/CA-MDPP001AYVIS-01-01/follow-up-reports')
+      .post('/api/findings/MDPP001-AYVIS-01/follow-ups')
       .set('Cookie', 'compliance_session_id=session-1')
       .set('x-csrf-token', 'csrf-token-1')
       .send({
+        followUpType: 'Closure Verification',
+        inheritedCapId: 'CA-MDPP001AYVIS-01-01',
         followUpDate: '2026-04-03T10:00:00.000Z',
         findingClosed: true,
         effectivenessConfirmed: true,
@@ -235,6 +241,7 @@ describe('Findings and CAP API', () => {
     expect(response.status).toBe(201);
     expect(response.body.followUpReport.effectivenessConfirmed).toBe(true);
     expect(response.body.followUpReport.followUpId).toBe('FU-MDPP001AYVIS-01-260403');
+    expect(response.body.followUpReport.inheritedCapId).toBe('CA-MDPP001AYVIS-01-01');
     expect(fixture.findingNode.properties['vso:findingStatus']).toBe('Closed');
   });
 });

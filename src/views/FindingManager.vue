@@ -44,6 +44,7 @@
           <td>{{ finding.submissionDeadline || '-' }}</td>
           <td>
             <button @click="viewDetail(finding.findingId)">View</button>
+            <button @click="goToFollowUps(finding.findingId)">Manage Follow-ups</button>
           </td>
         </tr>
       </tbody>
@@ -59,6 +60,7 @@
         Stored status differs from calculated status. Calculated status is shown in the listing.
       </p>
       <button @click="goToCaps(findingStore.selectedFinding.findingId)">Open CAP Manager</button>
+      <button @click="goToFollowUps(findingStore.selectedFinding.findingId)">Open Follow-up Manager</button>
     </div>
   </BaseManager>
 </template>
@@ -103,6 +105,10 @@ async function viewDetail(findingId) {
 
 function goToCaps(findingId) {
   router.push({ name: 'correctiveActions', query: { findingId } });
+}
+
+function goToFollowUps(findingId) {
+  router.push({ name: 'followUps', query: { findingId } });
 }
 
 onBeforeMount(async () => {
