@@ -41,25 +41,26 @@
 
     <section class="card">
       <h3>CAP Listing</h3>
-      <div class="toolbar">
-        <label for="filterStatus">Status</label>
-        <select id="filterStatus" v-model="filters.acceptanceStatus">
-          <option value="">All</option>
-          <option value="Pending Review">Pending Review</option>
-          <option value="Accepted">Accepted</option>
-          <option value="Rejected">Rejected</option>
-          <option value="Returned for Revision">Returned for Revision</option>
-        </select>
-        <label for="filterLocation">Location</label>
-        <input id="filterLocation" v-model="filters.locationId" type="text" />
-        <label for="filterProvider">Provider</label>
-        <input id="filterProvider" v-model="filters.providerId" type="text" />
-        <label for="filterInspection">Inspection</label>
-        <input id="filterInspection" v-model="filters.inspectionId" type="text" />
-        <label for="filterDomain">Domain</label>
-        <input id="filterDomain" v-model="filters.domain" type="text" />
-        <button @click="loadCaps" :disabled="capStore.loading">Refresh</button>
-      </div>
+      <ScopePicker
+        v-model="scope"
+        mode="caps"
+        title="CAP Scope"
+        :loading="capStore.loading"
+        :presets="capScopePresets"
+        :show-finding-id="false"
+        :show-provider-id="true"
+        :show-location-id="true"
+        :show-specialty-code="false"
+        :show-inspection-id="true"
+        :show-domain="true"
+        :show-status="false"
+        :show-overdue-only="false"
+        :show-follow-up-type="false"
+        :show-acceptance-status="true"
+        :acceptance-status-options="capAcceptanceStatuses"
+        @search="loadCaps"
+        @reset="loadCaps"
+      />
 
       <table class="data-table">
         <thead>
@@ -101,6 +102,7 @@
 import { reactive, ref, onBeforeMount } from 'vue';
 import { useRoute } from 'vue-router';
 import BaseManager from '@/components/base/BaseManager.vue';
+import ScopePicker from '@/components/common/ScopePicker.vue';
 import { useCapStore } from '@/stores/capStore';
 import { useAuthStore } from '@/stores/authStore';
 
@@ -123,7 +125,23 @@ const reviewForm = reactive({
   acceptanceStatus: 'Accepted',
 });
 
-const filters = reactive({
+const capScopePresets = [
+  { value: 'all-caps', label: 'All CAPs' },
+  { value: 'pending-caps', label: 'Pending review' },
+  { value: 'accepted-caps', label: 'Accepted' },
+  { value: 'rejected-caps', label: 'Rejected' },
+  { value: 'returned-caps', label: 'Returned for revision' },
+];
+
+const capAcceptanceStatuses = [
+  'Pending Review',
+  'Accepted',
+  'Rejected',
+  'Returned for Revision',
+];
+
+let scope = reactive({
+  preset: '',
   acceptanceStatus: '',
   locationId: '',
   providerId: '',
@@ -131,12 +149,40 @@ const filters = reactive({
   domain: '',
 });
 
+function normalizeCapScope(currentScope) {
+  const resolved = { ...currentScope };
+
+  switch (resolved.preset) {
+    case 'pending-caps':
+      resolved.acceptanceStatus = 'Pending Review';
+      break;
+    case 'accepted-caps':
+      resolved.acceptanceStatus = 'Accepted';
+      break;
+    case 'rejected-caps':
+      resolved.acceptanceStatus = 'Rejected';
+      break;
+    case 'returned-caps':
+      resolved.acceptanceStatus = 'Returned for Revision';
+      break;
+    case 'all-caps':
+      resolved.acceptanceStatus = '';
+      break;
+    default:
+      break;
+  }
+
+  return resolved;
+}
+
 async function loadCaps() {
-  capStore.setFilter('acceptanceStatus', filters.acceptanceStatus);
-  capStore.setFilter('locationId', filters.locationId);
-  capStore.setFilter('providerId', filters.providerId);
-  capStore.setFilter('inspectionId', filters.inspectionId);
-  capStore.setFilter('domain', filters.domain);
+  const resolvedScope = normalizeCapScope(scope);
+
+  capStore.setFilter('acceptanceStatus', resolvedScope.acceptanceStatus);
+  capStore.setFilter('locationId', resolvedScope.locationId);
+  capStore.setFilter('providerId', resolvedScope.providerId);
+  capStore.setFilter('inspectionId', resolvedScope.inspectionId);
+  capStore.setFilter('domain', resolvedScope.domain);
   await capStore.fetchCaps();
 }
 
@@ -220,21 +266,6 @@ onBeforeMount(async () => {
 .form-grid input,
 .form-grid select,
 .form-grid textarea {
-  padding: 0.45rem 0.6rem;
-  border: 1px solid var(--border-color);
-  border-radius: 6px;
-}
-
-.toolbar {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 0.6rem;
-  margin-bottom: 0.8rem;
-}
-
-.toolbar input,
-.toolbar select {
   padding: 0.45rem 0.6rem;
   border: 1px solid var(--border-color);
   border-radius: 6px;

@@ -1,23 +1,21 @@
 <template>
   <BaseManager title="Findings">
-    <div class="toolbar">
-      <label for="status">Status</label>
-      <select id="status" v-model="filters.status">
-        <option value="">All</option>
-        <option v-for="status in findingStatuses" :key="status" :value="status">{{ status }}</option>
-      </select>
-
-      <label for="inspectionId">Inspection</label>
-      <input id="inspectionId" type="text" v-model="filters.inspectionId" placeholder="Inspection ID" />
-
-      <label for="providerId">Provider</label>
-      <input id="providerId" type="text" v-model="filters.providerId" placeholder="Provider ID" />
-
-      <label for="overdueOnly">Overdue only</label>
-      <input id="overdueOnly" type="checkbox" v-model="filters.overdueOnly" />
-
-      <button @click="loadFindings" :disabled="findingStore.loading">Refresh</button>
-    </div>
+    <ScopePicker
+      v-model="scope"
+      mode="findings"
+      title="Finding Scope"
+      :loading="findingStore.loading"
+      :presets="findingPresets"
+      :show-provider-id="true"
+      :show-location-id="true"
+      :show-specialty-code="true"
+      :show-inspection-id="true"
+      :show-domain="true"
+      :show-status="true"
+      :show-overdue-only="true"
+      @search="loadFindings"
+      @reset="loadFindings"
+    />
 
     <div v-if="findingStore.error" class="error-message">{{ findingStore.error }}</div>
 
@@ -67,35 +65,72 @@
 
 <script setup>
 import { reactive, onBeforeMount } from 'vue';
-import { useRouter } from 'vue-router';
+import { useRouter, useRoute } from 'vue-router';
 import BaseManager from '@/components/base/BaseManager.vue';
+import ScopePicker from '@/components/common/ScopePicker.vue';
 import { useFindingStore } from '@/stores/findingStore';
 
 const router = useRouter();
+const route = useRoute();
 const findingStore = useFindingStore();
 
-const findingStatuses = [
-  'Open',
-  'CAP Submitted',
-  'CAP Accepted',
-  'In Progress',
-  'Pending Closure Review',
-  'Closed',
-  'Overdue',
+const findingPresets = [
+  { value: 'open-findings', label: 'Open findings' },
+  { value: 'closed-findings', label: 'Closed findings' },
+  { value: 'all-findings', label: 'All findings' },
+  { value: 'overdue-findings', label: 'Overdue findings' },
 ];
 
-const filters = reactive({
+let scope = reactive({
+  preset: '',
+  findingId: '',
   status: '',
   inspectionId: '',
   providerId: '',
+  locationId: '',
+  specialtyCode: '',
+  domain: '',
   overdueOnly: false,
 });
 
+function normalizeFindingScope(currentScope) {
+  const resolved = { ...currentScope };
+
+  switch (resolved.preset) {
+    case 'open-findings':
+      resolved.status = 'Open';
+      resolved.overdueOnly = false;
+      break;
+    case 'closed-findings':
+      resolved.status = 'Closed';
+      resolved.overdueOnly = false;
+      break;
+    case 'all-findings':
+      resolved.status = '';
+      resolved.overdueOnly = false;
+      break;
+    case 'overdue-findings':
+      resolved.status = '';
+      resolved.overdueOnly = true;
+      break;
+    default:
+      break;
+  }
+
+  return resolved;
+}
+
 async function loadFindings() {
-  findingStore.setFilter('status', filters.status);
-  findingStore.setFilter('inspectionId', filters.inspectionId);
-  findingStore.setFilter('providerId', filters.providerId);
-  findingStore.setFilter('overdueOnly', filters.overdueOnly);
+  const resolvedScope = normalizeFindingScope(scope);
+
+  findingStore.setFilter('findingId', resolvedScope.findingId);
+  findingStore.setFilter('status', resolvedScope.status);
+  findingStore.setFilter('inspectionId', resolvedScope.inspectionId);
+  findingStore.setFilter('providerId', resolvedScope.providerId);
+  findingStore.setFilter('locationId', resolvedScope.locationId);
+  findingStore.setFilter('specialtyCode', resolvedScope.specialtyCode);
+  findingStore.setFilter('domain', resolvedScope.domain);
+  findingStore.setFilter('overdueOnly', resolvedScope.overdueOnly);
   await findingStore.fetchFindings();
 }
 
@@ -112,25 +147,15 @@ function goToFollowUps(findingId) {
 }
 
 onBeforeMount(async () => {
+  const findingId = String(route.query?.findingId || '').trim();
+  if (findingId) {
+    scope.findingId = findingId;
+  }
   await loadFindings();
 });
 </script>
 
 <style scoped>
-.toolbar {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 0.6rem;
-}
-
-.toolbar input[type='text'],
-.toolbar select {
-  padding: 0.45rem 0.6rem;
-  border: 1px solid var(--border-color);
-  border-radius: 6px;
-}
-
 .divergence-badge {
   margin-left: 0.5rem;
   background: #ffecb3;

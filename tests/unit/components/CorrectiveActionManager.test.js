@@ -19,6 +19,9 @@ describe('CorrectiveActionManager.vue', () => {
     global: {
       stubs: {
         BaseManager: { template: '<div><slot /></div>' },
+        ScopePicker: {
+          template: '<div><button type="button" class="scope-search" @click="$emit(\'search\')">Search</button><button type="button" class="scope-reset" @click="$emit(\'reset\')">Reset</button></div>',
+        },
       },
     },
   });
@@ -59,11 +62,12 @@ describe('CorrectiveActionManager.vue', () => {
     const wrapper = mountComponent();
     await wrapper.vm.$nextTick();
 
-    wrapper.vm.filters.acceptanceStatus = 'Accepted';
-    wrapper.vm.filters.locationId = 'LOC-1';
-    wrapper.vm.filters.providerId = 'PROV-1';
-    wrapper.vm.filters.inspectionId = 'INS-1';
-    wrapper.vm.filters.domain = 'AGA';
+    wrapper.vm.scope.preset = 'accepted-caps';
+    wrapper.vm.scope.acceptanceStatus = 'Rejected';
+    wrapper.vm.scope.locationId = 'LOC-1';
+    wrapper.vm.scope.providerId = 'PROV-1';
+    wrapper.vm.scope.inspectionId = 'INS-1';
+    wrapper.vm.scope.domain = 'AGA';
 
     await wrapper.vm.loadCaps();
 
@@ -142,15 +146,15 @@ describe('CorrectiveActionManager.vue', () => {
     consoleSpy.mockRestore();
   });
 
-  it('wires template actions through buttons (refresh and view)', async () => {
+  it('wires template actions through buttons (search and view)', async () => {
     const wrapper = mountComponent();
     await wrapper.vm.$nextTick();
 
     const buttons = wrapper.findAll('button');
-    const refreshBtn = buttons.find((btn) => btn.text() === 'Refresh');
+    const searchBtn = buttons.find((btn) => btn.text() === 'Search');
     const viewBtn = buttons.find((btn) => btn.text() === 'View');
 
-    await refreshBtn.trigger('click');
+    await searchBtn.trigger('click');
     await viewBtn.trigger('click');
 
     expect(mockCapStore.fetchCaps).toHaveBeenCalled();

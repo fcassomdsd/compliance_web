@@ -35,26 +35,24 @@
       <button @click="createFollowUp" :disabled="followUpStore.loading">Create Follow-up</button>
     </section>
 
+    <ScopePicker
+      v-model="scope"
+      mode="follow-ups"
+      title="Follow-up Scope"
+      :loading="followUpStore.loading"
+      :show-provider-id="true"
+      :show-status="true"
+      :show-overdue-only="false"
+      :show-domain="true"
+      :show-inspection-id="true"
+      :presets="[]"
+      :show-follow-up-type="true"
+      @search="loadFollowUps"
+      @reset="loadFollowUps"
+    />
+
     <section class="card">
       <h3>Follow-up Listing</h3>
-      <div class="toolbar">
-        <label for="filterFindingId">Finding ID</label>
-        <input id="filterFindingId" v-model="filters.findingId" type="text" />
-
-        <label for="filterLocation">Location</label>
-        <input id="filterLocation" v-model="filters.locationId" type="text" />
-
-        <label for="filterSpecialty">Specialty</label>
-        <input id="filterSpecialty" v-model="filters.specialtyCode" type="text" />
-
-        <label for="filterType">Follow-up Type</label>
-        <select id="filterType" v-model="filters.followUpType">
-          <option value="">All</option>
-          <option v-for="type in followUpTypes" :key="type" :value="type">{{ type }}</option>
-        </select>
-
-        <button @click="loadFollowUps" :disabled="followUpStore.loading">Refresh</button>
-      </div>
 
       <table class="data-table">
         <thead>
@@ -62,7 +60,7 @@
             <th>Follow-up ID</th>
             <th>Finding ID</th>
             <th>Type</th>
-            <th>Location</th>
+            <th>Location Code</th>
             <th>Specialty</th>
             <th>Percent Complete</th>
             <th>Inherited CAP</th>
@@ -73,7 +71,7 @@
             <td>{{ followUp.followUpId }}</td>
             <td>{{ followUp.findingId || '-' }}</td>
             <td>{{ followUp.followUpType || '-' }}</td>
-            <td>{{ followUp.locationId || '-' }}</td>
+            <td>{{ followUp.locationCode || followUp.locationId || '-' }}</td>
             <td>{{ followUp.specialtyCode || '-' }}</td>
             <td>{{ followUp.percentComplete ?? '-' }}</td>
             <td>{{ followUp.inheritedCapId || '-' }}</td>
@@ -82,7 +80,8 @@
       </table>
     </section>
 
-    <p v-if="followUpStore.error" class="error-message">{{ followUpStore.error }}</p>
+    <p v-if="searchErrorMessage" class="error-message">{{ searchErrorMessage }}</p>
+    <p v-else-if="followUpStore.error" class="error-message">There was a problem processing the follow-up request. Please try again.</p>
     <p v-if="message" class="success-message">{{ message }}</p>
   </BaseManager>
 </template>
@@ -91,6 +90,7 @@
 import { reactive, ref, onBeforeMount } from 'vue';
 import { useRoute } from 'vue-router';
 import BaseManager from '@/components/base/BaseManager.vue';
+import ScopePicker from '@/components/common/ScopePicker.vue';
 import { useFollowUpStore } from '@/stores/followUpStore';
 import { useAuthStore } from '@/stores/authStore';
 
@@ -99,6 +99,7 @@ const followUpStore = useFollowUpStore();
 const authStore = useAuthStore();
 
 const message = ref('');
+const searchErrorMessage = ref('');
 
 const followUpTypes = [
   'Progress Review',
@@ -119,19 +120,38 @@ const form = reactive({
   closureVerificationMethod: '',
 });
 
-const filters = reactive({
+let scope = reactive({
   findingId: '',
+  providerId: '',
   locationId: '',
   specialtyCode: '',
+  inspectionId: '',
+  domain: '',
+  findingStatus: '',
   followUpType: '',
 });
 
 async function loadFollowUps() {
-  followUpStore.setFilter('findingId', filters.findingId);
-  followUpStore.setFilter('locationId', filters.locationId);
-  followUpStore.setFilter('specialtyCode', filters.specialtyCode);
-  followUpStore.setFilter('followUpType', filters.followUpType);
-  await followUpStore.fetchFollowUps();
+  searchErrorMessage.value = '';
+  followUpStore.setFilter('findingId', scope.findingId);
+  followUpStore.setFilter('providerId', scope.providerId);
+  followUpStore.setFilter('locationId', scope.locationId);
+  followUpStore.setFilter('specialtyCode', scope.specialtyCode);
+  followUpStore.setFilter('inspectionId', scope.inspectionId);
+  followUpStore.setFilter('domain', scope.domain);
+  followUpStore.setFilter('status', scope.findingStatus);
+  followUpStore.setFilter('statusMode', 'effective');
+  followUpStore.setFilter('overdueOnly', false);
+  followUpStore.setFilter('skipCount', 0);
+  followUpStore.setFilter('maxItems', 50);
+  followUpStore.setFilter('followUpType', scope.followUpType);
+  try {
+    await followUpStore.fetchFollowUps();
+  } catch (error) {
+    // Store keeps the canonical error string used by the view.
+    console.error('Follow-up search failed:', error);
+    searchErrorMessage.value = 'Could not load follow-ups. Adjust the scope and try again.';
+  }
 }
 
 async function createFollowUp() {
@@ -169,7 +189,7 @@ onBeforeMount(async () => {
   const findingId = String(route.query?.findingId || '').trim();
   if (findingId) {
     form.findingId = findingId;
-    filters.findingId = findingId;
+    scope.findingId = findingId;
   }
   await loadFollowUps();
 });
@@ -194,21 +214,6 @@ onBeforeMount(async () => {
 .form-grid input,
 .form-grid select,
 .form-grid textarea {
-  padding: 0.45rem 0.6rem;
-  border: 1px solid var(--border-color);
-  border-radius: 6px;
-}
-
-.toolbar {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 0.6rem;
-  margin-bottom: 0.8rem;
-}
-
-.toolbar input,
-.toolbar select {
   padding: 0.45rem 0.6rem;
   border: 1px solid var(--border-color);
   border-radius: 6px;

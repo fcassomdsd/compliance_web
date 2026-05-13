@@ -54,6 +54,7 @@ function buildFixture() {
     findingNode,
     capNode,
     followUpNodes: [],
+    followUpCapLinks: new Map(),
   };
 }
 
@@ -110,6 +111,32 @@ function buildApp({ roles = ['cap_entry'], now = new Date('2026-04-03T10:00:00.0
         fixture.capNode = next;
       }
       return next;
+    },
+    createTargetAssociation: async ({ sourceNodeId, targetNodeId, assocType }) => {
+      if (assocType === 'vso:relatedCorrectiveAction') {
+        fixture.followUpCapLinks.set(sourceNodeId, targetNodeId);
+      }
+      return { id: `${sourceNodeId}->${targetNodeId}` };
+    },
+    listTargetAssociations: async ({ nodeId, assocType }) => {
+      if (assocType !== 'vso:relatedCorrectiveAction') {
+        return [];
+      }
+      const capNodeId = fixture.followUpCapLinks.get(nodeId);
+      if (!capNodeId || capNodeId !== fixture.capNode.id) {
+        return [];
+      }
+      return [fixture.capNode];
+    },
+    listSourceAssociations: async ({ nodeId, assocType }) => {
+      if (assocType !== 'vso:relatedCorrectiveAction') {
+        return [];
+      }
+      const capNodeId = fixture.followUpCapLinks.get(nodeId);
+      if (!capNodeId || capNodeId !== fixture.capNode.id) {
+        return [];
+      }
+      return [fixture.capNode];
     },
     updateNodeProperties: async ({ nodeId, properties }) => {
       if (nodeId === fixture.findingNode.id) {
@@ -243,5 +270,62 @@ describe('Findings and CAP API', () => {
     expect(response.body.followUpReport.followUpId).toBe('FU-MDPP001AYVIS-01-260403');
     expect(response.body.followUpReport.inheritedCapId).toBe('CA-MDPP001AYVIS-01-01');
     expect(fixture.findingNode.properties['vso:findingStatus']).toBe('Closed');
+  });
+
+  it('returns follow-ups using finding-first scope with status semantics and paging metadata', async () => {
+    const { app, fixture } = buildApp({ roles: ['inspector'] });
+
+    fixture.followUpNodes = [
+      {
+        id: 'follow-up-node-1',
+        parentId: fixture.findingNode.id,
+        properties: {
+          'vso:followUpId': 'FU-MDPP001AYVIS-01-260403',
+          'vso:followUpType': 'Progress Review',
+          'vso:followUpDate': '2026-04-03T10:00:00.000Z',
+          'vso:percentComplete': 20,
+          'vso:inspectionId': 'MDPP-001',
+          'vso:locationId': 'LOC-01',
+          'vso:specialtyCode': 'AYVIS',
+          'vso:providerId': 'PR-01',
+        },
+      },
+      {
+        id: 'follow-up-node-2',
+        parentId: fixture.findingNode.id,
+        properties: {
+          'vso:followUpId': 'FU-MDPP001AYVIS-01-260402',
+          'vso:followUpType': 'CAP Verification',
+          'vso:followUpDate': '2026-04-02T10:00:00.000Z',
+          'vso:percentComplete': 10,
+          'vso:inspectionId': 'MDPP-001',
+          'vso:locationId': 'LOC-01',
+          'vso:specialtyCode': 'AYVIS',
+          'vso:providerId': 'PR-01',
+        },
+      },
+    ];
+    fixture.followUpCapLinks.set('follow-up-node-1', fixture.capNode.id);
+
+    const response = await request(app)
+      .get('/api/findings/follow-ups')
+      .query({
+        providerId: 'PR-01',
+        status: 'Open',
+        statusMode: 'stored',
+        followUpType: 'Progress Review',
+        skipCount: 0,
+        maxItems: 1,
+      })
+      .set('Cookie', 'compliance_session_id=session-1');
+
+    expect(response.status).toBe(200);
+    expect(response.body.list).toHaveLength(1);
+    expect(response.body.list[0].followUpType).toBe('Progress Review');
+    expect(response.body.list[0].inheritedCapId).toBe('CA-MDPP001AYVIS-01-01');
+    expect(response.body.paging.totalItems).toBe(1);
+    expect(response.body.paging.maxItems).toBe(1);
+    expect(response.body.scopeMeta.statusMode).toBe('stored');
+    expect(response.body.scopeMeta.matchedFindings).toBe(1);
   });
 });

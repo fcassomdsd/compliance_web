@@ -19,6 +19,9 @@ describe('FollowUpManager.vue', () => {
     global: {
       stubs: {
         BaseManager: { template: '<div><slot /></div>' },
+        ScopePicker: {
+          template: '<div><button type="button" class="scope-search" @click="$emit(\'search\')">Search</button><button type="button" class="scope-reset" @click="$emit(\'reset\')">Reset</button></div>',
+        },
       },
     },
   });
@@ -60,23 +63,35 @@ describe('FollowUpManager.vue', () => {
 
     expect(mockFollowUpStore.fetchFollowUps).toHaveBeenCalled();
     expect(wrapper.vm.form.findingId).toBe('MDPP001-AYVIS-01');
-    expect(wrapper.vm.filters.findingId).toBe('MDPP001-AYVIS-01');
+    expect(wrapper.vm.scope.findingId).toBe('MDPP001-AYVIS-01');
   });
 
   it('loadFollowUps applies filter values to store', async () => {
     const wrapper = mountComponent();
     await wrapper.vm.$nextTick();
 
-    wrapper.vm.filters.findingId = 'F-1';
-    wrapper.vm.filters.locationId = 'LOC-2';
-    wrapper.vm.filters.specialtyCode = 'AGA';
-    wrapper.vm.filters.followUpType = 'CAP Verification';
+    wrapper.vm.scope.findingId = 'F-1';
+    wrapper.vm.scope.providerId = 'PROV-8';
+    wrapper.vm.scope.locationId = 'LOC-2';
+    wrapper.vm.scope.specialtyCode = 'AGA';
+    wrapper.vm.scope.inspectionId = 'MDPP-001';
+    wrapper.vm.scope.domain = 'OPS';
+    wrapper.vm.scope.findingStatus = 'Open';
+    wrapper.vm.scope.followUpType = 'CAP Verification';
 
     await wrapper.vm.loadFollowUps();
 
     expect(mockFollowUpStore.setFilter).toHaveBeenCalledWith('findingId', 'F-1');
+    expect(mockFollowUpStore.setFilter).toHaveBeenCalledWith('providerId', 'PROV-8');
     expect(mockFollowUpStore.setFilter).toHaveBeenCalledWith('locationId', 'LOC-2');
     expect(mockFollowUpStore.setFilter).toHaveBeenCalledWith('specialtyCode', 'AGA');
+    expect(mockFollowUpStore.setFilter).toHaveBeenCalledWith('inspectionId', 'MDPP-001');
+    expect(mockFollowUpStore.setFilter).toHaveBeenCalledWith('domain', 'OPS');
+    expect(mockFollowUpStore.setFilter).toHaveBeenCalledWith('status', 'Open');
+    expect(mockFollowUpStore.setFilter).toHaveBeenCalledWith('statusMode', 'effective');
+    expect(mockFollowUpStore.setFilter).toHaveBeenCalledWith('overdueOnly', false);
+    expect(mockFollowUpStore.setFilter).toHaveBeenCalledWith('skipCount', 0);
+    expect(mockFollowUpStore.setFilter).toHaveBeenCalledWith('maxItems', 50);
     expect(mockFollowUpStore.setFilter).toHaveBeenCalledWith('followUpType', 'CAP Verification');
   });
 
@@ -118,6 +133,16 @@ describe('FollowUpManager.vue', () => {
     await wrapper.vm.$nextTick();
 
     expect(wrapper.text()).toContain('FU-MDPP001AYVIS-01-260403');
-    expect(wrapper.text()).toContain('failed to load follow-ups');
+    expect(wrapper.text()).toContain('There was a problem processing the follow-up request. Please try again.');
+  });
+
+  it('triggers follow-up search from scope picker controls', async () => {
+    const wrapper = mountComponent();
+    await wrapper.vm.$nextTick();
+
+    const searchBtn = wrapper.findAll('button').find((btn) => btn.text() === 'Search');
+    await searchBtn.trigger('click');
+
+    expect(mockFollowUpStore.fetchFollowUps).toHaveBeenCalled();
   });
 });

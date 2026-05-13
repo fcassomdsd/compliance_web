@@ -434,7 +434,10 @@ export async function apiFollowUps(filters = {}) {
     });
     return { data: result.data, status: result.status };
   } catch (error) {
-    throw new Error('apiFollowUps: ' + error.message);
+    const backendMessage = error?.response?.data?.message || error?.response?.data?.error;
+    const status = error?.response?.status;
+    const detail = backendMessage || error.message;
+    throw new Error(`apiFollowUps: ${status ? `[${status}] ` : ''}${detail}`);
   }
 }
 

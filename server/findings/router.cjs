@@ -30,27 +30,11 @@ function buildFindingsQuery(filters = {}) {
   if (filters.providerId) {
     predicates.push(`=vso:providerId:"${escapeAftsValue(filters.providerId)}"`);
   }
-  if (filters.domain) {
-    predicates.push(`=vso:domain:"${escapeAftsValue(filters.domain)}"`);
-  }
-
-  return predicates.join(' AND ');
-}
-
-function buildFollowUpQuery(filters = {}) {
-  const predicates = [
-    "TYPE:'vso:followUpReport'",
-    `PATH:'/app:company_home/st:sites/cm:vigilancia-de-la-so/cm:documentLibrary/cm:Vigilancia/cm:Hallazgos//*'`,
-  ];
-
-  if (filters.followUpType) {
-    predicates.push(`=vso:followUpType:"${escapeAftsValue(filters.followUpType)}"`);
-  }
-  if (filters.locationId) {
-    predicates.push(`=vso:locationId:"${escapeAftsValue(filters.locationId)}"`);
-  }
   if (filters.specialtyCode) {
     predicates.push(`=vso:specialtyCode:"${escapeAftsValue(filters.specialtyCode)}"`);
+  }
+  if (filters.domain) {
+    predicates.push(`=vso:domain:"${escapeAftsValue(filters.domain)}"`);
   }
 
   return predicates.join(' AND ');
@@ -63,6 +47,97 @@ async function getFollowUpReportsForFinding({ alfrescoClient, ticket, findingNod
     nodeType: 'vso:followUpReport',
   });
   return followUpNodes.map(mapFollowUpReportNode);
+}
+
+function parsePositiveInt(value, fallback, { min = 1, max = 1000 } = {}) {
+  const parsed = Number.parseInt(value, 10);
+  if (!Number.isInteger(parsed) || parsed < min) {
+    return fallback;
+  }
+  return Math.min(parsed, max);
+}
+
+function parseNonNegativeInt(value, fallback, { max = 100000 } = {}) {
+  const parsed = Number.parseInt(value, 10);
+  if (!Number.isInteger(parsed) || parsed < 0) {
+    return fallback;
+  }
+  return Math.min(parsed, max);
+}
+
+async function mapWithConcurrency(items, concurrency, mapper) {
+  if (!Array.isArray(items) || items.length === 0) {
+    return [];
+  }
+
+  const result = new Array(items.length);
+  let cursor = 0;
+  const workerCount = Math.min(Math.max(1, concurrency), items.length);
+
+  const workers = Array.from({ length: workerCount }, async () => {
+    while (true) {
+      const index = cursor;
+      cursor += 1;
+      if (index >= items.length) {
+        return;
+      }
+      result[index] = await mapper(items[index], index);
+    }
+  });
+
+  await Promise.all(workers);
+  return result;
+}
+
+function applyFindingScopeForFollowUps({ findingRows, status, statusMode, overdueOnly }) {
+  const normalizedStatusMode = statusMode === 'stored' ? 'stored' : 'effective';
+
+  return findingRows.filter((row) => {
+    if (status) {
+      const candidateStatus = normalizedStatusMode === 'stored' ? row.statusMeta.storedStatus : row.statusMeta.effectiveStatus;
+      if (candidateStatus !== status) {
+        return false;
+      }
+    }
+
+    if (String(overdueOnly || '').toLowerCase() === 'true' && row.statusMeta.effectiveStatus !== FINDING_STATUS.OVERDUE) {
+      return false;
+    }
+
+    return true;
+  });
+}
+
+async function resolveRelatedCapId({ alfrescoClient, ticket, followUpNodeId }) {
+  try {
+    // Try target associations first (follow-up -> CAP)
+    let relatedCaps = await alfrescoClient.listTargetAssociations({
+      ticket,
+      nodeId: followUpNodeId,
+      assocType: 'vso:relatedCorrectiveAction',
+      maxItems: 1,
+    });
+
+    if (relatedCaps.length === 0) {
+      // Try source associations as fallback (CAP -> follow-up)
+      relatedCaps = await alfrescoClient.listSourceAssociations({
+        ticket,
+        nodeId: followUpNodeId,
+        assocType: 'vso:relatedCorrectiveAction',
+        maxItems: 1,
+      });
+    }
+
+    return relatedCaps[0]?.properties?.['vso:capId'] || null;
+  } catch (error) {
+    // Log but don't fail the whole request if association lookup fails
+    console.warn(`Failed to resolve CAP for follow-up ${followUpNodeId}:`, error.message);
+    return null;
+  }
+}
+
+function readLegacyInheritedCapId(node) {
+  return node?.properties?.['vso:inheritedCapId'] || null;
 }
 
 function resolveFindingStatusFromFollowUp({ report }) {
@@ -117,6 +192,7 @@ function createFindingsRouter({ auth, alfrescoClient, now = () => new Date() }) 
           inspectionId: req.query?.inspectionId,
           locationId: req.query?.locationId,
           providerId: req.query?.providerId,
+          specialtyCode: req.query?.specialtyCode,
           domain: req.query?.domain,
         });
 
@@ -169,30 +245,141 @@ function createFindingsRouter({ auth, alfrescoClient, now = () => new Date() }) 
     auth.authorize(['inspector', 'planner', 'admin', 'cap_entry']),
     async (req, res) => {
       try {
-        const followUpNodes = await alfrescoClient.searchNodes({
-          ticket: req.auth.ticket,
-          query: buildFollowUpQuery({
-            locationId: req.query?.locationId,
-            specialtyCode: req.query?.specialtyCode,
-            followUpType: req.query?.followUpType,
-          }),
-          maxItems: 1000,
-        });
+        const skipCount = parseNonNegativeInt(req.query?.skipCount, 0);
+        const maxItems = parsePositiveInt(req.query?.maxItems, 50, { min: 1, max: 200 });
+        const findingMaxItems = parsePositiveInt(req.query?.findingMaxItems, 200, { min: 1, max: 1000 });
+        const findingFetchConcurrency = parsePositiveInt(req.query?.findingFetchConcurrency, 8, { min: 1, max: 25 });
+        const capResolveConcurrency = parsePositiveInt(req.query?.capResolveConcurrency, 10, { min: 1, max: 40 });
 
-        let list = followUpNodes.map((node) => {
-          const mapped = mapFollowUpReportNode(node);
+        let findingNodes;
+        const explicitFindingId = String(req.query?.findingId || '').trim();
+        if (explicitFindingId) {
+          const findingNode = await alfrescoClient.searchFindingByBusinessId({
+            ticket: req.auth.ticket,
+            findingId: explicitFindingId,
+          });
+          findingNodes = findingNode ? [findingNode] : [];
+        } else {
+          findingNodes = await alfrescoClient.searchNodes({
+            ticket: req.auth.ticket,
+            query: buildFindingsQuery({
+              inspectionId: req.query?.inspectionId,
+              locationId: req.query?.locationId,
+              providerId: req.query?.providerId,
+              specialtyCode: req.query?.specialtyCode,
+              domain: req.query?.domain,
+            }),
+            maxItems: findingMaxItems,
+          });
+        }
+
+        const findingRows = await mapWithConcurrency(findingNodes, findingFetchConcurrency, async (node) => {
+          const finding = mapFindingNode(node);
+          const followUpReports = await getFollowUpReportsForFinding({
+            alfrescoClient,
+            ticket: req.auth.ticket,
+            findingNodeId: finding.nodeId,
+          });
+          const statusMeta = computeEffectiveFindingStatus({
+            finding,
+            followUpReports,
+            now: now(),
+          });
+
           return {
-            ...mapped,
-            findingId: findingIdFromFollowUpId(mapped.followUpId),
+            finding,
+            followUpReports,
+            statusMeta,
           };
         });
 
-        if (req.query?.findingId) {
-          const targetFindingId = String(req.query.findingId).trim().toUpperCase();
-          list = list.filter((entry) => String(entry.findingId || '').trim().toUpperCase() === targetFindingId);
+        const scopedFindings = applyFindingScopeForFollowUps({
+          findingRows,
+          status: req.query?.status,
+          statusMode: req.query?.statusMode,
+          overdueOnly: req.query?.overdueOnly,
+        });
+
+        const requestedType = String(req.query?.followUpType || '').trim().toUpperCase();
+        const unresolvedList = scopedFindings.flatMap((row) => row.followUpReports
+          .filter((report) => {
+            if (!requestedType) {
+              return true;
+            }
+            return String(report.followUpType || '').trim().toUpperCase() === requestedType;
+          })
+          .map((report) => ({
+            ...report,
+            findingNodeId: row.finding.nodeId,
+            findingId: row.finding.findingId || findingIdFromFollowUpId(report.followUpId),
+            storedFindingStatus: row.statusMeta.storedStatus,
+            effectiveFindingStatus: row.statusMeta.effectiveStatus,
+            legacyInheritedCapId: readLegacyInheritedCapId(report),
+          })));
+
+        const fallbackCapCache = new Map();
+        async function resolveFallbackCapIdByFindingNodeId(findingNodeId) {
+          if (!findingNodeId) {
+            return null;
+          }
+          if (fallbackCapCache.has(findingNodeId)) {
+            return fallbackCapCache.get(findingNodeId);
+          }
+
+          const siblingCaps = await alfrescoClient.listChildrenByType({
+            ticket: req.auth.ticket,
+            parentNodeId: findingNodeId,
+            nodeType: 'vso:correctiveAction',
+            maxItems: 200,
+          });
+
+          const fallbackCapId = siblingCaps.length === 1
+            ? siblingCaps[0]?.properties?.['vso:capId'] || null
+            : null;
+
+          fallbackCapCache.set(findingNodeId, fallbackCapId);
+          return fallbackCapId;
         }
 
-        return res.status(200).json({ list });
+        const resolvedList = await mapWithConcurrency(unresolvedList, capResolveConcurrency, async (entry) => ({
+          ...entry,
+          inheritedCapId: (await resolveRelatedCapId({
+            alfrescoClient,
+            ticket: req.auth.ticket,
+            followUpNodeId: entry.nodeId,
+          })) || entry.legacyInheritedCapId || (await resolveFallbackCapIdByFindingNodeId(entry.findingNodeId)),
+        }));
+
+        const sorted = resolvedList.sort((left, right) => {
+          const byDate = String(right.followUpDate || '').localeCompare(String(left.followUpDate || ''));
+          if (byDate !== 0) {
+            return byDate;
+          }
+          return String(right.followUpId || '').localeCompare(String(left.followUpId || ''));
+        });
+
+        const totalItems = sorted.length;
+        const list = sorted.slice(skipCount, skipCount + maxItems);
+
+        return res.status(200).json({
+          list,
+          paging: {
+            skipCount,
+            maxItems,
+            count: list.length,
+            totalItems,
+            hasMoreItems: skipCount + list.length < totalItems,
+          },
+          scopeMeta: {
+            statusMode: req.query?.statusMode === 'stored' ? 'stored' : 'effective',
+            scannedFindings: findingRows.length,
+            matchedFindings: scopedFindings.length,
+            concurrency: {
+              findingFetch: findingFetchConcurrency,
+              capResolve: capResolveConcurrency,
+            },
+          },
+        });
       } catch (error) {
         return res.status(502).json(buildError('FOLLOW_UP_QUERY_FAILED', error.message));
       }
@@ -285,9 +472,9 @@ function createFindingsRouter({ auth, alfrescoClient, now = () => new Date() }) 
             'vso:followUpClosureDate': followUpClosureDate,
             'vso:closureVerificationMethod': closureVerificationMethod,
             'vso:effectivenessConfirmed': effectivenessConfirmed,
-            'vso:inheritedCapId': inheritedCapId,
             'vso:inspectionId': finding.inspectionId,
             'vso:locationId': finding.locationId,
+            ...(finding.locationCode ? { 'vso:locationCode': finding.locationCode } : {}),
             'vso:locationName': finding.locationName,
             'vso:specialtyCode': finding.specialtyCode,
             'vso:specialtyId': finding.specialtyId,
@@ -296,6 +483,15 @@ function createFindingsRouter({ auth, alfrescoClient, now = () => new Date() }) 
             'vso:providerName': finding.providerName,
           },
         });
+
+        if (selectedCap) {
+          await alfrescoClient.createTargetAssociation({
+            ticket: req.auth.ticket,
+            sourceNodeId: created.id,
+            targetNodeId: selectedCap.id,
+            assocType: 'vso:relatedCorrectiveAction',
+          });
+        }
 
         const nextFindingStatus = resolveFindingStatusFromFollowUp({
           report: {

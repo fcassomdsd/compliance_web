@@ -8,10 +8,12 @@ export const useFindingStore = defineStore('finding', {
     loading: false,
     error: null,
     filters: {
+      findingId: '',
       status: '',
       inspectionId: '',
       locationId: '',
       providerId: '',
+      specialtyCode: '',
       domain: '',
       overdueOnly: false,
     },

@@ -8,9 +8,17 @@ export const useFollowUpStore = defineStore('followUp', {
     error: null,
     filters: {
       findingId: '',
+      providerId: '',
       locationId: '',
       specialtyCode: '',
+      inspectionId: '',
+      domain: '',
+      status: '',
+      statusMode: 'effective',
       followUpType: '',
+      overdueOnly: false,
+      skipCount: 0,
+      maxItems: 50,
     },
   }),
 

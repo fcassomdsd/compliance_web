@@ -57,6 +57,12 @@ describe('followUpStore', () => {
     store.setFilter('followUpType', 'Closure Verification');
     expect(store.filters.followUpType).toBe('Closure Verification');
 
+    store.setFilter('status', 'Open');
+    expect(store.filters.status).toBe('Open');
+
+    store.setFilter('statusMode', 'stored');
+    expect(store.filters.statusMode).toBe('stored');
+
     store.setFilter('unknownFilter', 'x');
     expect(store.filters.unknownFilter).toBeUndefined();
   });

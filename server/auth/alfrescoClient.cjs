@@ -183,6 +183,78 @@ class AlfrescoClient {
     return response?.data?.entry || null;
   }
 
+  async listTargetAssociations({ ticket, nodeId, assocType, skipCount = 0, maxItems = 200 }) {
+    if (!ticket || !nodeId || !assocType) {
+      throw new Error('ticket, nodeId and assocType are required');
+    }
+
+    try {
+      const response = await this.request({
+        method: 'get',
+        url: `${this.baseUrl}/alfresco/api/-default-/public/alfresco/versions/1/nodes/${encodeURIComponent(nodeId)}/targets/${encodeURIComponent(assocType)}`,
+        params: {
+          include: 'properties,path',
+          skipCount,
+          maxItems,
+          alf_ticket: ticket,
+        },
+      });
+
+      return response?.data?.list?.entries?.map((entry) => entry.entry) || [];
+    } catch (error) {
+      // Log detailed error for debugging
+      console.warn(`listTargetAssociations failed for ${nodeId} -> ${assocType}:`, error.message);
+      // Return empty array instead of throwing to allow graceful degradation
+      return [];
+    }
+  }
+
+  async listSourceAssociations({ ticket, nodeId, assocType, skipCount = 0, maxItems = 200 }) {
+    if (!ticket || !nodeId || !assocType) {
+      throw new Error('ticket, nodeId and assocType are required');
+    }
+
+    try {
+      const response = await this.request({
+        method: 'get',
+        url: `${this.baseUrl}/alfresco/api/-default-/public/alfresco/versions/1/nodes/${encodeURIComponent(nodeId)}/sources/${encodeURIComponent(assocType)}`,
+        params: {
+          include: 'properties,path',
+          skipCount,
+          maxItems,
+          alf_ticket: ticket,
+        },
+      });
+
+      return response?.data?.list?.entries?.map((entry) => entry.entry) || [];
+    } catch (error) {
+      // Log detailed error for debugging
+      console.warn(`listSourceAssociations failed for ${nodeId} <- ${assocType}:`, error.message);
+      // Return empty array instead of throwing to allow graceful degradation
+      return [];
+    }
+  }
+
+  async createTargetAssociation({ ticket, sourceNodeId, targetNodeId, assocType }) {
+    if (!ticket || !sourceNodeId || !targetNodeId || !assocType) {
+      throw new Error('ticket, sourceNodeId, targetNodeId and assocType are required');
+    }
+
+    const response = await this.request({
+      method: 'post',
+      url: `${this.baseUrl}/alfresco/api/-default-/public/alfresco/versions/1/nodes/${encodeURIComponent(sourceNodeId)}/targets`,
+      params: {
+        alf_ticket: ticket,
+      },
+      data: {
+        targetId: targetNodeId,
+        assocType,
+      },
+    });
+
+    return response?.data?.entry || null;
+  }
+
   async searchFindingByBusinessId({ ticket, findingId }) {
     if (!findingId) {
       return null;

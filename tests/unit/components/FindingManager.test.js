@@ -7,6 +7,7 @@ import { useFindingStore } from '@/stores/findingStore';
 vi.mock('../../../src/stores/findingStore');
 vi.mock('vue-router', () => ({
   useRouter: vi.fn(),
+  useRoute: vi.fn(),
 }));
 
 describe('FindingManager.vue', () => {
@@ -17,6 +18,9 @@ describe('FindingManager.vue', () => {
     global: {
       stubs: {
         BaseManager: { template: '<div><slot /></div>' },
+        ScopePicker: {
+          template: '<div><button type="button" class="scope-search" @click="$emit(\'search\')">Search</button><button type="button" class="scope-reset" @click="$emit(\'reset\')">Reset</button></div>',
+        },
       },
     },
   });
@@ -28,6 +32,8 @@ describe('FindingManager.vue', () => {
     const { useRouter } = await import('vue-router');
     mockRouter = { push: vi.fn() };
     vi.mocked(useRouter).mockReturnValue(mockRouter);
+    const { useRoute } = await import('vue-router');
+    vi.mocked(useRoute).mockReturnValue({ query: {} });
 
     mockFindingStore = {
       findings: [
@@ -63,17 +69,26 @@ describe('FindingManager.vue', () => {
     const wrapper = mountComponent();
     await wrapper.vm.$nextTick();
 
-    wrapper.vm.filters.status = 'Open';
-    wrapper.vm.filters.inspectionId = 'INS-1';
-    wrapper.vm.filters.providerId = 'PROV-1';
-    wrapper.vm.filters.overdueOnly = true;
+    wrapper.vm.scope.preset = 'open-findings';
+    wrapper.vm.scope.status = 'Closed';
+    wrapper.vm.scope.findingId = 'F-10';
+    wrapper.vm.scope.inspectionId = 'INS-1';
+    wrapper.vm.scope.providerId = 'PROV-1';
+    wrapper.vm.scope.locationId = 'LOC-1';
+    wrapper.vm.scope.specialtyCode = 'AYVIS';
+    wrapper.vm.scope.domain = 'OPS';
+    wrapper.vm.scope.overdueOnly = true;
 
     await wrapper.vm.loadFindings();
 
+    expect(mockFindingStore.setFilter).toHaveBeenCalledWith('findingId', 'F-10');
     expect(mockFindingStore.setFilter).toHaveBeenCalledWith('status', 'Open');
     expect(mockFindingStore.setFilter).toHaveBeenCalledWith('inspectionId', 'INS-1');
     expect(mockFindingStore.setFilter).toHaveBeenCalledWith('providerId', 'PROV-1');
-    expect(mockFindingStore.setFilter).toHaveBeenCalledWith('overdueOnly', true);
+    expect(mockFindingStore.setFilter).toHaveBeenCalledWith('locationId', 'LOC-1');
+    expect(mockFindingStore.setFilter).toHaveBeenCalledWith('specialtyCode', 'AYVIS');
+    expect(mockFindingStore.setFilter).toHaveBeenCalledWith('domain', 'OPS');
+    expect(mockFindingStore.setFilter).toHaveBeenCalledWith('overdueOnly', false);
     expect(mockFindingStore.fetchFindings).toHaveBeenCalledTimes(2);
   });
 
@@ -130,10 +145,10 @@ describe('FindingManager.vue', () => {
     const wrapper = mountComponent();
     await wrapper.vm.$nextTick();
 
-    const refreshBtn = wrapper.findAll('button').find((btn) => btn.text() === 'Refresh');
+    const searchBtn = wrapper.findAll('button').find((btn) => btn.text() === 'Search');
     const viewBtn = wrapper.findAll('button').find((btn) => btn.text() === 'View');
 
-    await refreshBtn.trigger('click');
+    await searchBtn.trigger('click');
     await viewBtn.trigger('click');
 
     expect(mockFindingStore.fetchFindings).toHaveBeenCalled();
