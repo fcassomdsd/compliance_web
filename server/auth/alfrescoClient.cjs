@@ -191,9 +191,10 @@ class AlfrescoClient {
     try {
       const response = await this.request({
         method: 'get',
-        url: `${this.baseUrl}/alfresco/api/-default-/public/alfresco/versions/1/nodes/${encodeURIComponent(nodeId)}/targets/${encodeURIComponent(assocType)}`,
+        url: `${this.baseUrl}/alfresco/api/-default-/public/alfresco/versions/1/nodes/${encodeURIComponent(nodeId)}/targets`,
         params: {
           include: 'properties,path',
+          where: `(assocType='${assocType}')`,
           skipCount,
           maxItems,
           alf_ticket: ticket,
@@ -217,9 +218,10 @@ class AlfrescoClient {
     try {
       const response = await this.request({
         method: 'get',
-        url: `${this.baseUrl}/alfresco/api/-default-/public/alfresco/versions/1/nodes/${encodeURIComponent(nodeId)}/sources/${encodeURIComponent(assocType)}`,
+        url: `${this.baseUrl}/alfresco/api/-default-/public/alfresco/versions/1/nodes/${encodeURIComponent(nodeId)}/sources`,
         params: {
           include: 'properties,path',
+          where: `(assocType='${assocType}')`,
           skipCount,
           maxItems,
           alf_ticket: ticket,
