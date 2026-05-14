@@ -12,6 +12,14 @@ function escapeAftsValue(value) {
   return String(value || '').replace(/"/g, '\\"');
 }
 
+function extractUpstreamErrorDetail(error) {
+  const payload = error?.response?.data;
+  const briefSummary = payload?.error?.briefSummary;
+  const message = payload?.error?.message;
+  const errorKey = payload?.error?.errorKey;
+  return briefSummary || message || payload?.message || payload?.error || errorKey || error?.message || 'Unknown error';
+}
+
 function buildFindingsQuery(filters = {}) {
   const predicates = [
     "TYPE:'vso:finding'",
@@ -411,22 +419,12 @@ function createFindingsRouter({ auth, alfrescoClient, now = () => new Date() }) 
         const followUpDate = req.body?.followUpDate || new Date(now()).toISOString();
         const findingClosed = Boolean(req.body?.findingClosed);
         const percentComplete = Number(req.body?.percentComplete ?? 0);
-        const followUpClosureDate = req.body?.followUpClosureDate || null;
-        const closureVerificationMethod = req.body?.closureVerificationMethod || null;
+        const followUpClosureDate = String(req.body?.followUpClosureDate || '').trim();
+        const closureVerificationMethod = String(req.body?.closureVerificationMethod || '').trim();
         const effectivenessConfirmed = Boolean(req.body?.effectivenessConfirmed);
 
         if (Number.isNaN(percentComplete) || percentComplete < 0 || percentComplete > 100) {
           return res.status(400).json(buildError('FOLLOW_UP_BAD_REQUEST', 'percentComplete must be between 0 and 100'));
-        }
-
-        let followUpId;
-        try {
-          followUpId = buildFollowUpIdFromFinding({
-            findingId: finding.findingId,
-            followUpDate,
-          });
-        } catch (error) {
-          return res.status(400).json(buildError('FOLLOW_UP_BAD_REQUEST', error.message));
         }
 
         const existingFollowUps = await alfrescoClient.listChildrenByType({
@@ -434,12 +432,25 @@ function createFindingsRouter({ auth, alfrescoClient, now = () => new Date() }) 
           parentNodeId: finding.nodeId,
           nodeType: 'vso:followUpReport',
         });
-        const duplicateByDate = existingFollowUps.some((entry) => {
-          const existingId = entry?.properties?.['vso:followUpId'];
-          return typeof existingId === 'string' && existingId.trim().toUpperCase() === followUpId;
-        });
-        if (duplicateByDate) {
-          return res.status(409).json(buildError('FOLLOW_UP_ALREADY_EXISTS', 'A follow-up report for this finding and date already exists'));
+
+        const maxExistingSequence = existingFollowUps.reduce((max, entry) => {
+          const parsed = parseFollowUpId(entry?.properties?.['vso:followUpId']);
+          return parsed ? Math.max(max, parsed.followUpSequence) : max;
+        }, 0);
+        const nextSequence = maxExistingSequence + 1;
+
+        let followUpId;
+        try {
+          followUpId = buildFollowUpIdFromFinding({
+            findingId: finding.findingId,
+            followUpSequence: nextSequence,
+          });
+        } catch (error) {
+          return res.status(400).json(buildError('FOLLOW_UP_BAD_REQUEST', error.message));
+        }
+
+        if (nextSequence > 99) {
+          return res.status(409).json(buildError('FOLLOW_UP_ALREADY_EXISTS', 'Maximum number of follow-ups (99) reached for this finding'));
         }
 
         const siblingCaps = await alfrescoClient.listChildrenByType({
@@ -450,7 +461,7 @@ function createFindingsRouter({ auth, alfrescoClient, now = () => new Date() }) 
         const requestedCapId = String(req.body?.inheritedCapId || '').trim().toUpperCase();
         const selectedCap = requestedCapId
           ? siblingCaps.find((entry) => String(entry?.properties?.['vso:capId'] || '').trim().toUpperCase() === requestedCapId)
-          : siblingCaps[0] || null;
+          : null;
 
         if (requestedCapId && !selectedCap) {
           return res.status(400).json(buildError('FOLLOW_UP_BAD_REQUEST', 'inheritedCapId must belong to the provided findingId'));
@@ -467,10 +478,9 @@ function createFindingsRouter({ auth, alfrescoClient, now = () => new Date() }) 
             'vso:followUpId': followUpId,
             'vso:followUpType': followUpType,
             'vso:followUpDate': followUpDate,
-            'vso:findingClosed': findingClosed,
             'vso:percentComplete': percentComplete,
-            'vso:followUpClosureDate': followUpClosureDate,
-            'vso:closureVerificationMethod': closureVerificationMethod,
+            ...(followUpClosureDate ? { 'vso:followUpClosureDate': followUpClosureDate } : {}),
+            ...(closureVerificationMethod ? { 'vso:closureVerificationMethod': closureVerificationMethod } : {}),
             'vso:effectivenessConfirmed': effectivenessConfirmed,
             'vso:inspectionId': finding.inspectionId,
             'vso:locationId': finding.locationId,
@@ -524,7 +534,20 @@ function createFindingsRouter({ auth, alfrescoClient, now = () => new Date() }) 
           },
         });
       } catch (error) {
-        return res.status(502).json(buildError('FOLLOW_UP_CREATE_FAILED', error.message));
+        const upstreamStatus = Number(error?.response?.status || 0);
+        const upstreamDetail = extractUpstreamErrorDetail(error);
+        console.error('Follow-up creation failed', {
+          findingId: req.params.findingId,
+          followUpType: req.body?.followUpType || null,
+          status: upstreamStatus || null,
+          message: upstreamDetail,
+        });
+
+        if (upstreamStatus >= 400 && upstreamStatus < 500) {
+          return res.status(400).json(buildError('FOLLOW_UP_BAD_REQUEST', upstreamDetail));
+        }
+
+        return res.status(502).json(buildError('FOLLOW_UP_CREATE_FAILED', upstreamDetail));
       }
     }
   );

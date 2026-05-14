@@ -267,7 +267,7 @@ describe('Findings and CAP API', () => {
 
     expect(response.status).toBe(201);
     expect(response.body.followUpReport.effectivenessConfirmed).toBe(true);
-    expect(response.body.followUpReport.followUpId).toBe('FU-MDPP001AYVIS-01-260403');
+    expect(response.body.followUpReport.followUpId).toBe('FU-MDPP001AYVIS-01-01');
     expect(response.body.followUpReport.inheritedCapId).toBe('CA-MDPP001AYVIS-01-01');
     expect(fixture.findingNode.properties['vso:findingStatus']).toBe('Closed');
   });
@@ -280,7 +280,7 @@ describe('Findings and CAP API', () => {
         id: 'follow-up-node-1',
         parentId: fixture.findingNode.id,
         properties: {
-          'vso:followUpId': 'FU-MDPP001AYVIS-01-260403',
+          'vso:followUpId': 'FU-MDPP001AYVIS-01-01',
           'vso:followUpType': 'Progress Review',
           'vso:followUpDate': '2026-04-03T10:00:00.000Z',
           'vso:percentComplete': 20,
@@ -294,7 +294,7 @@ describe('Findings and CAP API', () => {
         id: 'follow-up-node-2',
         parentId: fixture.findingNode.id,
         properties: {
-          'vso:followUpId': 'FU-MDPP001AYVIS-01-260402',
+          'vso:followUpId': 'FU-MDPP001AYVIS-01-02',
           'vso:followUpType': 'CAP Verification',
           'vso:followUpDate': '2026-04-02T10:00:00.000Z',
           'vso:percentComplete': 10,
