@@ -81,7 +81,7 @@
     </section>
 
     <p v-if="searchErrorMessage" class="error-message">{{ searchErrorMessage }}</p>
-    <p v-else-if="followUpStore.error" class="error-message">There was a problem processing the follow-up request. Please try again.</p>
+    <p v-else-if="followUpStore.error" class="error-message">{{ followUpStore.error }}</p>
     <p v-if="message" class="success-message">{{ message }}</p>
   </BaseManager>
 </template>
@@ -156,6 +156,7 @@ async function loadFollowUps() {
 
 async function createFollowUp() {
   message.value = '';
+  searchErrorMessage.value = '';
   try {
     await followUpStore.createFollowUp({
       findingId: form.findingId,
@@ -182,6 +183,7 @@ async function createFollowUp() {
     await loadFollowUps();
   } catch (error) {
     console.error('Follow-up creation failed:', error);
+    searchErrorMessage.value = error?.message || 'Could not create follow-up. Please try again.';
   }
 }
 
