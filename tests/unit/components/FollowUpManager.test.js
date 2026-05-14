@@ -36,7 +36,7 @@ describe('FollowUpManager.vue', () => {
     mockFollowUpStore = {
       followUps: [
         {
-          followUpId: 'FU-MDPP001AYVIS-01-260403',
+          followUpId: 'FU-MDPP001AYVIS-01-01',
           findingId: 'MDPP001-AYVIS-01',
           followUpType: 'Progress Review',
           locationId: 'LOC-01',
@@ -132,8 +132,8 @@ describe('FollowUpManager.vue', () => {
     const wrapper = mountComponent();
     await wrapper.vm.$nextTick();
 
-    expect(wrapper.text()).toContain('FU-MDPP001AYVIS-01-260403');
-    expect(wrapper.text()).toContain('There was a problem processing the follow-up request. Please try again.');
+    expect(wrapper.text()).toContain('FU-MDPP001AYVIS-01-01');
+    expect(wrapper.text()).toContain('failed to load follow-ups');
   });
 
   it('triggers follow-up search from scope picker controls', async () => {

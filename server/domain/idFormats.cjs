@@ -2,7 +2,7 @@ const INSPECTION_ID_PATTERN = /^([A-Z0-9]{4})-(\d{3})$/;
 const CHECKLIST_ID_PATTERN = /^CHK-([A-Z0-9]{4}\d{3})-([A-Z0-9]{3,6})$/;
 const FINDING_ID_PATTERN = /^([A-Z0-9]{4}\d{3})-([A-Z0-9]{3,6})-(\d{2})$/;
 const CAP_ID_PATTERN = /^CA-([A-Z0-9]{4}\d{3})([A-Z0-9]{3,6})-(\d{2})-(\d{2})$/;
-const FOLLOW_UP_ID_PATTERN = /^FU-([A-Z0-9]{4}\d{3})([A-Z0-9]{3,6})-(\d{2})-(\d{6})$/;
+const FOLLOW_UP_ID_PATTERN = /^FU-([A-Z0-9]{4}\d{3})([A-Z0-9]{3,6})-(\d{2})-(\d{2})$/;
 
 function parseInspectionId(value) {
   const match = String(value || '').trim().toUpperCase().match(INSPECTION_ID_PATTERN);
@@ -41,7 +41,7 @@ function parseFollowUpId(value) {
     compactInspectionId: match[1],
     specialtyCode: match[2],
     findingSequence: Number.parseInt(match[3], 10),
-    dateCode: match[4],
+    followUpSequence: Number.parseInt(match[4], 10),
   };
 }
 
@@ -94,14 +94,16 @@ function buildCapIdFromFinding({ findingId, capSequence }) {
   return `CA-${finding.compactInspectionId}${finding.specialtyCode}-${String(finding.findingSequence).padStart(2, '0')}-${String(seq).padStart(2, '0')}`;
 }
 
-function buildFollowUpIdFromFinding({ findingId, followUpDate }) {
+function buildFollowUpIdFromFinding({ findingId, followUpSequence }) {
   const finding = parseFindingId(findingId);
   if (!finding) {
     throw new Error('findingId does not match expected format XXXXNNN-YYY-MM');
   }
-  const dateCode = toDateCode(followUpDate);
-
-  return `FU-${finding.compactInspectionId}${finding.specialtyCode}-${String(finding.findingSequence).padStart(2, '0')}-${dateCode}`;
+  const seq = Number(followUpSequence);
+  if (!Number.isInteger(seq) || seq < 1 || seq > 99) {
+    throw new Error('Follow-up sequence must be an integer between 1 and 99');
+  }
+  return `FU-${finding.compactInspectionId}${finding.specialtyCode}-${String(finding.findingSequence).padStart(2, '0')}-${String(seq).padStart(2, '0')}`;
 }
 
 module.exports = {
