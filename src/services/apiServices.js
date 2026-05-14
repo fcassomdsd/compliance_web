@@ -424,3 +424,42 @@ export async function apiCreateFollowUpReport(capId, payload, csrfToken) {
   }
 }
 
+export async function apiFollowUps(filters = {}) {
+  try {
+    const result = await axios({
+      method: 'get',
+      url: `${complianceApiServer}/findings/follow-ups`,
+      params: filters,
+      withCredentials: true,
+    });
+    return { data: result.data, status: result.status };
+  } catch (error) {
+    const backendMessage = error?.response?.data?.message || error?.response?.data?.error;
+    const status = error?.response?.status;
+    const detail = backendMessage || error.message;
+    throw new Error(`apiFollowUps: ${status ? `[${status}] ` : ''}${detail}`);
+  }
+}
+
+export async function apiCreateFindingFollowUp(findingId, payload, csrfToken) {
+  try {
+    if (!findingId || typeof findingId !== 'string') {
+      throw new Error('findingId is required');
+    }
+
+    const result = await axios({
+      method: 'post',
+      url: `${complianceApiServer}/findings/${encodeURIComponent(findingId)}/follow-ups`,
+      data: payload,
+      headers: buildCsrfHeader(csrfToken),
+      withCredentials: true,
+    });
+    return { data: result.data, status: result.status };
+  } catch (error) {
+    const backendMessage = error?.response?.data?.message || error?.response?.data?.error;
+    const status = error?.response?.status;
+    const detail = backendMessage || error.message;
+    throw new Error(`apiCreateFindingFollowUp: ${status ? `[${status}] ` : ''}${detail}`);
+  }
+}
+

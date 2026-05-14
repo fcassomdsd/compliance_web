@@ -4,7 +4,6 @@ import {
   apiCapDetail,
   apiSubmitCap,
   apiReviewCap,
-  apiCreateFollowUpReport,
 } from '@/services/apiServices';
 
 export const useCapStore = defineStore('cap', {
@@ -70,20 +69,6 @@ export const useCapStore = defineStore('cap', {
       this.error = null;
       try {
         const { data } = await apiReviewCap(capId, acceptanceStatus, csrfToken);
-        return data;
-      } catch (error) {
-        this.error = error.message;
-        throw error;
-      } finally {
-        this.loading = false;
-      }
-    },
-
-    async createFollowUp({ capId, payload, csrfToken }) {
-      this.loading = true;
-      this.error = null;
-      try {
-        const { data } = await apiCreateFollowUpReport(capId, payload, csrfToken);
         return data;
       } catch (error) {
         this.error = error.message;

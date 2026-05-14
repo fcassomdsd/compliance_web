@@ -4,11 +4,13 @@ import {
   apiAssignmentGroup,
   apiCapDetail,
   apiCaps,
+  apiCreateFindingFollowUp,
   apiCreateFollowUpReport,
   apiEntityCRUD,
   apiEntityLinks,
   apiFindingDetail,
   apiFindings,
+  apiFollowUps,
   apiInspectionByIdOrCode,
   apiInspectionPlan,
   apiInspectionReport,
@@ -393,6 +395,33 @@ describe('apiServices', () => {
         method: 'post',
         url: '/api/caps/CAP-1/follow-up-reports',
         data: { percentComplete: 55 },
+        headers: { 'x-csrf-token': 'csrf-token' },
+        withCredentials: true,
+      });
+    });
+
+    it('calls finding-scoped follow-up listing and creation endpoints', async () => {
+      const list = await apiFollowUps({ findingId: 'MDPP001-AYVIS-01', followUpType: 'Progress Review' });
+      expect(list.data).toEqual({
+        method: 'get',
+        url: '/api/findings/follow-ups',
+        params: { findingId: 'MDPP001-AYVIS-01', followUpType: 'Progress Review' },
+        withCredentials: true,
+      });
+
+      await expect(apiCreateFindingFollowUp('', { followUpType: 'Progress Review' }))
+        .rejects
+        .toThrow('apiCreateFindingFollowUp: findingId is required');
+
+      const create = await apiCreateFindingFollowUp(
+        'MDPP001-AYVIS-01',
+        { followUpType: 'Progress Review', percentComplete: 20 },
+        'csrf-token'
+      );
+      expect(create.data).toEqual({
+        method: 'post',
+        url: '/api/findings/MDPP001-AYVIS-01/follow-ups',
+        data: { followUpType: 'Progress Review', percentComplete: 20 },
         headers: { 'x-csrf-token': 'csrf-token' },
         withCredentials: true,
       });

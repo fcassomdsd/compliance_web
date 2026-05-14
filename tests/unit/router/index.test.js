@@ -22,12 +22,14 @@ describe('router index', () => {
     const checklist = router.getRoutes().find((route) => route.name === 'checklist');
     const inspectionPlan = router.getRoutes().find((route) => route.name === 'inspectionPlan');
     const inspectionReport = router.getRoutes().find((route) => route.name === 'inspectionReport');
+    const followUps = router.getRoutes().find((route) => route.name === 'followUps');
 
     expect(inspection.meta.requiredRoles).toEqual(['planner', 'admin']);
     expect(assignInspectors.meta.requiredRoles).toEqual(['assigner', 'admin']);
     expect(checklist.meta.requiredRoles).toEqual(['inspector', 'admin']);
     expect(inspectionPlan.meta.requiredRoles).toEqual(['planner', 'inspector', 'admin']);
     expect(inspectionReport.meta.requiredRoles).toEqual(['inspector', 'admin']);
+    expect(followUps.meta.requiredRoles).toEqual(['inspector', 'planner', 'cap_entry', 'admin']);
   });
 
   it('executes lazy route component factories', async () => {

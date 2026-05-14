@@ -49,6 +49,12 @@ const routes = [
     meta: { requiresAuth: true, requiredRoles: ['inspector', 'planner', 'cap_entry', 'admin'] },
   },
   {
+    path: '/follow-ups',
+    name: 'followUps',
+    component: () => import('@/views/FollowUpManager.vue'),
+    meta: { requiresAuth: true, requiredRoles: ['inspector', 'planner', 'cap_entry', 'admin'] },
+  },
+  {
     path: '/login',
     name: 'login',
     component: () => import('@/views/LoginView.vue'),

@@ -7,6 +7,7 @@ import { useFindingStore } from '@/stores/findingStore';
 vi.mock('../../../src/stores/findingStore');
 vi.mock('vue-router', () => ({
   useRouter: vi.fn(),
+  useRoute: vi.fn(),
 }));
 
 describe('FindingManager.vue', () => {
@@ -17,6 +18,9 @@ describe('FindingManager.vue', () => {
     global: {
       stubs: {
         BaseManager: { template: '<div><slot /></div>' },
+        ScopePicker: {
+          template: '<div><button type="button" class="scope-search" @click="$emit(\'search\')">Search</button><button type="button" class="scope-reset" @click="$emit(\'reset\')">Reset</button></div>',
+        },
       },
     },
   });
@@ -28,6 +32,8 @@ describe('FindingManager.vue', () => {
     const { useRouter } = await import('vue-router');
     mockRouter = { push: vi.fn() };
     vi.mocked(useRouter).mockReturnValue(mockRouter);
+    const { useRoute } = await import('vue-router');
+    vi.mocked(useRoute).mockReturnValue({ query: {} });
 
     mockFindingStore = {
       findings: [
@@ -63,17 +69,26 @@ describe('FindingManager.vue', () => {
     const wrapper = mountComponent();
     await wrapper.vm.$nextTick();
 
-    wrapper.vm.filters.status = 'Open';
-    wrapper.vm.filters.inspectionId = 'INS-1';
-    wrapper.vm.filters.providerId = 'PROV-1';
-    wrapper.vm.filters.overdueOnly = true;
+    wrapper.vm.scope.preset = 'open-findings';
+    wrapper.vm.scope.status = 'Closed';
+    wrapper.vm.scope.findingId = 'F-10';
+    wrapper.vm.scope.inspectionId = 'INS-1';
+    wrapper.vm.scope.providerId = 'PROV-1';
+    wrapper.vm.scope.locationId = 'LOC-1';
+    wrapper.vm.scope.specialtyCode = 'AYVIS';
+    wrapper.vm.scope.domain = 'OPS';
+    wrapper.vm.scope.overdueOnly = true;
 
     await wrapper.vm.loadFindings();
 
+    expect(mockFindingStore.setFilter).toHaveBeenCalledWith('findingId', 'F-10');
     expect(mockFindingStore.setFilter).toHaveBeenCalledWith('status', 'Open');
     expect(mockFindingStore.setFilter).toHaveBeenCalledWith('inspectionId', 'INS-1');
     expect(mockFindingStore.setFilter).toHaveBeenCalledWith('providerId', 'PROV-1');
-    expect(mockFindingStore.setFilter).toHaveBeenCalledWith('overdueOnly', true);
+    expect(mockFindingStore.setFilter).toHaveBeenCalledWith('locationId', 'LOC-1');
+    expect(mockFindingStore.setFilter).toHaveBeenCalledWith('specialtyCode', 'AYVIS');
+    expect(mockFindingStore.setFilter).toHaveBeenCalledWith('domain', 'OPS');
+    expect(mockFindingStore.setFilter).toHaveBeenCalledWith('overdueOnly', false);
     expect(mockFindingStore.fetchFindings).toHaveBeenCalledTimes(2);
   });
 
@@ -93,11 +108,19 @@ describe('FindingManager.vue', () => {
     expect(mockRouter.push).toHaveBeenCalledWith({ name: 'correctiveActions', query: { findingId: 'F-7' } });
   });
 
+  it('goToFollowUps navigates to follow-up manager with query', async () => {
+    const wrapper = mountComponent();
+    await wrapper.vm.$nextTick();
+
+    wrapper.vm.goToFollowUps('F-8');
+    expect(mockRouter.push).toHaveBeenCalledWith({ name: 'followUps', query: { findingId: 'F-8' } });
+  });
+
   it('renders detail panel and warning text for selected finding divergence', async () => {
     mockFindingStore.selectedFinding = {
       findingId: 'F-2',
       description: 'Issue found',
-      regulationBreached: 'REG-1',
+      requirementBreached: 'REG-1',
       openedDate: '2026-01-02',
       lastStatusChange: '2026-02-03',
       statusDivergence: true,
@@ -122,10 +145,10 @@ describe('FindingManager.vue', () => {
     const wrapper = mountComponent();
     await wrapper.vm.$nextTick();
 
-    const refreshBtn = wrapper.findAll('button').find((btn) => btn.text() === 'Refresh');
+    const searchBtn = wrapper.findAll('button').find((btn) => btn.text() === 'Search');
     const viewBtn = wrapper.findAll('button').find((btn) => btn.text() === 'View');
 
-    await refreshBtn.trigger('click');
+    await searchBtn.trigger('click');
     await viewBtn.trigger('click');
 
     expect(mockFindingStore.fetchFindings).toHaveBeenCalled();
@@ -136,7 +159,7 @@ describe('FindingManager.vue', () => {
     mockFindingStore.selectedFinding = {
       findingId: 'F-9',
       description: 'Needs CAP',
-      regulationBreached: 'REG-X',
+      requirementBreached: 'REG-X',
       openedDate: '2026-02-01',
       lastStatusChange: '2026-02-15',
       statusDivergence: false,
@@ -148,5 +171,28 @@ describe('FindingManager.vue', () => {
     await openCapsBtn.trigger('click');
 
     expect(mockRouter.push).toHaveBeenCalledWith({ name: 'correctiveActions', query: { findingId: 'F-9' } });
+  });
+
+  it('triggers follow-up navigation from row and detail actions', async () => {
+    mockFindingStore.selectedFinding = {
+      findingId: 'F-9',
+      description: 'Needs follow-up',
+      requirementBreached: 'REG-X',
+      openedDate: '2026-02-01',
+      lastStatusChange: '2026-02-15',
+      statusDivergence: false,
+    };
+    const wrapper = mountComponent();
+    await wrapper.vm.$nextTick();
+
+    const followUpButtons = wrapper.findAll('button').filter((btn) =>
+      btn.text() === 'Manage Follow-ups' || btn.text() === 'Open Follow-up Manager'
+    );
+
+    await followUpButtons[0].trigger('click');
+    await followUpButtons[1].trigger('click');
+
+    expect(mockRouter.push).toHaveBeenNthCalledWith(1, { name: 'followUps', query: { findingId: 'F-1' } });
+    expect(mockRouter.push).toHaveBeenNthCalledWith(2, { name: 'followUps', query: { findingId: 'F-9' } });
   });
 });

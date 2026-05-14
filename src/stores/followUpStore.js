@@ -1,35 +1,34 @@
 import { defineStore } from 'pinia';
-import { apiFindings, apiFindingDetail } from '@/services/apiServices';
+import { apiFollowUps, apiCreateFindingFollowUp } from '@/services/apiServices';
 
-export const useFindingStore = defineStore('finding', {
+export const useFollowUpStore = defineStore('followUp', {
   state: () => ({
-    findings: [],
-    selectedFinding: null,
+    followUps: [],
     loading: false,
     error: null,
     filters: {
       findingId: '',
-      status: '',
-      inspectionId: '',
-      locationId: '',
       providerId: '',
+      locationId: '',
       specialtyCode: '',
+      inspectionId: '',
       domain: '',
+      status: '',
+      statusMode: 'effective',
+      followUpType: '',
       overdueOnly: false,
+      skipCount: 0,
+      maxItems: 50,
     },
   }),
 
   actions: {
-    async fetchFindings() {
+    async fetchFollowUps() {
       this.loading = true;
       this.error = null;
       try {
-        const params = {
-          ...this.filters,
-          overdueOnly: this.filters.overdueOnly ? 'true' : 'false',
-        };
-        const { data } = await apiFindings(params);
-        this.findings = Array.isArray(data?.list) ? data.list : [];
+        const { data } = await apiFollowUps(this.filters);
+        this.followUps = Array.isArray(data?.list) ? data.list : [];
       } catch (error) {
         this.error = error.message;
         throw error;
@@ -38,12 +37,12 @@ export const useFindingStore = defineStore('finding', {
       }
     },
 
-    async fetchFindingDetail(findingId) {
+    async createFollowUp({ findingId, payload, csrfToken }) {
       this.loading = true;
       this.error = null;
       try {
-        const { data } = await apiFindingDetail(findingId);
-        this.selectedFinding = data || null;
+        const { data } = await apiCreateFindingFollowUp(findingId, payload, csrfToken);
+        return data;
       } catch (error) {
         this.error = error.message;
         throw error;

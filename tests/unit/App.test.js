@@ -13,6 +13,7 @@ const routes = [
   { path: '/checklist', component: { template: '<div id="checklist-page">Checklist</div>' } },
   { path: '/inspection-plan', component: { template: '<div id="plan-page">Plan</div>' } },
   { path: '/inspection-report', component: { template: '<div id="report-page">Report</div>' } },
+  { path: '/follow-ups', component: { template: '<div id="follow-ups-page">Follow-ups</div>' } },
   { path: '/login', name: 'login', component: { template: '<div id="login-page">Login</div>' } },
   { path: '/:pathMatch(.*)*', component: { template: '<div id="not-found-page">Not Found</div>' } },
 ];
@@ -56,11 +57,11 @@ describe('App.vue (router navigation)', () => {
     expect(logo.attributes('src')).toContain('compliance-logo');
   });
 
-  it('renders seven navigation links', async () => {
+  it('renders eight navigation links', async () => {
     const { wrapper } = await mountAppAt();
 
     const links = wrapper.findAll('a.nav-link');
-    expect(links).toHaveLength(7);
+    expect(links).toHaveLength(8);
 
     const labels = links.map((link) => link.text().trim());
     expect(labels).toEqual([
@@ -71,6 +72,7 @@ describe('App.vue (router navigation)', () => {
       'Inspection Report',
       'Findings',
       'Corrective Actions',
+      'Follow-ups',
     ]);
   });
 
