@@ -68,13 +68,20 @@ compliance_web/
 │   ├── TopicChecklistGroup.test.js        ← Topic component tests (30+)
 │   └── ChecklistManager.test.js           ← Main component tests (35+)
 │
-└── Documentation/
-    ├── DELIVERY_SUMMARY.md                ← This delivery summary
-    ├── CHECKLIST_QUICK_START.md           ← User guide
-    ├── CHECKLIST_DEVELOPER_GUIDE.md       ← Developer documentation
-    ├── CHECKLIST_MODULE_DOCS.md           ← Technical specifications
-    ├── CHECKLIST_IMPLEMENTATION_SUMMARY.md ← Implementation details
-    └── DOCUMENTATION_INDEX.md             ← This file
+└── docs/
+    ├── checklist/
+    │   └── phase-4-delivery/
+    │       ├── DELIVERY_SUMMARY.md                 ← This delivery summary
+    │       ├── CHECKLIST_QUICK_START.md            ← User guide
+    │       ├── CHECKLIST_DEVELOPER_GUIDE.md        ← Developer documentation
+    │       ├── CHECKLIST_MODULE_DOCS.md            ← Technical specifications
+    │       ├── CHECKLIST_IMPLEMENTATION_SUMMARY.md ← Implementation details
+    │       └── DOCUMENTATION_INDEX.md              ← This file
+    ├── auth/
+    │   ├── phase-1-contract/               ← API and route auth contract
+    │   └── phase-8-operational-readiness/  ← Rollout and operations
+    └── shared/
+        └── operations/                     ← Docker, CI, lint ops docs
 ```
 
 ---
