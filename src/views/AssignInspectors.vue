@@ -90,6 +90,7 @@ import BaseManager from '@/components/base/BaseManager.vue';
 import { useInspectionStore } from '@/stores/inspectionStore';
 import { useInspectorStore } from '@/stores/inspectorStore';
 import { useInspectedSpecialtyStore } from '@/stores/inspectedSpecialtyStore';
+import { useAuthStore } from '@/stores/authStore';
 // specialtyStore not required here; inspectorStore provides inspector specialties
 import { useToast } from 'vue-toastification';
 import saveImg from '@/assets/images/icons/save.png';
@@ -100,6 +101,7 @@ import { apiEntityLinks } from '@/services/apiServices';
 const inspectionStore = useInspectionStore();
 const inspectorStore = useInspectorStore();
 const inspectedStore = useInspectedSpecialtyStore();
+const authStore = useAuthStore();
 const toast = useToast();
 
 const currentInspection = ref(null);
@@ -131,11 +133,20 @@ const buildSpecialtiesList = () => {
   allowedInspectorList.value = {};
   assigned.value = {};
   const specObj = inspectedStore.inspectedSpecialties || {};
+  const assignerScopeIds = authStore.assignerSpecialtyIds;
+  const enforceAssignerScope = authStore.hasRole('assigner')
+    && !authStore.hasRole(['admin', 'planner'])
+    && assignerScopeIds.size > 0;
+
   for (const specKey of Object.keys(specObj)) {
+      if (enforceAssignerScope && !assignerScopeIds.has(specKey)) {
+        continue;
+      }
+
       const specialty = specObj[specKey];
       specialtiesList.value.push({ "id" : specKey, name: specialty.name, inspectedId: specialty.id });
       // prefill assignments by matching inspectors' declared specialties
-      const inspectors = inspectorStore.inspectorSpecialties[specKey].inspectors;
+      const inspectors = inspectorStore.inspectorSpecialties?.[specKey]?.inspectors || [];
       allowedInspectorList.value[specKey] = {
         inspectedSpecialtyId: specialty.id,
         inspectors: inspectors.map(i => ({ "id": i.id, 

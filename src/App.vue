@@ -5,6 +5,14 @@
       <span>
         <h2>Operational Safety Compliance System</h2>
       </span>
+      <div class="header-actions" v-if="authStore.authenticated">
+        <span v-if="authStore.user?.username" class="signed-in-user">
+          {{ authStore.user.username }}
+        </span>
+        <button type="button" class="logout-button" @click="onLogout" :disabled="authStore.loading">
+          {{ authStore.loading ? 'Signing out...' : 'Sign out' }}
+        </button>
+      </div>
     </div>
     <div class="controls-container">
       <RouterLink to="/inspection" class="nav-link" exact-active-class="active-view">
@@ -22,13 +30,32 @@
       <RouterLink to="/inspection-report" class="nav-link" exact-active-class="active-view">
         Inspection Report
       </RouterLink>
+      <RouterLink to="/findings" class="nav-link" exact-active-class="active-view">
+        Findings
+      </RouterLink>
+      <RouterLink to="/corrective-actions" class="nav-link" exact-active-class="active-view">
+        Corrective Actions
+      </RouterLink>
+      <RouterLink to="/follow-ups" class="nav-link" exact-active-class="active-view">
+        Follow-ups
+      </RouterLink>
     </div>
     <RouterView />
   </div>
 </template>
 
 <script setup>
+import { useRouter } from 'vue-router'
+import { useAuthStore } from '@/stores/authStore'
 import logo from './assets/images/logos/compliance-logo.png'
+
+const router = useRouter()
+const authStore = useAuthStore()
+
+async function onLogout() {
+  await authStore.logout()
+  await router.push({ name: 'login' })
+}
 
 </script>
 
@@ -40,6 +67,33 @@ import logo from './assets/images/logos/compliance-logo.png'
   padding-bottom: 1.5rem;
   border-bottom: 1px solid var(--border-color);
   margin-bottom: 2rem;
+}
+
+.header-actions {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.signed-in-user {
+  color: #3d4a57;
+  font-weight: 600;
+}
+
+.logout-button {
+  border: 1px solid #bf3030;
+  background-color: white;
+  color: #bf3030;
+  padding: 0.5rem 0.9rem;
+  border-radius: 8px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.logout-button:hover:enabled {
+  background-color: #bf3030;
+  color: white;
 }
 
 .controls-container {

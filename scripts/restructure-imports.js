@@ -3,10 +3,7 @@
 /**
  * Script to update all imports to use @ path alias after restructuring
  * Usage: node scripts/restructure-imports.js
- * 
- * eslint-disable-next-line no-undef
  */
-/* global process __filename require */
 
 const fs = require('fs');
 const path = require('path');

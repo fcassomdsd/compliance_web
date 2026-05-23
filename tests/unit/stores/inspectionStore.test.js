@@ -23,7 +23,7 @@ describe('Inspection Store', () => {
   let addData;
   let updateData;
   let mockLocation;
-  let mockExistingInspectionSameYear;
+  let mockExistingInspectionSameLocation;
 
   beforeEach(() => {
     pinia = createPinia();
@@ -32,7 +32,7 @@ describe('Inspection Store', () => {
     
     mockInspection = {
       id : "ID123",
-      code : "ABCD-2025-01",
+      code : "ABCD-002",
       startDate : '2025-03-26',
       endDate : '2025-03-27',
       objective : 'objective',
@@ -44,7 +44,7 @@ describe('Inspection Store', () => {
     
     mockApiUpdate = {
       id : "ID123",
-      code : "ABCD-2025-01",
+      code : "ABCD-002",
       startDate : '2025-03-27',
       endDate : '2025-03-28',
       objective : 'modified objective',
@@ -56,7 +56,7 @@ describe('Inspection Store', () => {
 
     mockAddedRecord = {
       id : "ID123",
-      code : "ABCD-2025-01",
+      code : "ABCD-002",
       startDate : '2025-03-26',
       endDate : '2025-03-27',
       objective : 'objective',
@@ -68,7 +68,7 @@ describe('Inspection Store', () => {
 
     mockUpdatedRecord = {
       id : "ID123",
-      code : "ABCD-2025-01",
+      code : "ABCD-002",
       startDate : '2025-03-27',
       endDate : '2025-03-28',
       objective : 'modified objective',
@@ -95,16 +95,16 @@ describe('Inspection Store', () => {
       name: 'Location 1',
     };
 
-    mockExistingInspectionSameYear = {
+    mockExistingInspectionSameLocation = {
       id: 'ID122',
-      code: 'ABCD-2025-01',
+      code: 'ABCD-001',
       locationId: 'Location123',
       startDate: '2025-01-10',
       deleted: false,
     };
 
     addData = {
-      code : "ABCD-2025-02",
+      code : "ABCD-002",
       startDate : '2025-03-26',
       endDate : '2025-03-27',
       objective : 'objective',
@@ -114,7 +114,7 @@ describe('Inspection Store', () => {
     };
       
     updateData = {
-      code : "ABCD-2025-01",
+      code : "ABCD-002",
       startDate : '2025-03-27',
       endDate : '2025-03-28',
       objective : 'modified objective',
@@ -132,7 +132,7 @@ describe('Inspection Store', () => {
         return { data: { list: [mockLocation] }, status: 200 };
       }
       if (method === 'query' && entity === 'Inspection' && data?.deleted === false && data?.locationId) {
-        return { data: { list: [mockExistingInspectionSameYear] }, status: 200 };
+        return { data: { list: [mockExistingInspectionSameLocation] }, status: 200 };
       }
       if (method == 'query' && entity !== null ) {
         return { data: { list : [ mockInspection ] }, status: 200 }      
@@ -188,7 +188,7 @@ describe('Inspection Store', () => {
       store.inspections = [];    
       vi.mocked(apiEntityCRUD)
         .mockResolvedValueOnce({ data: { list: [mockLocation] }, status: 200 })
-        .mockResolvedValueOnce({ data: { list: [mockExistingInspectionSameYear] }, status: 200 })
+        .mockResolvedValueOnce({ data: { list: [mockExistingInspectionSameLocation] }, status: 200 })
         .mockRejectedValueOnce(new Error('API add failed'));
       await expect(store.addInspection(mockToAdd)).rejects.toThrow('addInspection: API add failed');
       expect(store.inspections).toEqual([]);
@@ -200,7 +200,7 @@ describe('Inspection Store', () => {
       store.inspections = [];    
       vi.mocked(apiEntityCRUD)
         .mockResolvedValueOnce({ data: { list: [mockLocation] }, status: 200 })
-        .mockResolvedValueOnce({ data: { list: [mockExistingInspectionSameYear] }, status: 200 })
+        .mockResolvedValueOnce({ data: { list: [mockExistingInspectionSameLocation] }, status: 200 })
         .mockResolvedValueOnce({ data: null, status: 200 });
       await expect(store.addInspection(mockToAdd)).rejects.toThrow('addInspection: API call for "add" returned invalid data');
       expect(store.inspections).toEqual([]);
@@ -214,7 +214,7 @@ describe('Inspection Store', () => {
       store.inspections = [];    
       vi.mocked(apiEntityCRUD)
         .mockResolvedValueOnce({ data: { list: [mockLocation] }, status: 200 })
-        .mockResolvedValueOnce({ data: { list: [mockExistingInspectionSameYear] }, status: 200 })
+        .mockResolvedValueOnce({ data: { list: [mockExistingInspectionSameLocation] }, status: 200 })
         .mockResolvedValueOnce({ data: {"code" : "0225"}, status: 200 });
       await expect(store.addInspection(mockToAdd)).rejects.toThrow('addInspection: API call for "add" returned invalid data');
       expect(store.inspections).toEqual([]);
@@ -228,7 +228,7 @@ describe('Inspection Store', () => {
       store.inspections = [];    
       vi.mocked(apiEntityCRUD)
         .mockResolvedValueOnce({ data: { list: [mockLocation] }, status: 200 })
-        .mockResolvedValueOnce({ data: { list: [mockExistingInspectionSameYear] }, status: 200 })
+        .mockResolvedValueOnce({ data: { list: [mockExistingInspectionSameLocation] }, status: 200 })
         .mockResolvedValueOnce({ data: mockInspection, status: 200 })
         .mockRejectedValueOnce(new Error('API query failed'));
       await expect(store.addInspection(mockToAdd)).rejects.toThrow('addInspection: API query failed');
@@ -243,7 +243,7 @@ describe('Inspection Store', () => {
       store.inspections = [];    
       vi.mocked(apiEntityCRUD)
         .mockResolvedValueOnce({ data: { list: [mockLocation] }, status: 200 })
-        .mockResolvedValueOnce({ data: { list: [mockExistingInspectionSameYear] }, status: 200 })
+        .mockResolvedValueOnce({ data: { list: [mockExistingInspectionSameLocation] }, status: 200 })
         .mockResolvedValueOnce({ data: mockInspection, status: 200 })
         .mockResolvedValueOnce({ data: {"total" : 0}, status: 200 });
       await expect(store.addInspection(mockToAdd)).rejects.toThrow('addInspection: API query failed');
@@ -258,7 +258,7 @@ describe('Inspection Store', () => {
       store.inspections = [];    
       vi.mocked(apiEntityCRUD)
         .mockResolvedValueOnce({ data: { list: [mockLocation] }, status: 200 })
-        .mockResolvedValueOnce({ data: { list: [mockExistingInspectionSameYear] }, status: 200 })
+        .mockResolvedValueOnce({ data: { list: [mockExistingInspectionSameLocation] }, status: 200 })
         .mockResolvedValueOnce({ data: mockInspection, status: 200 })
         .mockResolvedValueOnce({ data: {"total" : 0, "list" : []}, status: 200 });      
       await expect(store.addInspection(mockToAdd)).rejects.toThrow('addInspection: API query failed for ID123');
@@ -366,7 +366,7 @@ describe('Inspection Store', () => {
 
     it('blocks manual inspection code changes', async () => {
       store.inspections = [mockAddedRecord];
-      const modified = { ...mockUpdatedRecord, code: 'ABCD-2025-99' };
+      const modified = { ...mockUpdatedRecord, code: 'ABCD-999' };
 
       await expect(store.updateInspection(modified)).rejects.toThrow('updateInspection: Inspection code cannot be manually modified');
       expect(apiEntityCRUD).not.toHaveBeenCalledWith('update', 'Inspection', 'ID123', expect.any(Object));
@@ -380,12 +380,15 @@ describe('Inspection Store', () => {
       expect(apiEntityCRUD).not.toHaveBeenCalledWith('update', 'Inspection', 'ID123', expect.any(Object));
     });
 
-    it('blocks start date year changes that mismatch code year', async () => {
+    it('allows start date changes when code remains unchanged', async () => {
       store.inspections = [mockAddedRecord];
       const modified = { ...mockUpdatedRecord, startDate: '2026-01-10' };
 
-      await expect(store.updateInspection(modified)).rejects.toThrow('updateInspection: Start date year must match the year in the inspection code');
-      expect(apiEntityCRUD).not.toHaveBeenCalledWith('update', 'Inspection', 'ID123', expect.any(Object));
+      await expect(store.updateInspection(modified)).resolves.not.toThrow();
+      expect(apiEntityCRUD).toHaveBeenCalledWith('update', 'Inspection', 'ID123', expect.objectContaining({
+        code: 'ABCD-002',
+        startDate: '2026-01-10',
+      }));
     });
 
     it('allows update when code does not match generated pattern', async () => {

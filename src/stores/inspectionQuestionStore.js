@@ -1,6 +1,22 @@
 import { defineStore } from 'pinia';
 import { apiEntityCRUD } from '@/services/apiServices';
 
+const VALID_RISK_LEVELS = ['Low', 'Medium', 'High', 'Critical'];
+
+const normalizeRiskLevel = (riskLevel) => {
+  if (typeof riskLevel !== 'string') {
+    return null;
+  }
+
+  const normalized = riskLevel.trim().toLowerCase();
+  if (normalized.length === 0) {
+    return null;
+  }
+
+  const matched = VALID_RISK_LEVELS.find((level) => level.toLowerCase() === normalized);
+  return matched || null;
+};
+
 export const useInspectionQuestionStore = defineStore('inspectionQuestion', {
 
   state: () => ({
@@ -43,6 +59,7 @@ export const useInspectionQuestionStore = defineStore('inspectionQuestion', {
 //            protocolQuestion: question.protocolQuestion,
             protocolQuestionId: question.protocolQuestionId,
             sequence: question.sequence ?? null,
+            riskLevel: normalizeRiskLevel(question.riskLevel),
           };
           this.inspectionQuestions[question.id] = questionObj;
           this.inspectionQuestionsBySpecialty[inspectedSpecialtyId].push(questionObj);
@@ -82,6 +99,14 @@ export const useInspectionQuestionStore = defineStore('inspectionQuestion', {
           addData.sequence = questionData.sequence;
         }
 
+        const normalizedRiskLevel = normalizeRiskLevel(questionData.riskLevel);
+        if (questionData.riskLevel && !normalizedRiskLevel) {
+          throw new Error('riskLevel must be one of: Low, Medium, High, Critical');
+        }
+        if (normalizedRiskLevel) {
+          addData.riskLevel = normalizedRiskLevel;
+        }
+
         const { data: addedQuestion } = await apiEntityCRUD('add', 'InspectionQuestion', null, addData);
         if (!addedQuestion || !('id' in addedQuestion)) {
           throw new Error('API call for "add" returned invalid data');
@@ -103,6 +128,7 @@ export const useInspectionQuestionStore = defineStore('inspectionQuestion', {
           inspectedSpecialtyId: entity.inspectedSpecialtyId,
           protocolQuestionId: entity.protocolQuestionId,
           sequence: entity.sequence ?? null,
+          riskLevel: normalizeRiskLevel(entity.riskLevel),
         };
 
         this.inspectionQuestions[entityObj.id] = entityObj;
@@ -207,6 +233,7 @@ export const useInspectionQuestionStore = defineStore('inspectionQuestion', {
               protocolQuestionId: protocolQuestion.id,
               code: protocolQuestion.code,
               sequence: protocolQuestion.sequence,
+              riskLevel: protocolQuestion.riskLevel,
             };
 
             const addedQuestion = await this.addInspectionQuestion(questionData);

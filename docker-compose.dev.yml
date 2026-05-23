@@ -1,0 +1,18 @@
+services:
+  db:
+    ports:
+      - "5433:5432"
+
+  backend:
+    ports:
+      - "4000:4000"
+    environment:
+      ALFRESCO_BASE_URL: ${ALFRESCO_BASE_URL:-http://proxy:8080}
+    networks:
+      - default
+      - alfresco_backend
+
+networks:
+  alfresco_backend:
+    name: alfresco_backend
+    external: true
