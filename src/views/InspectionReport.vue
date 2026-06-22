@@ -87,7 +87,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onBeforeMount } from 'vue';
+import { ref, computed, onMounted } from 'vue';
 import BaseManager from '@/components/base/BaseManager.vue';
 import { useInspectionStore } from '@/stores/inspectionStore';
 import { useInspectedSpecialtyStore } from '@/stores/inspectedSpecialtyStore';
@@ -120,7 +120,7 @@ const canGenerate = computed(() =>
   selectedServiceProviderId.value !== ''
 );
 
-onBeforeMount(async () => {
+onMounted(async () => {
   await inspectionStore.refreshInspections();
 });
 

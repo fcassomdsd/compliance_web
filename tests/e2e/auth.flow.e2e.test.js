@@ -4,90 +4,10 @@ import { createRequire } from 'node:module';
 
 const require = createRequire(import.meta.url);
 const { createApp } = require('../../server/app.cjs');
-
-class E2ESessionRepository {
-  constructor() {
-    this.sessions = new Map();
-    this.groupRoleMap = new Map([
-      ['group_inspector', ['inspector']],
-      ['group_planner', ['planner']],
-      ['group_admin', ['admin']],
-    ]);
-  }
-
-  async ping() {
-    return true;
-  }
-
-  async createSession(session) {
-    this.sessions.set(session.sessionId, { ...session, revokedAt: null });
-  }
-
-  async getSession(sessionId) {
-    return this.sessions.get(sessionId) || null;
-  }
-
-  async touchSession(sessionId, patch) {
-    const current = this.sessions.get(sessionId);
-    if (!current) return;
-    this.sessions.set(sessionId, {
-      ...current,
-      lastSeenAt: patch.lastSeenAt,
-      expiresAtIdle: patch.expiresAtIdle,
-      lastRoleRefreshAt: patch.lastRoleRefreshAt,
-    });
-  }
-
-  async updateSessionRoles(sessionId, patch) {
-    const current = this.sessions.get(sessionId);
-    if (!current) return;
-    this.sessions.set(sessionId, {
-      ...current,
-      roles: patch.roles,
-      lastRoleRefreshAt: patch.lastRoleRefreshAt,
-    });
-  }
-
-  async rotateSession(oldSessionId, nextSession) {
-    const current = this.sessions.get(oldSessionId);
-    if (!current) return;
-    this.sessions.delete(oldSessionId);
-    this.sessions.set(nextSession.sessionId, {
-      ...current,
-      sessionId: nextSession.sessionId,
-      csrfSecret: nextSession.csrfSecret,
-      roles: nextSession.roles,
-      lastSeenAt: nextSession.lastSeenAt,
-      lastRoleRefreshAt: nextSession.lastRoleRefreshAt,
-      expiresAtIdle: nextSession.expiresAtIdle,
-      metadata: nextSession.metadata || current.metadata || {},
-    });
-  }
-
-  async revokeSession(sessionId, revokedAt) {
-    const current = this.sessions.get(sessionId);
-    if (!current) return;
-    this.sessions.set(sessionId, {
-      ...current,
-      revokedAt,
-    });
-  }
-
-  async resolveRolesForGroups(groups) {
-    const roleSet = new Set();
-    for (const group of groups || []) {
-      const key = String(group || '').trim().toLowerCase();
-      const mapped = this.groupRoleMap.get(key) || [];
-      for (const role of mapped) {
-        roleSet.add(role);
-      }
-    }
-    return Array.from(roleSet).sort();
-  }
-}
+const { InMemorySessionRepository } = require('../setup/mocks/InMemorySessionRepository.cjs');
 
 function createE2EApp({ alfrescoOverrides = {} } = {}) {
-  const sessionRepository = new E2ESessionRepository();
+  const sessionRepository = new InMemorySessionRepository();
   const alfrescoClient = {
     createTicket: vi.fn(async (username) => ({
       ticket: `ticket-${username}`,

@@ -73,7 +73,7 @@
 </template>
 
 <script setup>
-import { computed, ref, onBeforeMount } from 'vue';
+import { computed, ref, onMounted } from 'vue';
 import BaseManager from '@/components/base/BaseManager.vue';
 import { useInspectionStore } from '@/stores/inspectionStore';
 import { useInspectedSpecialtyStore } from '@/stores/inspectedSpecialtyStore';
@@ -101,7 +101,7 @@ const canGenerate = computed(() => {
   return hasPlanPermission.value && hasAssignments.value;
 });
 
-onBeforeMount(async () => {
+onMounted(async () => {
   await inspectionStore.refreshInspections();
 });
 

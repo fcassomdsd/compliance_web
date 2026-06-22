@@ -73,4 +73,14 @@ module.exports = {
   mapFindingNode,
   mapCorrectiveActionNode,
   mapFollowUpReportNode,
+  getFollowUpReportsForFinding,
 };
+
+async function getFollowUpReportsForFinding({ alfrescoClient, ticket, findingNodeId }) {
+  const followUpNodes = await alfrescoClient.listChildrenByType({
+    ticket,
+    parentNodeId: findingNodeId,
+    nodeType: 'vso:followUpReport',
+  });
+  return followUpNodes.map(mapFollowUpReportNode);
+}

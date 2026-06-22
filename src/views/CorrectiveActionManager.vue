@@ -99,7 +99,7 @@
 </template>
 
 <script setup>
-import { reactive, ref, onBeforeMount } from 'vue';
+import { reactive, ref, onMounted } from 'vue';
 import { useRoute } from 'vue-router';
 import BaseManager from '@/components/base/BaseManager.vue';
 import ScopePicker from '@/components/common/ScopePicker.vue';
@@ -233,7 +233,7 @@ async function viewCap(capId) {
   await capStore.fetchCapDetail(capId);
 }
 
-onBeforeMount(async () => {
+onMounted(async () => {
   const findingId = String(route.query?.findingId || '').trim();
   if (findingId) {
     capForm.findingId = findingId;
