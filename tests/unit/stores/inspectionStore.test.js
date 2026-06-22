@@ -733,11 +733,13 @@ describe('Inspection Store', () => {
       expect(store.loading).toBe(false);
     });
 
-    it('handles empty list in API response', async () => {
-      store.inspections = [];
+    it('handles empty list in API response gracefully', async () => {
+      store.inspections = [{ id: 'stale', code: 'X' }];
       vi.mocked(apiEntityCRUD).mockResolvedValueOnce({ data: { list: [] }, status: 200 });
 
-      await expect(store.refreshInspections()).rejects.toThrow('refreshInspections: API query failed');
+      await store.refreshInspections();
+
+      expect(store.inspections).toHaveLength(0);
       expect(store.loading).toBe(false);
     });
 

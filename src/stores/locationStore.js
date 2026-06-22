@@ -57,7 +57,7 @@ export const useLocationStore = defineStore('locationStore', {
       try {
 
         const { data: subqueryResults } = await apiEntityCRUD("query", "LocationServiceSpecialty", null, {deleted : false});
-        if (!("list" in subqueryResults) || (subqueryResults.list.length == 0)) {
+        if (!("list" in subqueryResults) || !Array.isArray(subqueryResults.list)) {
           throw new Error('API query failed');
         }
 
@@ -73,7 +73,7 @@ export const useLocationStore = defineStore('locationStore', {
         }
         
         const { data: queryResults } = await apiEntityCRUD("query", "LocationService", null, { deleted : false} );
-        if (!("list" in queryResults) || (queryResults.list.length == 0)) {
+        if (!("list" in queryResults) || !Array.isArray(queryResults.list)) {
           throw new Error('API query failed');
         }
         

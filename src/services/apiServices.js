@@ -405,15 +405,15 @@ export async function apiReviewCap(capId, acceptanceStatus, csrfToken) {
   }
 }
 
-export async function apiCreateFollowUpReport(capId, payload, csrfToken) {
+export async function apiCreateFollowUpReport(findingId, payload, csrfToken) {
   try {
-    if (!capId || typeof capId !== 'string') {
-      throw new Error('capId is required');
+    if (!findingId || typeof findingId !== 'string') {
+      throw new Error('findingId is required');
     }
 
     const result = await axios({
       method: 'post',
-      url: `${complianceApiServer}/caps/${encodeURIComponent(capId)}/follow-up-reports`,
+      url: `${complianceApiServer}/findings/${encodeURIComponent(findingId)}/follow-ups`,
       data: payload,
       headers: buildCsrfHeader(csrfToken),
       withCredentials: true,

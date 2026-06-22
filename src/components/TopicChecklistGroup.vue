@@ -405,6 +405,13 @@ const moveQuestion = (questionId, direction) => {
 }
 
 .question-details {
+  margin-top: 0.5rem;
+  padding: 0.75rem;
+  background-color: #ffffff;
+  border-left: 3px solid var(--secondary-color);
+  border-radius: 4px;
+  font-size: 0.85rem;
+}
 
 .question-order-controls {
   display: flex;
@@ -427,13 +434,6 @@ const moveQuestion = (questionId, direction) => {
 .order-btn:disabled {
   opacity: 0.4;
   cursor: not-allowed;
-}
-  margin-top: 0.5rem;
-  padding: 0.75rem;
-  background-color: #ffffff;
-  border-left: 3px solid var(--secondary-color);
-  border-radius: 4px;
-  font-size: 0.85rem;
 }
 
 .detail-row {

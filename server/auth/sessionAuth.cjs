@@ -33,9 +33,15 @@ function isSessionExpired(session, now = new Date()) {
     return true;
   }
 
-  const idle = new Date(session.expiresAtIdle);
-  const absolute = new Date(session.expiresAtAbsolute);
-  return now > idle || now > absolute;
+  if (new Date(session.expiresAtIdle) <= now) {
+    return true;
+  }
+
+  if (new Date(session.expiresAtAbsolute) <= now) {
+    return true;
+  }
+
+  return false;
 }
 
 function createSessionAuth({ config, sessionRepository, now = () => new Date() }) {

@@ -52,9 +52,9 @@ function clearAuthCookie(res, cookieName, config) {
   });
 }
 
-function createAuthRouter({ config, sessionRepository, alfrescoClient, now = () => new Date(), logger = console }) {
+function createAuthRouter({ config, sessionRepository, alfrescoClient, loginRateLimiter, now = () => new Date(), logger = console }) {
   const router = express.Router();
-  const rateLimiter = createLoginRateLimiter({
+  const rateLimiter = loginRateLimiter || createLoginRateLimiter({
     windowSeconds: config.loginRateLimitWindowSeconds,
     blockSeconds: config.loginRateLimitBlockSeconds,
     maxAttempts: config.loginRateLimitMaxAttempts,
@@ -116,7 +116,7 @@ function createAuthRouter({ config, sessionRepository, alfrescoClient, now = () 
       }
 
       const requestIp = req.ip || req.headers['x-forwarded-for'] || 'unknown';
-      if (rateLimiter.isBlocked(requestIp, username)) {
+      if (await rateLimiter.isBlocked(requestIp, username)) {
         auditAuthEvent(logger, 'login_rate_limited', { username, ip: requestIp });
         return res.status(429).json(buildError('AUTH_RATE_LIMITED', 'Too many login attempts, try again later'));
       }
@@ -125,7 +125,7 @@ function createAuthRouter({ config, sessionRepository, alfrescoClient, now = () 
       try {
         auth = await alfrescoClient.createTicket(username, password);
       } catch (error) {
-        rateLimiter.registerFailure(requestIp, username);
+        await rateLimiter.registerFailure(requestIp, username);
         if (isProviderUnavailableError(error)) {
           auditAuthEvent(logger, 'login_provider_unavailable', { username, ip: requestIp });
           return res.status(503).json(buildError('AUTH_IDP_UNAVAILABLE', 'Identity provider unavailable'));
@@ -135,7 +135,7 @@ function createAuthRouter({ config, sessionRepository, alfrescoClient, now = () 
         return res.status(401).json(buildError('AUTH_INVALID_CREDENTIALS', 'Invalid credentials'));
       }
 
-      rateLimiter.clear(requestIp, username);
+      await rateLimiter.clear(requestIp, username);
 
       const nowTs = now();
       const times = buildSessionTimes(nowTs, config);
@@ -285,9 +285,9 @@ function createAuthRouter({ config, sessionRepository, alfrescoClient, now = () 
 
   router.post('/logout', async (req, res) => {
     const sessionId = req.cookies?.[config.cookieName];
-    clearAuthCookie(res, config.cookieName, config);
 
     if (!sessionId) {
+      clearAuthCookie(res, config.cookieName, config);
       return res.status(200).json({ ok: true });
     }
 
@@ -298,6 +298,7 @@ function createAuthRouter({ config, sessionRepository, alfrescoClient, now = () 
       return res.status(403).json(buildError('AUTH_FORBIDDEN', 'Invalid CSRF token'));
     }
 
+    clearAuthCookie(res, config.cookieName, config);
     await sessionRepository.revokeSession(sessionId, now());
 
     if (session?.ticket) {

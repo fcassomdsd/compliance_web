@@ -4,99 +4,7 @@ import { createRequire } from 'node:module';
 
 const require = createRequire(import.meta.url);
 const { createApp } = require('../../server/app.cjs');
-
-class InMemorySessionRepository {
-  constructor() {
-    this.sessions = new Map();
-    this.groupRoleMap = new Map([
-      ['group_inspector', ['inspector']],
-      ['group_planner', ['planner']],
-      ['group_admin', ['admin']],
-    ]);
-  }
-
-  async ping() {
-    return true;
-  }
-
-  async createSession(session) {
-    this.sessions.set(session.sessionId, { ...session, revokedAt: null });
-  }
-
-  async getSession(sessionId) {
-    return this.sessions.get(sessionId) || null;
-  }
-
-  async rotateSession(oldSessionId, nextSession) {
-    const current = this.sessions.get(oldSessionId);
-    if (!current) {
-      return;
-    }
-
-    this.sessions.delete(oldSessionId);
-    this.sessions.set(nextSession.sessionId, {
-      ...current,
-      sessionId: nextSession.sessionId,
-      csrfSecret: nextSession.csrfSecret,
-      roles: nextSession.roles,
-      lastSeenAt: nextSession.lastSeenAt,
-      lastRoleRefreshAt: nextSession.lastRoleRefreshAt,
-      expiresAtIdle: nextSession.expiresAtIdle,
-      metadata: nextSession.metadata || current.metadata || {},
-    });
-  }
-
-  async touchSession(sessionId, patch) {
-    const current = this.sessions.get(sessionId);
-    if (!current) {
-      return;
-    }
-
-    this.sessions.set(sessionId, {
-      ...current,
-      lastSeenAt: patch.lastSeenAt,
-      expiresAtIdle: patch.expiresAtIdle,
-      lastRoleRefreshAt: patch.lastRoleRefreshAt,
-    });
-  }
-
-  async revokeSession(sessionId, revokedAt) {
-    const current = this.sessions.get(sessionId);
-    if (!current) {
-      return;
-    }
-
-    this.sessions.set(sessionId, {
-      ...current,
-      revokedAt,
-    });
-  }
-
-  async resolveRolesForGroups(groups) {
-    const roleSet = new Set();
-    for (const group of groups || []) {
-      const key = String(group || '').trim().toLowerCase();
-      const mapped = this.groupRoleMap.get(key) || [];
-      for (const role of mapped) {
-        roleSet.add(role);
-      }
-    }
-    return Array.from(roleSet).sort();
-  }
-
-  async updateSessionRoles(sessionId, { roles, lastRoleRefreshAt }) {
-    const current = this.sessions.get(sessionId);
-    if (!current) {
-      return;
-    }
-
-    this.sessions.set(sessionId, {
-      ...current,
-      roles,
-      lastRoleRefreshAt,
-    });
-  }
-}
+const { InMemorySessionRepository } = require('../setup/mocks/InMemorySessionRepository.cjs');
 
 function buildTestApp({ now } = {}) {
   const repo = new InMemorySessionRepository();
@@ -273,7 +181,7 @@ describe('Auth Router Chunk 2 foundation', () => {
     expect(sessionResponse.body.roles).toEqual(['inspector']);
   });
 
-  it('rejects logout when csrf token is invalid', async () => {
+  it('rejects logout when csrf token is invalid and preserves session cookie', async () => {
     const { app } = buildTestApp();
 
     const loginResponse = await request(app)
@@ -288,5 +196,22 @@ describe('Auth Router Chunk 2 foundation', () => {
 
     expect(logoutResponse.status).toBe(403);
     expect(logoutResponse.body.code).toBe('AUTH_FORBIDDEN');
+
+    // Session cookie must NOT be cleared on CSRF failure
+    const setCookieHeader = logoutResponse.headers['set-cookie'];
+    const clearedCookie = setCookieHeader
+      ? setCookieHeader[0].split(';')[0]
+      : null;
+    const isCleared = clearedCookie && clearedCookie.startsWith('compliance_session_id=');
+    expect(isCleared).toBeFalsy();
+
+    // Session must still be valid and usable
+    const sessionResponse = await request(app)
+      .get('/api/auth/session')
+      .set('Cookie', cookie);
+
+    expect(sessionResponse.status).toBe(200);
+    expect(sessionResponse.body.authenticated).toBe(true);
+    expect(sessionResponse.body.user.username).toBe('erin');
   });
 });

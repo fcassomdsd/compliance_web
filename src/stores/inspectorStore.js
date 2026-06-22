@@ -42,12 +42,12 @@ export const useInspectorStore = defineStore('inspectorStore', {
 
       this.loading = true;
 
-      this.specialties = {};
+      this.inspectorSpecialties = {};
       
       try {
 
         const { data: subqueryResults } = await apiEntityCRUD("query", "InspectorSpecialty", null, {deleted : false});
-        if (!("list" in subqueryResults) || (subqueryResults.list.length == 0)) {
+        if (!("list" in subqueryResults) || !Array.isArray(subqueryResults.list)) {
           throw new Error('API query failed');
         }
 

@@ -64,11 +64,22 @@ describe('locationStore', () => {
   });
 
   it('loadLocationServices throws on missing list and resets loading', async () => {
-    vi.mocked(apiServices.apiEntityCRUD).mockResolvedValueOnce({ data: { list: [] }, status: 200 });
+    vi.mocked(apiServices.apiEntityCRUD).mockResolvedValueOnce({ data: { total: 0 }, status: 200 });
 
     const store = useLocationStore();
     await expect(store.loadLocationServices()).rejects.toThrow();
     expect(store.loading).toBe(false);
+  });
+
+  it('loadLocationServices handles empty subquery list gracefully', async () => {
+    vi.mocked(apiServices.apiEntityCRUD)
+      .mockResolvedValueOnce({ data: { list: [] }, status: 200 })
+      .mockResolvedValueOnce({ data: { list: [{ id: 'SVC1', locationId: 'L1' }] }, status: 200 });
+
+    const store = useLocationStore();
+    await store.loadLocationServices();
+    expect(store.loading).toBe(false);
+    expect(store.services['L1']).toBeDefined();
   });
 
   it('getLocationServices sets locationServices from services map', async () => {
