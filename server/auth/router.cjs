@@ -316,6 +316,32 @@ function createAuthRouter({ config, sessionRepository, alfrescoClient, loginRate
     return res.status(200).json({ ok: true });
   });
 
+  router.get('/ticket', async (req, res) => {
+    const sessionId = req.cookies?.[config.cookieName];
+    if (!sessionId) {
+      return res.status(401).json(buildError('AUTH_SESSION_EXPIRED', 'No active session'));
+    }
+
+    const session = await sessionRepository.getSession(sessionId);
+    if (!session || isExpired(session, now())) {
+      clearAuthCookie(res, config.cookieName, config);
+      return res.status(401).json(buildError('AUTH_SESSION_EXPIRED', 'Session expired'));
+    }
+
+    const csrfHeader = readCsrfHeader(req);
+    if (csrfHeader !== session.csrfSecret) {
+      auditAuthEvent(logger, 'csrf_mismatch', { sessionId });
+      return res.status(403).json(buildError('AUTH_FORBIDDEN', 'Invalid CSRF token'));
+    }
+
+    const ticket = ticketProtector.decrypt(session.ticket);
+    if (!ticket) {
+      return res.status(500).json(buildError('AUTH_INTERNAL_ERROR', 'Could not decrypt provider ticket'));
+    }
+
+    return res.status(200).json({ ticket });
+  });
+
   return router;
 }
 
