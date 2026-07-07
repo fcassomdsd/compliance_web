@@ -3,6 +3,16 @@ import { default as axios } from 'axios';
 const apiServer = 'http://localhost:1880';
 const complianceApiServer = import.meta.env.VITE_COMPLIANCE_API_BASE_URL || '/api';
 
+let cachedTicket = null
+
+export function setAlfrescoTicket(ticket) {
+  cachedTicket = ticket || null
+}
+
+function buildNodeRedHeaders() {
+  return cachedTicket ? { 'X-Alfresco-Ticket': cachedTicket } : undefined
+}
+
 /*
 const apiQueryOps = [
   { op : "==", apiOp : "equal"},
@@ -117,7 +127,8 @@ export async function apiEntityCRUD(method, entityName, entityId = null, entityD
 
     const apiConfig = {
       method : apiOp[method].apiMethod,
-      url : `${apiServer}/${method}Entity${apiName}${(apiId ? apiId : "")}`
+      url : `${apiServer}/${method}Entity${apiName}${(apiId ? apiId : "")}`,
+      headers: buildNodeRedHeaders(),
     }
     if (apiData) {
       apiConfig["data"] = apiData;    
@@ -203,7 +214,8 @@ export async function apiEntityLinks(method, entityName, entityId, linkName, ent
 
     const apiConfig = {
       method : apiOp[method].apiMethod,
-      url : `${apiServer}/${method}${apiName}${(apiId ? apiId : "")}${(apiLink ? apiLink : "")}`
+      url : `${apiServer}/${method}${apiName}${(apiId ? apiId : "")}${(apiLink ? apiLink : "")}`,
+      headers: buildNodeRedHeaders(),
     }
     if (apiData) {
       apiConfig["data"] = apiData;    
@@ -224,7 +236,8 @@ export async function apiInspectionPlan(inspectionCode) {
     }
     const result = await axios({
       method: 'get',
-      url: `${apiServer}/inspectionPlan?inspection=${encodeURIComponent(inspectionCode.trim())}`
+      url: `${apiServer}/inspectionPlan?inspection=${encodeURIComponent(inspectionCode.trim())}`,
+      headers: buildNodeRedHeaders(),
     });
     return { data: result.data, status: result.status };
   } catch (error) {
@@ -245,7 +258,8 @@ export async function apiInspectionReport(inspectionCode, reportDate, servicePro
     }
     const result = await axios({
       method: 'get',
-      url: `${apiServer}/inspectionReport?inspection=${encodeURIComponent(inspectionCode.trim())}&reportDate=${encodeURIComponent(reportDate.trim())}&provider=${encodeURIComponent(serviceProviderId.trim())}`
+      url: `${apiServer}/inspectionReport?inspection=${encodeURIComponent(inspectionCode.trim())}&reportDate=${encodeURIComponent(reportDate.trim())}&provider=${encodeURIComponent(serviceProviderId.trim())}`,
+      headers: buildNodeRedHeaders(),
     });
     return { data: result.data, status: result.status };
   } catch (error) {
@@ -262,6 +276,7 @@ export async function apiInspectorByAlfrescoUser(alfrescoUserId) {
     const result = await axios({
       method: 'get',
       url: `${apiServer}/inspector/${encodeURIComponent(alfrescoUserId.trim())}`,
+      headers: buildNodeRedHeaders(),
     });
     return { data: result.data, status: result.status };
   } catch (error) {
@@ -278,6 +293,7 @@ export async function apiInspectionByIdOrCode(inspectionRef) {
     const result = await axios({
       method: 'get',
       url: `${apiServer}/inspection/${encodeURIComponent(inspectionRef.trim())}`,
+      headers: buildNodeRedHeaders(),
     });
     return { data: result.data, status: result.status };
   } catch (error) {
@@ -294,6 +310,7 @@ export async function apiAssignmentGroup(alfrescoGroup) {
     const result = await axios({
       method: 'get',
       url: `${apiServer}/assignmentGroup/${encodeURIComponent(alfrescoGroup.trim())}`,
+      headers: buildNodeRedHeaders(),
     });
     return { data: result.data, status: result.status };
   } catch (error) {
@@ -405,15 +422,15 @@ export async function apiReviewCap(capId, acceptanceStatus, csrfToken) {
   }
 }
 
-export async function apiCreateFollowUpReport(capId, payload, csrfToken) {
+export async function apiCreateFollowUpReport(findingId, payload, csrfToken) {
   try {
-    if (!capId || typeof capId !== 'string') {
-      throw new Error('capId is required');
+    if (!findingId || typeof findingId !== 'string') {
+      throw new Error('findingId is required');
     }
 
     const result = await axios({
       method: 'post',
-      url: `${complianceApiServer}/caps/${encodeURIComponent(capId)}/follow-up-reports`,
+      url: `${complianceApiServer}/findings/${encodeURIComponent(findingId)}/follow-ups`,
       data: payload,
       headers: buildCsrfHeader(csrfToken),
       withCredentials: true,

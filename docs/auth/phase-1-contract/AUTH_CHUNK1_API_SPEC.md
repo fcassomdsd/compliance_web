@@ -119,8 +119,9 @@ Success: 200
 Behavior notes:
 
 1. Endpoint is idempotent.
-2. Provider ticket revocation is async best effort.
-3. Session is revoked server-side immediately even if provider ticket revocation fails.
+2. CSRF token is validated **before** the session cookie is cleared; a CSRF mismatch returns 403 without destroying the session.
+3. Provider ticket revocation is async best effort.
+4. Session is revoked server-side immediately even if provider ticket revocation fails.
 
 ## 5. Cookie Requirements
 

@@ -388,12 +388,12 @@ describe('apiServices', () => {
     });
 
     it('validates and calls follow-up report endpoint', async () => {
-      await expect(apiCreateFollowUpReport('')).rejects.toThrow('apiCreateFollowUpReport: capId is required');
+      await expect(apiCreateFollowUpReport('')).rejects.toThrow('apiCreateFollowUpReport: findingId is required');
 
-      const result = await apiCreateFollowUpReport('CAP-1', { percentComplete: 55 }, 'csrf-token');
+      const result = await apiCreateFollowUpReport('MDPP001-AYVIS-01', { percentComplete: 55 }, 'csrf-token');
       expect(result.data).toEqual({
         method: 'post',
-        url: '/api/caps/CAP-1/follow-up-reports',
+        url: '/api/findings/MDPP001-AYVIS-01/follow-ups',
         data: { percentComplete: 55 },
         headers: { 'x-csrf-token': 'csrf-token' },
         withCredentials: true,
@@ -435,7 +435,7 @@ describe('apiServices', () => {
       await expect(apiReviewCap('CAP-1', 'Accepted')).rejects.toThrow('apiReviewCap: Axios failure');
 
       vi.mocked(axios).mockImplementationOnce(() => { throw new Error('Axios failure'); });
-      await expect(apiCreateFollowUpReport('CAP-1', {})).rejects.toThrow('apiCreateFollowUpReport: Axios failure');
+      await expect(apiCreateFollowUpReport('F-1', {})).rejects.toThrow('apiCreateFollowUpReport: Axios failure');
     });
   });
 });

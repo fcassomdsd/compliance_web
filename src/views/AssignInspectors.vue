@@ -85,7 +85,7 @@
 </template>
 
 <script setup>
-import { onBeforeMount, ref } from 'vue';
+import { onMounted, ref } from 'vue';
 import BaseManager from '@/components/base/BaseManager.vue';
 import { useInspectionStore } from '@/stores/inspectionStore';
 import { useInspectorStore } from '@/stores/inspectorStore';
@@ -109,7 +109,7 @@ const specialtiesList = ref([]); // { key: string, name: string, locationService
 const allowedInspectorList = ref({});
 const assigned = ref({}); // key -> Set of inspector ids
 
-onBeforeMount(async () => {
+onMounted(async () => {
   // load inspections
   await inspectionStore.refreshInspections();
 
@@ -214,12 +214,12 @@ const saveAssignments = async () => {
       
       // process additions
       for (const specKey of Object.keys(toAddAssignments)) {
-        inspectedStore.linkActingInspectors(toAddAssignments[specKey].inspectedSpecialtyId, toAddAssignments[specKey].inspectors);
+        await inspectedStore.linkActingInspectors(toAddAssignments[specKey].inspectedSpecialtyId, toAddAssignments[specKey].inspectors);
       }
 
       // process removals
       for (const specKey of Object.keys(toRemoveAssignments)) {
-        inspectedStore.unlinkActingInspectors(toRemoveAssignments[specKey].inspectedSpecialtyId, toRemoveAssignments[specKey].inspectors);
+        await inspectedStore.unlinkActingInspectors(toRemoveAssignments[specKey].inspectedSpecialtyId, toRemoveAssignments[specKey].inspectors);
       }
 
       toast.success('Inspector assignments saved successfully.');

@@ -64,7 +64,7 @@
 </template>
 
 <script setup>
-import { reactive, onBeforeMount } from 'vue';
+import { reactive, onMounted } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
 import BaseManager from '@/components/base/BaseManager.vue';
 import ScopePicker from '@/components/common/ScopePicker.vue';
@@ -146,7 +146,7 @@ function goToFollowUps(findingId) {
   router.push({ name: 'followUps', query: { findingId } });
 }
 
-onBeforeMount(async () => {
+onMounted(async () => {
   const findingId = String(route.query?.findingId || '').trim();
   if (findingId) {
     scope.findingId = findingId;

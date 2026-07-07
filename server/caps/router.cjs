@@ -1,7 +1,7 @@
 const express = require('express');
 
 const { buildError } = require('../auth/sessionAuth.cjs');
-const { mapCorrectiveActionNode, mapFindingNode, mapFollowUpReportNode } = require('../domain/alfrescoMappers.cjs');
+const { mapCorrectiveActionNode, mapFindingNode, mapFollowUpReportNode, getFollowUpReportsForFinding } = require('../domain/alfrescoMappers.cjs');
 const {
   parseCapId,
   parseFindingId,
@@ -50,16 +50,6 @@ async function getFollowUpReportsForCap({ alfrescoClient, ticket, capNodeId }) {
   const followUpNodes = await alfrescoClient.listChildrenByType({
     ticket,
     parentNodeId: capNodeId,
-    nodeType: 'vso:followUpReport',
-  });
-
-  return followUpNodes.map(mapFollowUpReportNode);
-}
-
-async function getFollowUpReportsForFinding({ alfrescoClient, ticket, findingNodeId }) {
-  const followUpNodes = await alfrescoClient.listChildrenByType({
-    ticket,
-    parentNodeId: findingNodeId,
     nodeType: 'vso:followUpReport',
   });
 

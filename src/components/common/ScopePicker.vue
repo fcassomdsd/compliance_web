@@ -221,19 +221,19 @@ watch(
 watch(
   localScope,
   (value) => {
-    emit('update:modelValue', { ...value });
+    emit('update:modelValue', { ...value, status: value.findingStatus });
   },
   { deep: true }
 );
 
 function emitSearch() {
-  emit('search', { ...localScope });
+  emit('search', { ...localScope, status: localScope.findingStatus });
 }
 
 function resetScope() {
   Object.assign(localScope, createScopeState());
-  emit('update:modelValue', { ...localScope });
-  emit('reset', { ...localScope });
+  emit('update:modelValue', { ...localScope, status: localScope.findingStatus });
+  emit('reset', { ...localScope, status: localScope.findingStatus });
 }
 </script>
 

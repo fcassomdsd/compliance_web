@@ -75,7 +75,7 @@ Access:
 1. Frontend: http://localhost:8080
 2. Backend and PostgreSQL are internal-only (not exposed on host ports)
 
-In prod profile, nginx proxies `/api/auth` to the backend service.
+In prod profile, nginx proxies all `/api/` routes to the backend service.
 
 ## Stop and Remove Containers
 

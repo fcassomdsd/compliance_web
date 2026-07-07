@@ -172,7 +172,7 @@ export const useInspectionStore = defineStore('inspection', {
       this.loading = true;
       try {
         const { data: queryResults } = await apiEntityCRUD('query', 'Inspection', null, { deleted: false });
-        if (!('list' in queryResults) || queryResults.list.length === 0) throw new Error('API query failed');
+        if (!('list' in queryResults) || !Array.isArray(queryResults.list)) throw new Error('API query failed');
         this.inspections = [];
         for (const entity of queryResults.list) {
           const obj = {

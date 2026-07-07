@@ -4,16 +4,7 @@ import { createRequire } from 'node:module';
 
 const require = createRequire(import.meta.url);
 const { createApp } = require('../../server/app.cjs');
-
-class InMemorySessionRepository {
-  constructor(session) {
-    this.sessions = new Map([[session.sessionId, session]]);
-  }
-
-  async getSession(sessionId) {
-    return this.sessions.get(sessionId) || null;
-  }
-}
+const { InMemorySessionRepository } = require('../setup/mocks/InMemorySessionRepository.cjs');
 
 function buildFixture() {
   const findingNode = {
@@ -58,7 +49,7 @@ function buildFixture() {
   };
 }
 
-function buildApp({ roles = ['cap_entry'], now = new Date('2026-04-03T10:00:00.000Z') } = {}) {
+async function buildApp({ roles = ['cap_entry'], now = new Date('2026-04-03T10:00:00.000Z') } = {}) {
   const fixture = buildFixture();
 
   const session = {
@@ -72,7 +63,8 @@ function buildApp({ roles = ['cap_entry'], now = new Date('2026-04-03T10:00:00.0
     expiresAtAbsolute: new Date('2026-04-04T12:00:00.000Z'),
   };
 
-  const sessionRepository = new InMemorySessionRepository(session);
+  const sessionRepository = new InMemorySessionRepository();
+  await sessionRepository.createSession(session);
 
   const alfrescoClient = {
     searchNodes: async ({ query }) => {
@@ -199,7 +191,7 @@ function buildApp({ roles = ['cap_entry'], now = new Date('2026-04-03T10:00:00.0
 
 describe('Findings and CAP API', () => {
   it('returns effective Overdue status as calculated value for expired deadline', async () => {
-    const { app } = buildApp({ roles: ['inspector'] });
+    const { app } = await buildApp({ roles: ['inspector'] });
 
     const response = await request(app)
       .get('/api/findings')
@@ -214,7 +206,7 @@ describe('Findings and CAP API', () => {
   });
 
   it('creates CAP for eligible finding and forces Pending Review acceptance status', async () => {
-    const { app } = buildApp({ roles: ['cap_entry'] });
+    const { app } = await buildApp({ roles: ['cap_entry'] });
 
     const response = await request(app)
       .post('/api/findings/MDPP001-AYVIS-01/caps')
@@ -233,7 +225,7 @@ describe('Findings and CAP API', () => {
   });
 
   it('allows inspector review and updates CAP acceptance status', async () => {
-    const { app } = buildApp({ roles: ['inspector'] });
+    const { app } = await buildApp({ roles: ['inspector'] });
 
     const response = await request(app)
       .patch('/api/caps/CA-MDPP001AYVIS-01-01/review')
@@ -248,7 +240,7 @@ describe('Findings and CAP API', () => {
   });
 
   it('registers follow-up report and closes finding when closure is effective', async () => {
-    const { app, fixture } = buildApp({ roles: ['inspector'] });
+    const { app, fixture } = await buildApp({ roles: ['inspector'] });
 
     const response = await request(app)
       .post('/api/findings/MDPP001-AYVIS-01/follow-ups')
@@ -273,7 +265,7 @@ describe('Findings and CAP API', () => {
   });
 
   it('returns follow-ups using finding-first scope with status semantics and paging metadata', async () => {
-    const { app, fixture } = buildApp({ roles: ['inspector'] });
+    const { app, fixture } = await buildApp({ roles: ['inspector'] });
 
     fixture.followUpNodes = [
       {

@@ -93,3 +93,30 @@ WHERE revoked_at IS NULL
 -- WHERE revoked_at IS NOT NULL
 --    OR expires_at_idle <= NOW()
 --    OR expires_at_absolute <= NOW();
+
+-- 4) Login rate limiting (PostgreSQL-backed, shared across instances)
+CREATE TABLE IF NOT EXISTS auth_login_attempt (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  attempt_key TEXT NOT NULL UNIQUE,
+  count INTEGER NOT NULL DEFAULT 0,
+  window_start TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  blocked_until TIMESTAMPTZ,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_login_attempt_key
+  ON auth_login_attempt (attempt_key);
+
+-- 5) Auth audit event log
+CREATE TABLE IF NOT EXISTS auth_audit_event (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  category TEXT NOT NULL DEFAULT 'auth',
+  event TEXT NOT NULL,
+  details JSONB NOT NULL DEFAULT '{}'::jsonb,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_audit_event_category
+  ON auth_audit_event (category);
+CREATE INDEX IF NOT EXISTS idx_audit_event_created_at
+  ON auth_audit_event (created_at);

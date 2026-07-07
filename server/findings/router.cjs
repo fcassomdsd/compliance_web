@@ -1,7 +1,7 @@
 const express = require('express');
 
 const { buildError } = require('../auth/sessionAuth.cjs');
-const { mapFindingNode, mapFollowUpReportNode } = require('../domain/alfrescoMappers.cjs');
+const { mapFindingNode, mapFollowUpReportNode, getFollowUpReportsForFinding } = require('../domain/alfrescoMappers.cjs');
 const { parseFollowUpId, buildFollowUpIdFromFinding } = require('../domain/idFormats.cjs');
 const { FINDING_STATUS } = require('../domain/statusRules.cjs');
 const { computeEffectiveFindingStatus } = require('../domain/statusRules.cjs');
@@ -46,15 +46,6 @@ function buildFindingsQuery(filters = {}) {
   }
 
   return predicates.join(' AND ');
-}
-
-async function getFollowUpReportsForFinding({ alfrescoClient, ticket, findingNodeId }) {
-  const followUpNodes = await alfrescoClient.listChildrenByType({
-    ticket,
-    parentNodeId: findingNodeId,
-    nodeType: 'vso:followUpReport',
-  });
-  return followUpNodes.map(mapFollowUpReportNode);
 }
 
 function parsePositiveInt(value, fallback, { min = 1, max = 1000 } = {}) {
