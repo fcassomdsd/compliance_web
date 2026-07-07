@@ -10,7 +10,7 @@ export function setAlfrescoTicket(ticket) {
 }
 
 function buildNodeRedHeaders() {
-  return cachedTicket ? { 'X-Alfresco-Ticket': cachedTicket } : {}
+  return cachedTicket ? { 'X-Alfresco-Ticket': cachedTicket } : undefined
 }
 
 /*
