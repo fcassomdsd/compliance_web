@@ -2,6 +2,17 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.2.1] - 2026-08-01
+
+### Added
+- Added `GET /api/auth/ticket` endpoint (CSRF-protected) returning decrypted Alfresco ticket
+- Added `X-Alfresco-Ticket` header forwarding to all Node-RED API calls
+- Added `authTicket()` service function and `buildNodeRedHeaders()` helper
+- Added `refreshServiceTicket()` to authStore, called after login and session init
+
+### Fixed
+- Fixed `buildNodeRedHeaders()` returning `{}` instead of `undefined` when no ticket cached (axios treats `headers: undefined` as omission)
+
 ## [0.2.0] - 2026-06-21
 
 ### Added
