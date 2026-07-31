@@ -119,14 +119,14 @@ describe('ChecklistManager Component', () => {
           code: '2026-001',
           locationName: 'Location A',
           locationId: 'LOC1',
-          status: 'Abierta',
-        },
-        {
-          id: 'INS2',
-          code: '2026-002',
-          locationName: 'Location B',
-          locationId: 'LOC2',
-          status: 'Abierta',
+           status: 'Assigned',
+         },
+         {
+           id: 'INS2',
+           code: '2026-002',
+           locationName: 'Location B',
+           locationId: 'LOC2',
+           status: 'Assigned',
         },
       ],
     };
