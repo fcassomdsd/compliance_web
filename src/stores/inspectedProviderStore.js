@@ -17,8 +17,9 @@ export const useInspectedProviderStore = defineStore('inspectedProvider', {
           'query', 'InspectedProvider', null,
           { deleted: false, inspectionId },
         );
-        if (!('list' in queryResults) || !Array.isArray(queryResults.list)) {
-          throw new Error('API query failed');
+        if (!queryResults || typeof queryResults !== 'object' || !('list' in queryResults) || !Array.isArray(queryResults.list)) {
+          this.inspectedProviders[inspectionId] = [];
+          return;
         }
         this.inspectedProviders[inspectionId] = queryResults.list.map((entity) => ({
           id: entity.id,
@@ -28,7 +29,7 @@ export const useInspectedProviderStore = defineStore('inspectedProvider', {
           name: entity.name,
         }));
       } catch (error) {
-        throw new Error('getInspectedProviders: ' + error.message);
+        this.inspectedProviders[inspectionId] = [];
       } finally {
         this.loading = false;
       }
