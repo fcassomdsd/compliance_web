@@ -1,5 +1,6 @@
 import { defineStore } from 'pinia';
 import { apiEntityCRUD } from '@/services/apiServices';
+import { INSPECTION_STATUS, canInactivate, isActive } from '@/utils/inspectionStatus';
 
 const GENERATED_CODE_PATTERN = /^([A-Za-z0-9]{4})-(\d{3})$/;
 
@@ -70,6 +71,10 @@ export const useInspectionStore = defineStore('inspection', {
 
         const nextSequence = (maxSequence + 1).toString().padStart(3, '0');
         addData.code = `${locationIcaoCode}-${nextSequence}`;
+
+        if (!addData.status || addData.status === INSPECTION_STATUS.INACTIVE) {
+          addData.status = INSPECTION_STATUS.CREATED;
+        }
 
         const { data: addedInspection } = await apiEntityCRUD('add', 'Inspection', null, addData);
         if (!addedInspection || !('id' in addedInspection)) {
@@ -157,9 +162,89 @@ export const useInspectionStore = defineStore('inspection', {
       }
     },
 
+    async inactivateInspection(id) {
+      try {
+        if (!id || (typeof id !== 'string')) throw new Error('Invalid ID : ' + id?.toString());
+
+        const { data: currentQuery } = await apiEntityCRUD('query', 'Inspection', null, { id });
+        if (!('list' in currentQuery) || currentQuery.list.length === 0) {
+          throw new Error('Could not find inspection to inactivate');
+        }
+
+        const currentStatus = currentQuery.list[0].status;
+        if (!canInactivate(currentStatus)) {
+          throw new Error('Inspections at ' + currentStatus + ' status or beyond cannot be inactivated.');
+        }
+
+        await apiEntityCRUD('update', 'Inspection', id, { status: INSPECTION_STATUS.INACTIVE });
+
+        const index = this.inspections.findIndex((p) => p.id === id);
+        if (index !== -1) {
+          this.inspections[index].status = INSPECTION_STATUS.INACTIVE;
+        }
+      } catch (error) {
+        throw new Error('inactivateInspection: ' + error.message);
+      }
+    },
+
+    async reactivateInspection(id) {
+      try {
+        if (!id || (typeof id !== 'string')) throw new Error('Invalid ID : ' + id?.toString());
+
+        const { data: currentQuery } = await apiEntityCRUD('query', 'Inspection', null, { id });
+        if (!('list' in currentQuery) || currentQuery.list.length === 0) {
+          throw new Error('Could not find inspection to reactivate');
+        }
+
+        const currentStatus = currentQuery.list[0].status;
+        if (currentStatus !== INSPECTION_STATUS.INACTIVE) {
+          throw new Error('Only inactive inspections can be reactivated.');
+        }
+
+        await apiEntityCRUD('update', 'Inspection', id, { status: INSPECTION_STATUS.CREATED });
+
+        const index = this.inspections.findIndex((p) => p.id === id);
+        if (index !== -1) {
+          this.inspections[index].status = INSPECTION_STATUS.CREATED;
+        }
+      } catch (error) {
+        throw new Error('reactivateInspection: ' + error.message);
+      }
+    },
+
+    async updateInspectionStatus(id, newStatus) {
+      try {
+        if (!id || (typeof id !== 'string')) throw new Error('Invalid ID : ' + id?.toString());
+        if (!newStatus || (typeof newStatus !== 'string')) throw new Error('Invalid status value');
+
+        await apiEntityCRUD('update', 'Inspection', id, { status: newStatus });
+
+        const index = this.inspections.findIndex((p) => p.id === id);
+        if (index !== -1) {
+          this.inspections[index].status = newStatus;
+        }
+      } catch (error) {
+        throw new Error('updateInspectionStatus: ' + error.message);
+      }
+    },
+
     async deleteInspection(id) {
       try {
         if (!id || (typeof id !== 'string')) throw new Error('Invalid ID : ' + id?.toString());
+
+        const { data: currentQuery } = await apiEntityCRUD('query', 'Inspection', null, { id });
+        if (('list' in currentQuery) && currentQuery.list.length > 0) {
+          const currentStatus = currentQuery.list[0].status;
+          if (isActive(currentStatus)) {
+            await apiEntityCRUD('update', 'Inspection', id, { status: INSPECTION_STATUS.INACTIVE });
+            const index = this.inspections.findIndex((p) => p.id === id);
+            if (index !== -1) {
+              this.inspections[index].status = INSPECTION_STATUS.INACTIVE;
+            }
+            return;
+          }
+        }
+
         const { data: result } = await apiEntityCRUD('delete', 'Inspection', id);
         if (!result) throw new Error('API call for "delete" unsuccessful');
         this.inspections = this.inspections.filter((p) => p.id !== id);

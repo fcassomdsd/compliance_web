@@ -37,7 +37,7 @@ describe('Inspection Store', () => {
       endDate : '2025-03-27',
       objective : 'objective',
       scope : 'scope',
-      status : 'Cerrada',
+      status : 'Created',
       locationId : 'Location123',
       locationName : 'Location 1',
     }
@@ -49,7 +49,7 @@ describe('Inspection Store', () => {
       endDate : '2025-03-28',
       objective : 'modified objective',
       scope : 'modified scope',
-      status : 'Cerrada',
+      status : 'Created',
       locationId : 'Location123',
       locationName : 'Location 1',
     }
@@ -61,7 +61,7 @@ describe('Inspection Store', () => {
       endDate : '2025-03-27',
       objective : 'objective',
       scope : 'scope',
-      status : 'Cerrada',
+      status : 'Created',
       locationId : 'Location123',
       locationName : 'Location 1',
     }
@@ -73,7 +73,7 @@ describe('Inspection Store', () => {
       endDate : '2025-03-28',
       objective : 'modified objective',
       scope : 'modified scope',
-      status : 'Cerrada',
+      status : 'Created',
       locationId : 'Location123',
       locationName : 'Location 1',
     }
@@ -85,7 +85,7 @@ describe('Inspection Store', () => {
       endDate : '2025-03-27',
       objective : 'objective',
       scope : 'scope',
-      status : 'Cerrada',
+      status : 'Created',
       locationId : 'Location123',
     }
 
@@ -109,7 +109,7 @@ describe('Inspection Store', () => {
       endDate : '2025-03-27',
       objective : 'objective',
       scope : 'scope',
-      status : 'Cerrada',
+      status : 'Created',
       locationId : 'Location123',
     };
       
@@ -119,7 +119,7 @@ describe('Inspection Store', () => {
       endDate : '2025-03-28',
       objective : 'modified objective',
       scope : 'modified scope',
-      status : 'Cerrada',
+      status : 'Created',
       locationId : 'Location123',
       locationName : 'Location 1',
     };
@@ -425,12 +425,13 @@ describe('Inspection Store', () => {
   });
 
   describe('deleteInspection', () => { 
-    it('correctly deletes inspection with valid parameters', async () => {
+    it('inactivates active inspection and keeps it in the store', async () => {
 
       store.inspections = [mockAddedRecord];    
 
       await store.deleteInspection("ID123");
-      expect(store.inspections).toEqual([]);
+      expect(store.inspections).toHaveLength(1);
+      expect(store.inspections[0].status).toBe('Inactive');
       
     });
 
@@ -445,14 +446,23 @@ describe('Inspection Store', () => {
 
     });
 
-    it('handles invalid delete result', async () => {
+    it('handles invalid delete result for already inactive inspection', async () => {
 
-      store.inspections = [mockAddedRecord];    
-      vi.mocked(apiEntityCRUD).mockResolvedValueOnce({ data: false, status: 200 });
+      const inactiveRecord = { ...mockAddedRecord, status: 'Inactive' };
+      store.inspections = [inactiveRecord];
+
+      vi.mocked(apiEntityCRUD).mockImplementation((method, entity, id, data) => {
+        if (method === 'query' && entity === 'Inspection' && data?.id === 'ID123') {
+          return { data: { list: [inactiveRecord] }, status: 200 };
+        }
+        if (method === 'delete') {
+          return { data: false, status: 200 };
+        }
+        return { data: { list: [] }, status: 200 };
+      });
+
       await expect(store.deleteInspection("ID123")).rejects.toThrow('deleteInspection: API call for "delete" unsuccessful');
-      expect(store.inspections).toEqual([mockAddedRecord]);
-      expect(apiEntityCRUD).toHaveBeenCalledWith("delete","Inspection","ID123");
-      expect(apiEntityCRUD).toHaveBeenCalledTimes(1);
+      expect(store.inspections).toEqual([inactiveRecord]);
 
     });
 

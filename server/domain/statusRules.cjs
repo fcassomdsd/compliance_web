@@ -15,6 +15,59 @@ const CAP_ACCEPTANCE_STATUS = Object.freeze({
   RETURNED_FOR_REVISION: 'Returned',
 });
 
+const INSPECTION_STATUS = Object.freeze({
+  CREATED: 'Created',
+  DEFINED: 'Defined',
+  ASSIGNED: 'Assigned',
+  PLANNED: 'Planned',
+  UPLOADED: 'Uploaded',
+  REPORTED: 'Reported',
+  COMPLETE: 'Complete',
+  INACTIVE: 'Inactive',
+});
+
+const INSPECTION_STATUS_ORDER = [
+  INSPECTION_STATUS.CREATED,
+  INSPECTION_STATUS.DEFINED,
+  INSPECTION_STATUS.ASSIGNED,
+  INSPECTION_STATUS.PLANNED,
+  INSPECTION_STATUS.UPLOADED,
+  INSPECTION_STATUS.REPORTED,
+  INSPECTION_STATUS.COMPLETE,
+];
+
+function getInspectionStatusIndex(status) {
+  return INSPECTION_STATUS_ORDER.indexOf(status);
+}
+
+function canInspectionTransitionTo(currentStatus, targetStatus) {
+  if (!currentStatus || !targetStatus) {
+    return false;
+  }
+  const currentIdx = getInspectionStatusIndex(currentStatus);
+  const targetIdx = getInspectionStatusIndex(targetStatus);
+  if (currentIdx === -1 || targetIdx === -1) {
+    return false;
+  }
+  return targetIdx === currentIdx + 1;
+}
+
+function canInactivateInspection(status) {
+  if (status === INSPECTION_STATUS.INACTIVE) {
+    return false;
+  }
+  const idx = getInspectionStatusIndex(status);
+  return idx >= 0 && idx < getInspectionStatusIndex(INSPECTION_STATUS.UPLOADED);
+}
+
+function isInspectionReadOnly(status) {
+  return status === INSPECTION_STATUS.COMPLETE || status === INSPECTION_STATUS.INACTIVE;
+}
+
+function isInspectionActive(status) {
+  return status !== null && status !== INSPECTION_STATUS.INACTIVE;
+}
+
 function parseIsoDate(value) {
   if (!value || typeof value !== 'string') {
     return null;
@@ -95,6 +148,12 @@ function isValidCapAcceptanceStatus(status) {
 module.exports = {
   FINDING_STATUS,
   CAP_ACCEPTANCE_STATUS,
+  INSPECTION_STATUS,
+  INSPECTION_STATUS_ORDER,
+  canInspectionTransitionTo,
+  canInactivateInspection,
+  isInspectionReadOnly,
+  isInspectionActive,
   parseIsoDate,
   isClosedByFollowUp,
   computeEffectiveFindingStatus,

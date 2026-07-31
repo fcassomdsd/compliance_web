@@ -33,7 +33,8 @@
       </div>      
       <div class="grid-cell7 grid-item">
         <label for="status">Status:</label>
-        <span id="status"> {{ newInspection.status }} </span>
+        <span id="status" :class="statusBadgeClass" v-if="newInspection.status"> {{ newInspection.status }} </span>
+        <span id="status" class="status-badge status-none" v-else> N/A </span>
       </div>      
       <div class="grid-cell8 grid-item">
         <label for="mainInspector">Main Inspector:</label>
@@ -55,15 +56,21 @@
       </div>      
       <div class="input-buttons">
         <button id="addBtn" @click="startAdd" :disabled="appState != 'viewing'"><img :src="addImg" alt="Add" class="icon-btn" /></button>
-        <button id="editBtn" @click="appState = 'editing'" :disabled="newInspection.id == null || appState != 'viewing'"><img :src="editImg" alt="Edit" class="icon-btn" /></button>
+        <button id="editBtn" @click="appState = 'editing'" :disabled="newInspection.id == null || appState != 'viewing' || !canEditBasicValues(newInspection.status)"><img :src="editImg" alt="Edit" class="icon-btn" /></button>
         <button id="saveBtn" @click="saveEdit(newInspection)" :disabled="(appState != 'editing' || !newInspection.valid())"><img :src="saveImg" alt="Save" class="icon-btn" /></button>
         <button id="cancelBtn" @click="cancelEdit()" :disabled="appState != 'editing'"><img :src="cancelImg" alt="Cancel" class="icon-btn" /></button>
       </div>
     </div>
     <div class="detail-group">
       <div class="detail-buttons">
-        <button id="services" class="push-button" :class="{'button-down' : servicesState}" :disabled="appState == 'editing' || !newInspection.id" @click="toggleServices()">Services</button>
-        <button id="schedules" class="push-button" :class="{'button-down' : schedulesState}" :disabled="appState == 'editing' || !newInspection.id" @click="toggleSchedules()">Schedules</button>
+        <button id="services" class="push-button" :class="{'button-down' : servicesState}" :disabled="(appState == 'editing' || !newInspection.id || !canAssignServices(newInspection.status))" @click="toggleServices()">Services</button>
+        <button id="schedules" class="push-button" :class="{'button-down' : schedulesState}" :disabled="(appState == 'editing' || !newInspection.id || !canAssignServices(newInspection.status))" @click="toggleSchedules()">Schedules</button>
+        <button
+          v-if="newInspection.id && newInspection.status === INSPECTION_STATUS.INACTIVE && canManageStatus"
+          id="reactivateBtn" class="push-button" @click="reactivateInspection()">Reactivate</button>
+        <button
+          v-if="newInspection.id && canInactivate(newInspection.status) && canManageStatus"
+          id="inactivateBtn" class="push-button push-button-warning" @click="inactivateInspection()">Inactivate</button>
       </div>
       <div id="services" class="service-group" v-show="servicesState" >
         <table class="service-table">
@@ -168,7 +175,7 @@
         </tr>
       </thead>
       <tbody>
-        <tr v-for="inspection in store.inspections" :key="inspection.id">
+        <tr v-for="inspection in store.inspections" :key="inspection.id" :class="{ 'inactive-row': inspection.status === INSPECTION_STATUS.INACTIVE }">
           <td :id="`code-${inspection.id}`">
             {{ inspection?.code }}
           </td>
@@ -186,7 +193,7 @@
                 :disabled="appState !== 'viewing'">
                 <img :src="viewImg" alt="View" class="icon-btn"/>
               </button>
-              <button :id="`delete-${inspection.id}`" @click="deleteInspection(inspection.id)" :disabled="appState !== 'viewing'"><img :src="deleteImg" alt="Delete" class="icon-btn" /></button>
+              <button :id="`delete-${inspection.id}`" @click="removeInspection(inspection)" :disabled="appState !== 'viewing'"><img :src="deleteImg" alt="Delete" class="icon-btn" /></button>
             </div>
           </td> 
         </tr>
@@ -198,14 +205,23 @@
 </template>
 
 <script setup>
-import { ref } from 'vue';
+import { ref, computed } from 'vue';
 import BaseManager from '@/components/base/BaseManager.vue';
 import { useInspectionStore } from '@/stores/inspectionStore';
 import { useInspectedSpecialtyStore } from '@/stores/inspectedSpecialtyStore';
 import { useLocationStore } from '@/stores/locationStore';
 import { useInspectorStore } from '@/stores/inspectorStore';
+import { useAuthStore } from '@/stores/authStore';
 import { useToast } from 'vue-toastification';
 import { apiEntityCRUD } from '@/services/apiServices';
+import {
+  INSPECTION_STATUS,
+  isReadOnly,
+  canEditBasicValues,
+  canAssignServices,
+  canInactivate,
+  isActive,
+} from '@/utils/inspectionStatus';
 import editImg from '@/assets/images/icons/edit.png';
 import deleteImg from '@/assets/images/icons/trash.png';
 import saveImg from '@/assets/images/icons/save.png';
@@ -217,6 +233,7 @@ const store = useInspectionStore();
 const locationStore = useLocationStore();
 const inspectorStore = useInspectorStore();
 const iSpecialtyStore = useInspectedSpecialtyStore();
+const authStore = useAuthStore();
 const toast = useToast();
 const appState = ref('viewing');
 const servicesState = ref(false);
@@ -228,6 +245,26 @@ const currentSchedule = ref({ name: '', startDateTime: '', endDateTime: '' });
 const editingScheduleIndex = ref(null);
 const schedulesChanged = ref(false);
 const NONE_VALUE = ref("NONE");
+
+const canManageStatus = computed(() => {
+  return authStore.hasRole('admin') || authStore.hasRole('planner');
+});
+
+const statusBadgeClass = computed(() => {
+  const status = newInspection.value.status;
+  if (!status) return 'status-badge status-none';
+  const classMap = {
+    [INSPECTION_STATUS.CREATED]: 'status-badge status-created',
+    [INSPECTION_STATUS.DEFINED]: 'status-badge status-defined',
+    [INSPECTION_STATUS.ASSIGNED]: 'status-badge status-assigned',
+    [INSPECTION_STATUS.PLANNED]: 'status-badge status-planned',
+    [INSPECTION_STATUS.UPLOADED]: 'status-badge status-uploaded',
+    [INSPECTION_STATUS.REPORTED]: 'status-badge status-reported',
+    [INSPECTION_STATUS.COMPLETE]: 'status-badge status-complete',
+    [INSPECTION_STATUS.INACTIVE]: 'status-badge status-inactive',
+  };
+  return classMap[status] || 'status-badge';
+});
 const DEFAULT_INSPECTION = {
   id : null,
   code : '',
@@ -317,14 +354,78 @@ const viewElement = (inspectionData) => {
   appState.value = 'viewing';
 }
 
-const deleteInspection = async (id) => {
-  if (confirm('Are you sure you want to delete this inspection?')) {
+const removeInspection = async (inspection) => {
+  if (isActive(inspection.status)) {
+    if (confirm('Inactivate this inspection? It will remain in the system but will not be available for operations.')) {
+      try {
+        await store.inactivateInspection(inspection.id);
+        toast.success("Inspection inactivated");
+      } catch (error) {
+        toast.error("Could not inactivate inspection: " + error.message);
+        await store.refreshInspections();
+      }
+    }
+  } else {
+    if (confirm('Permanently delete this inspection? This action cannot be undone.')) {
+      try {
+        await store.deleteInspection(inspection.id);
+        toast.success("Inspection permanently deleted");
+      } catch (error) {
+        toast.error("Could not delete inspection: " + error.message);
+        await store.refreshInspections();
+      }
+    }
+  }
+};
+
+const inactivateInspection = async () => {
+  if (confirm('Inactivate this inspection? It will remain in the system but will not be available for operations.')) {
     try {
-      await store.deleteInspection(id);
-      toast.success("Inspection deleted");
-    } catch(error) {
-      toast.error("Could not delete inspection: " + error.message);
+      await store.inactivateInspection(newInspection.value.id);
+      toast.success("Inspection inactivated");
+      Object.assign(newInspection.value, store.inspections.find(x => x.id === newInspection.value.id));
+    } catch (error) {
+      toast.error("Could not inactivate inspection: " + error.message);
       await store.refreshInspections();
+    }
+  }
+};
+
+const reactivateInspection = async () => {
+  if (confirm('Reactivate this inspection?')) {
+    try {
+      await store.reactivateInspection(newInspection.value.id);
+      toast.success("Inspection reactivated");
+      Object.assign(newInspection.value, store.inspections.find(x => x.id === newInspection.value.id));
+    } catch (error) {
+      toast.error("Could not reactivate inspection: " + error.message);
+      await store.refreshInspections();
+    }
+  }
+};
+
+const checkAndTransitionToDefined = async () => {
+  const currentStatus = newInspection.value.status;
+  if (currentStatus !== INSPECTION_STATUS.CREATED) return;
+
+  const hasServices = iSpecialtyStore.inspectedServices
+    && Object.keys(iSpecialtyStore.inspectedServices).length > 0;
+
+  let hasSchedules = false;
+  try {
+    const { data: scheduleQuery } = await apiEntityCRUD('query', 'InspectionSchedule', null, { inspectionId: newInspection.value.id });
+    hasSchedules = ('list' in scheduleQuery) && scheduleQuery.list.length > 0;
+  } catch {
+    hasSchedules = false;
+  }
+
+  if (hasServices && hasSchedules) {
+    try {
+      await store.updateInspectionStatus(newInspection.value.id, INSPECTION_STATUS.DEFINED);
+      newInspection.value.status = INSPECTION_STATUS.DEFINED;
+      toast.success("Inspection status updated to Defined");
+    } catch (error) {
+      toast.warning("Could not update status to Defined: " + error.message);
     }
   }
 };
@@ -361,6 +462,7 @@ const toggleServices = async () => {
           }
         }
         toast.success("Services saved!");
+        await checkAndTransitionToDefined();
       } catch (error) {
         toast.error("Could not save changes to services: " + error.message);      
       }
@@ -511,6 +613,7 @@ const saveSchedules = async () => {
     originalSchedules.value = JSON.parse(JSON.stringify(schedules.value));
     schedulesChanged.value = false;
     toast.success("Schedules saved successfully!");
+    await checkAndTransitionToDefined();
   } catch (error) {
     toast.error("Could not save schedules: " + error.message);
   }
@@ -814,6 +917,79 @@ input:focus {
 
 .actions-cell {
   text-align : center;
+}
+
+.push-button-warning {
+  background-color: var(--warning-color, #e65100);
+  color: white;
+}
+
+.push-button-warning:hover {
+  background-color: #bf360c;
+  box-shadow: 0 4px 8px rgba(230, 81, 0, 0.3);
+}
+
+.status-badge {
+  padding: 0.25rem 0.75rem;
+  border-radius: 12px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  display: inline-block;
+  text-align: center;
+  min-width: 80px;
+}
+
+.status-none {
+  background-color: #e0e0e0;
+  color: #757575;
+}
+
+.status-created {
+  background-color: #e3f2fd;
+  color: #1565c0;
+}
+
+.status-defined {
+  background-color: #e8eaf6;
+  color: #283593;
+}
+
+.status-assigned {
+  background-color: #fff3e0;
+  color: #e65100;
+}
+
+.status-planned {
+  background-color: #e8f5e9;
+  color: #2e7d32;
+}
+
+.status-uploaded {
+  background-color: #f3e5f5;
+  color: #7b1fa2;
+}
+
+.status-reported {
+  background-color: #e0f2f1;
+  color: #00695c;
+}
+
+.status-complete {
+  background-color: #e8f5e9;
+  color: #1b5e20;
+}
+
+.status-inactive {
+  background-color: #f5f5f5;
+  color: #9e9e9e;
+}
+
+.inactive-row {
+  opacity: 0.5;
+}
+
+.inactive-row td {
+  text-decoration: line-through;
 }
   
 

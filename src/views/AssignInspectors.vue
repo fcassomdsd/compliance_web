@@ -68,7 +68,7 @@
           </tr>
         </thead>
         <tbody>
-          <tr v-for="inspection in inspectionStore.inspections" :key="inspection.id">
+          <tr v-for="inspection in assignableInspections" :key="inspection.id">
             <td>{{ inspection?.code }}</td>
             <td>{{ inspection?.locationName }}</td>
             <td>{{ inspection?.startDate }}</td>
@@ -85,7 +85,7 @@
 </template>
 
 <script setup>
-import { onMounted, ref } from 'vue';
+import { onMounted, ref, computed } from 'vue';
 import BaseManager from '@/components/base/BaseManager.vue';
 import { useInspectionStore } from '@/stores/inspectionStore';
 import { useInspectorStore } from '@/stores/inspectorStore';
@@ -97,6 +97,7 @@ import saveImg from '@/assets/images/icons/save.png';
 import cancelImg from '@/assets/images/icons/cancel.png';
 import viewImg from '@/assets/images/icons/view.png';
 import { apiEntityLinks } from '@/services/apiServices';
+import { INSPECTION_STATUS, canAssignInspectors, isActive, shouldRevertToAssignedOnReassign } from '@/utils/inspectionStatus';
 
 const inspectionStore = useInspectionStore();
 const inspectorStore = useInspectorStore();
@@ -108,6 +109,12 @@ const currentInspection = ref(null);
 const specialtiesList = ref([]); // { key: string, name: string, locationServiceId }
 const allowedInspectorList = ref({});
 const assigned = ref({}); // key -> Set of inspector ids
+
+const assignableInspections = computed(() => {
+  return inspectionStore.inspections.filter(
+    (i) => canAssignInspectors(i.status) && isActive(i.status)
+  );
+});
 
 onMounted(async () => {
   // load inspections
@@ -223,6 +230,16 @@ const saveAssignments = async () => {
       }
 
       toast.success('Inspector assignments saved successfully.');
+
+      if (currentInspection.value.status === INSPECTION_STATUS.DEFINED) {
+        await inspectionStore.updateInspectionStatus(currentInspection.value.id, INSPECTION_STATUS.ASSIGNED);
+        currentInspection.value.status = INSPECTION_STATUS.ASSIGNED;
+        toast.success('Inspection status updated to Assigned');
+      } else if (shouldRevertToAssignedOnReassign(currentInspection.value.status)) {
+        await inspectionStore.updateInspectionStatus(currentInspection.value.id, INSPECTION_STATUS.ASSIGNED);
+        currentInspection.value.status = INSPECTION_STATUS.ASSIGNED;
+        toast.success('Inspection status reverted to Assigned');
+      }
     } catch (error) {
       toast.error('Could not save assignments: ' + error.message);
     }

@@ -67,7 +67,7 @@
           </tr>
         </thead>
         <tbody>
-          <tr v-for="inspection in inspectionStore.inspections" :key="inspection.id"
+          <tr v-for="inspection in reportEligibleInspections" :key="inspection.id"
               :class="{ 'selected-row': selectedInspection?.id === inspection.id }">
             <td>{{ inspection.code }}</td>
             <td>{{ inspection.locationName }}</td>
@@ -94,6 +94,7 @@ import { useInspectedSpecialtyStore } from '@/stores/inspectedSpecialtyStore';
 import { useAuthStore } from '@/stores/authStore';
 import { useToast } from 'vue-toastification';
 import { apiInspectionByIdOrCode, apiInspectionReport } from '@/services/apiServices';
+import { canGenerateReport, isActive } from '@/utils/inspectionStatus';
 import viewImg from '@/assets/images/icons/view.png';
 
 const inspectionStore = useInspectionStore();
@@ -108,6 +109,12 @@ const serviceProviders = ref([]);
 const loading = ref(false);
 const hasInspectionAuthority = ref(false);
 const authorityContext = ref(null);
+
+const reportEligibleInspections = computed(() => {
+  return inspectionStore.inspections.filter(
+    (i) => canGenerateReport(i.status) && isActive(i.status)
+  );
+});
 
 const hasReportPermission = computed(() => {
   return authStore.hasRole('admin') || hasInspectionAuthority.value;
@@ -165,6 +172,7 @@ const generateReport = async () => {
       selectedServiceProviderId.value
     );
     toast.success('Inspection report generated successfully.');
+    await inspectionStore.refreshInspections();
   } catch (error) {
     toast.error('Could not generate inspection report: ' + error.message);
   } finally {

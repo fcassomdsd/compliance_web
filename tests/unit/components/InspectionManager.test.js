@@ -13,6 +13,11 @@ vi.mock('../../../src/stores/inspectionStore');
 vi.mock('../../../src/stores/locationStore');
 vi.mock('../../../src/stores/inspectedSpecialtyStore');
 vi.mock('../../../src/stores/inspectorStore');
+vi.mock('../../../src/stores/authStore', () => ({
+  useAuthStore: vi.fn(() => ({
+    hasRole: vi.fn(() => true),
+  })),
+}));
 vi.mock('vue-toastification', () => ({
   useToast: vi.fn(),
 }));
@@ -60,7 +65,7 @@ describe('InspectionManager.vue', () => {
           endDate : '2025-03-27',
           objective : 'objective',
           scope : 'scope',
-          status : 'Cerrada',
+          status : 'Created',
           locationId : 'Location1',
           locationName : 'Location 1',
           mainInspectorId : 'Inspector1',
@@ -81,6 +86,9 @@ describe('InspectionManager.vue', () => {
       addInspection: vi.fn(),
       updateInspection: vi.fn(),
       deleteInspection: vi.fn(),
+      inactivateInspection: vi.fn(),
+      reactivateInspection: vi.fn(),
+      updateInspectionStatus: vi.fn(),
       refreshInspections: vi.fn(),
       loading: false,
     };
@@ -517,15 +525,15 @@ describe('InspectionManager.vue', () => {
   describe('Delete operations', () => {
     it('deletes inspection with confirmation', async () => {
       vi.stubGlobal('confirm', vi.fn(() => true));
-      vi.mocked(mockInspectionStore.deleteInspection).mockResolvedValue(true);
+      vi.mocked(mockInspectionStore.inactivateInspection).mockResolvedValue(true);
       
       const deleteBtn = wrapper.find('button[id="delete-ID123"]');
       await deleteBtn.trigger('click');
       await wrapper.vm.$nextTick();
       
       expect(window.confirm).toBeDefined();
-      expect(mockInspectionStore.deleteInspection).toHaveBeenCalledWith('ID123');
-      expect(mockToast.success).toHaveBeenCalledWith('Inspection deleted');
+      expect(mockInspectionStore.inactivateInspection).toHaveBeenCalledWith('ID123');
+      expect(mockToast.success).toHaveBeenCalledWith('Inspection inactivated');
     });
 
     it('skips delete when confirmation is denied', async () => {
@@ -536,17 +544,19 @@ describe('InspectionManager.vue', () => {
       await wrapper.vm.$nextTick();
       
       expect(window.confirm).toBeDefined();
+      expect(mockInspectionStore.inactivateInspection).not.toHaveBeenCalled();
       expect(mockInspectionStore.deleteInspection).not.toHaveBeenCalled();
     });
 
     it('handles error on delete', async () => {
       vi.stubGlobal('confirm', vi.fn(() => true));
       const errorMsg = 'Delete failed';
-      vi.mocked(mockInspectionStore.deleteInspection).mockRejectedValue(new Error(errorMsg));
+      vi.mocked(mockInspectionStore.inactivateInspection).mockRejectedValueOnce(new Error(errorMsg));
       vi.mocked(mockInspectionStore.refreshInspections).mockResolvedValue(undefined);
       
       const deleteBtn = wrapper.find('button[id="delete-ID123"]');
       await deleteBtn.trigger('click');
+      await wrapper.vm.$nextTick();
       await wrapper.vm.$nextTick();
       
       expect(mockToast.error).toHaveBeenCalled();

@@ -2,6 +2,27 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.3.0] - 2026-07-30
+
+### Added
+- Added inspection status state machine with 8 states: `Created`, `Defined`, `Assigned`, `Planned`, `Uploaded`, `Reported`, `Complete`, `Inactive`.
+- Added `src/utils/inspectionStatus.js` — status enum and 12 guard functions (`canTransitionTo`, `canInactivate`, `isReadOnly`, `canEditBasicValues`, `canAssignServices`, `canAssignInspectors`, `canProcessChecklists`, `canGeneratePlan`, `canGenerateReport`, `isActive`, `shouldRevertToAssignedOnReassign`).
+- Added `INSPECTION_STATUS` enum and guard functions to `server/domain/statusRules.cjs`.
+- Added `inactivateInspection()`, `reactivateInspection()`, and `updateInspectionStatus()` actions to inspection store.
+- Added color-coded status badge to `InspectionManager.vue` with visual differentiation per state.
+- Added create/read/update/inactivate gates to `InspectionManager.vue` (Edit, Services, Schedules, Inactivate/Reactivate buttons governed by status).
+- Added state-filtered inspection lists to `AssignInspectors.vue`, `InspectionPlan.vue`, `ChecklistManager.vue`, and `InspectionReport.vue`.
+- Added inspector assignment backward transition: reassigning a `Planned` inspection reverts status to `Assigned`.
+
+### Changed
+- New inspections auto-set to `Created` on first save.
+- Delete button now soft-deletes (sets status to `Inactive`) instead of hard-deleting for active inspections. Hard delete still available for already `Inactive` inspections.
+- `canGeneratePlan` expanded to accept `Planned` status (plan regeneration).
+- `canAssignInspectors` expanded to accept `Planned` status (post-plan reassignment).
+
+### Fixed
+- Legacy inspections with null/empty status treated as `Created` for permissions and as active for inactivation.
+
 ## [0.2.1] - 2026-08-01
 
 ### Added

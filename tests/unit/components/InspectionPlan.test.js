@@ -26,6 +26,7 @@ describe('InspectionPlan.vue', () => {
     code: 'MDPP-2026-01',
     locationName: 'Location A',
     startDate: '2026-03-25',
+    status: 'Assigned',
   };
 
   beforeEach(() => {

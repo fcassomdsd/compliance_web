@@ -17,6 +17,7 @@ This repository is intended for both adopters evaluating the platform and contri
 
 ## Feature Highlights
 
+- **Inspection status state machine** — linear lifecycle from `Created` through `Reported` with `Complete` (external) and `Inactive` (soft-delete) states. Status governs available actions (editing, service assignment, inspector assignment, checklist processing, plan/report generation). Backward transitions supported for plan regeneration and inspector reassignment.
 - Checklist manager with grouped questions and persisted selections.
 - Role-aware route and API authorization model.
 - Auth endpoints for login, session bootstrap, logout, and diagnostics.
@@ -24,6 +25,19 @@ This repository is intended for both adopters evaluating the platform and contri
 - PostgreSQL-backed login rate limiting and auth audit logging with graceful fallback.
 - ZIP bomb protection and upload size limits on import endpoints.
 - Test coverage spanning frontend units, router/store auth paths, and server auth behavior.
+
+### Inspection Status States
+
+| Status | Meaning | Available Actions |
+|---|---|---|
+| `Created` | Basic values saved (location, dates, objective, scope, inspectors) | Edit basics, assign services/schedules |
+| `Defined` | Services and schedules configured | Assign inspectors |
+| `Assigned` | Inspectors assigned | Process checklists, generate plan, reassign inspectors |
+| `Planned` | Inspection plan generated | Upload checklists, regenerate plan, reassign (reverts to Assigned) |
+| `Uploaded` | Checklist data uploaded | Generate report |
+| `Reported` | Report generated | Regenerate report |
+| `Complete` | All operations confirmed (external) | Read-only |
+| `Inactive` | Soft-deleted, no longer operational | Read-only; permanent delete only for inactive inspections |
 
 ## Project Status
 
