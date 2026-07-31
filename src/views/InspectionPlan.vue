@@ -9,6 +9,15 @@
         <label for="locationName">Location:</label>
         <input id="locationName" type="text" :value="selectedInspection?.locationName || ''" disabled />
       </div>
+      <div class="grid-cell3 grid-item">
+        <label for="serviceAreaSelect">Service Area:</label>
+        <select id="serviceAreaSelect" v-model="selectedServiceAreaId" :disabled="!selectedInspection">
+          <option value="">All service areas</option>
+          <option v-for="area in serviceAreaStore.serviceAreas" :key="area.id" :value="area.id">
+            {{ area.name }}
+          </option>
+        </select>
+      </div>
       <div class="input-buttons">
         <button id="generateBtn" @click="generatePlan" :disabled="!canGenerate || loading">
           Generate Plan
@@ -77,6 +86,7 @@ import { computed, ref, onMounted } from 'vue';
 import BaseManager from '@/components/base/BaseManager.vue';
 import { useInspectionStore } from '@/stores/inspectionStore';
 import { useInspectedSpecialtyStore } from '@/stores/inspectedSpecialtyStore';
+import { useServiceAreaStore } from '@/stores/serviceAreaStore';
 import { useAuthStore } from '@/stores/authStore';
 import { useToast } from 'vue-toastification';
 import { apiInspectionByIdOrCode, apiInspectionPlan } from '@/services/apiServices';
@@ -85,10 +95,12 @@ import viewImg from '@/assets/images/icons/view.png';
 
 const inspectionStore = useInspectionStore();
 const inspectedStore = useInspectedSpecialtyStore();
+const serviceAreaStore = useServiceAreaStore();
 const authStore = useAuthStore();
 const toast = useToast();
 
 const selectedInspection = ref(null);
+const selectedServiceAreaId = ref('');
 const hasAssignments = ref(false);
 const hasInspectionAuthority = ref(false);
 const authorityContext = ref(null);
@@ -110,6 +122,11 @@ const canGenerate = computed(() => {
 
 onMounted(async () => {
   await inspectionStore.refreshInspections();
+  try {
+    await serviceAreaStore.refreshServiceAreas();
+  } catch {
+    // Service areas are optional
+  }
 });
 
 const selectInspection = async (inspection) => {
@@ -151,7 +168,7 @@ const generatePlan = async () => {
   if (!selectedInspection.value || !canGenerate.value) return;
   loading.value = true;
   try {
-    await apiInspectionPlan(selectedInspection.value.code);
+    await apiInspectionPlan(selectedInspection.value.code, selectedServiceAreaId.value || null);
     toast.success('Inspection plan generated successfully.');
     await inspectionStore.refreshInspections();
   } catch (error) {

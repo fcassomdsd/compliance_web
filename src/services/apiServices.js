@@ -229,14 +229,18 @@ export async function apiEntityLinks(method, entityName, entityId, linkName, ent
 
 }
 
-export async function apiInspectionPlan(inspectionCode) {
+export async function apiInspectionPlan(inspectionCode, serviceAreaId = null) {
   try {
     if (!inspectionCode || typeof inspectionCode !== 'string' || inspectionCode.trim().length === 0) {
       throw new Error('inspectionCode is required');
     }
+    let url = `${apiServer}/inspectionPlan?inspection=${encodeURIComponent(inspectionCode.trim())}`;
+    if (serviceAreaId) {
+      url += `&serviceArea=${encodeURIComponent(serviceAreaId)}`;
+    }
     const result = await axios({
       method: 'get',
-      url: `${apiServer}/inspectionPlan?inspection=${encodeURIComponent(inspectionCode.trim())}`,
+      url,
       headers: buildNodeRedHeaders(),
     });
     return { data: result.data, status: result.status };
@@ -264,6 +268,19 @@ export async function apiInspectionReport(inspectionCode, reportDate, servicePro
     return { data: result.data, status: result.status };
   } catch (error) {
     throw new Error('apiInspectionReport: ' + error.message);
+  }
+}
+
+export async function apiServiceAreas() {
+  try {
+    const result = await axios({
+      method: 'get',
+      url: `${apiServer}/serviceAreas`,
+      headers: buildNodeRedHeaders(),
+    });
+    return { data: result.data, status: result.status };
+  } catch (error) {
+    throw new Error('apiServiceAreas: ' + error.message);
   }
 }
 

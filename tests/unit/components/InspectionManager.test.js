@@ -855,10 +855,10 @@ describe('InspectionManager.vue', () => {
       await nameInput.setValue('Empty Schedule');
       
       // The Add button should be disabled because datetime fields are empty
-      const buttons = wrapper.findAll('button');
-      const addBtn = buttons.find(btn => btn.text().includes('Add'));
+      const scheduleButtons = wrapper.find('.schedule-buttons');
+      const addBtn = scheduleButtons.find('button');
       // When datetime is empty, button should be disabled
-      expect(addBtn && addBtn.element.hasAttribute('disabled')).toBe(true);
+      expect(addBtn.element.hasAttribute('disabled')).toBe(true);
     });
 
     it('should convert backend datetime format to HTML5 input via loadSchedules', async () => {

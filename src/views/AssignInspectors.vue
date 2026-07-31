@@ -18,8 +18,14 @@
     <div class="detail-group" v-if="currentInspection">
       <div class="detail-buttons">
         <span class="subtitle">Inspection Specialties</span>
+        <select v-model="currentProviderId" @change="onProviderChange" class="provider-select">
+          <option value="NONE">Select provider</option>
+          <option v-for="pi in providerInspections" :key="pi.id" :value="pi.id">
+            {{ pi.serviceProviderName || pi.name || pi.serviceProviderId }}
+          </option>
+        </select>
       </div>
-      <div class="service-group">
+      <div class="service-group" v-if="currentProviderId !== 'NONE'">
         <table class="service-table">
           <colgroup>
             <col style="width: 40%;">
@@ -90,6 +96,7 @@ import BaseManager from '@/components/base/BaseManager.vue';
 import { useInspectionStore } from '@/stores/inspectionStore';
 import { useInspectorStore } from '@/stores/inspectorStore';
 import { useInspectedSpecialtyStore } from '@/stores/inspectedSpecialtyStore';
+import { useInspectedProviderStore } from '@/stores/inspectedProviderStore';
 import { useAuthStore } from '@/stores/authStore';
 // specialtyStore not required here; inspectorStore provides inspector specialties
 import { useToast } from 'vue-toastification';
@@ -102,11 +109,14 @@ import { INSPECTION_STATUS, canAssignInspectors, isActive, shouldRevertToAssigne
 const inspectionStore = useInspectionStore();
 const inspectorStore = useInspectorStore();
 const inspectedStore = useInspectedSpecialtyStore();
+const inspectedProviderStore = useInspectedProviderStore();
 const authStore = useAuthStore();
 const toast = useToast();
 
 const currentInspection = ref(null);
-const specialtiesList = ref([]); // { key: string, name: string, locationServiceId }
+const currentProviderId = ref('NONE');
+const providerInspections = ref([]);
+const specialtiesList = ref([]);
 const allowedInspectorList = ref({});
 const assigned = ref({}); // key -> Set of inspector ids
 
@@ -168,11 +178,21 @@ const buildSpecialtiesList = () => {
 
 const selectInspection = async (inspection) => {
   currentInspection.value = inspection;
-  // load inspected services and specialties for this inspection
-  await inspectedStore.getInspectedSpecialties(inspection.id);
-  // make an array of inspected specialty ids and load assigned inspectors
-  const inspectedSpecialtyIds = Object.values(inspectedStore.inspectedSpecialties).map( spec => spec.id );
-  await inspectedStore.loadActingInspectors({'inspectedSpecialtyId' : inspectedSpecialtyIds});
+  currentProviderId.value = 'NONE';
+  providerInspections.value = [];
+  try {
+    await inspectedProviderStore.getInspectedProviders(inspection.id);
+    providerInspections.value = inspectedProviderStore.getForInspection(inspection.id);
+  } catch {
+    providerInspections.value = [];
+  }
+};
+
+const onProviderChange = async () => {
+  if (!currentInspection.value || currentProviderId.value === 'NONE') return;
+  await inspectedStore.getInspectedSpecialties(currentInspection.value.id);
+  const inspectedSpecialtyIds = Object.values(inspectedStore.inspectedSpecialties).map(spec => spec.id);
+  await inspectedStore.loadActingInspectors({ 'inspectedSpecialtyId': inspectedSpecialtyIds });
   buildSpecialtiesList();
 };
 
@@ -275,5 +295,11 @@ const cancelAssignments = () => {
 .subtitle {
   font-weight: 600;
   color: var(--primary-color);
+}
+
+.provider-select {
+  padding: 0.4rem 0.6rem;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
 }
 </style>

@@ -61,6 +61,36 @@
         <button id="cancelBtn" @click="cancelEdit()" :disabled="appState != 'editing'"><img :src="cancelImg" alt="Cancel" class="icon-btn" /></button>
       </div>
     </div>
+    <div class="provider-group" v-if="newInspection.id && newInspection.id !== 'new'">
+      <div class="provider-header">
+        <span class="provider-label">Providers:</span>
+        <select v-model="selectedProviderId" :disabled="appState === 'editing'">
+          <option :value="NONE_VALUE">All providers</option>
+          <option v-for="pi in providerInspections" :key="pi.id" :value="pi.id">
+            {{ pi.serviceProviderName || pi.name || pi.serviceProviderId }}
+          </option>
+        </select>
+        <button id="addProviderBtn" @click="showProviderDropdown = !showProviderDropdown"
+                :disabled="appState === 'editing' || !canAssignServices(newInspection.status)"
+                class="push-button">Add Provider</button>
+      </div>
+      <div v-if="showProviderDropdown" class="provider-dropdown">
+        <div v-if="availableProviders.length === 0" class="provider-empty">No providers available. Load location services first.</div>
+        <div v-for="provider in availableProviders" :key="provider.id" class="provider-option"
+             @click="addProviderInspection(provider.id, provider.name); showProviderDropdown = false">
+          {{ provider.name }}
+        </div>
+      </div>
+      <div class="provider-list" v-if="providerInspections.length > 0">
+        <span v-for="pi in providerInspections" :key="pi.id" class="provider-tag"
+              :class="{ 'provider-tag-selected': selectedProviderId === pi.id }"
+              @click="selectedProviderId = pi.id">
+          {{ pi.serviceProviderName || pi.name || pi.serviceProviderId }}
+          <button class="provider-remove" @click.stop="removeProviderInspection(pi.id)"
+                  :disabled="appState === 'editing'">×</button>
+        </span>
+      </div>
+    </div>
     <div class="detail-group">
       <div class="detail-buttons">
         <button id="services" class="push-button" :class="{'button-down' : servicesState}" :disabled="(appState == 'editing' || !newInspection.id || !canAssignServices(newInspection.status))" @click="toggleServices()">Services</button>
@@ -123,6 +153,10 @@
               <label for="schedule-end">End Date/Time:</label>
               <input id="schedule-end" type="datetime-local" v-model="currentSchedule.endDateTime"/>
             </div>
+            <div>
+              <label for="schedule-place">Place:</label>
+              <input id="schedule-place" type="text" v-model="currentSchedule.place" placeholder="Event location"/>
+            </div>
           </div>
           <div class="schedule-buttons">
             <button @click="addOrUpdateSchedule" :disabled="!currentSchedule.name || !currentSchedule.startDateTime || !currentSchedule.endDateTime">
@@ -137,6 +171,7 @@
               <th>Name</th>
               <th>Start Date/Time</th>
               <th>End Date/Time</th>
+              <th>Place</th>
               <th>Actions</th>
             </tr>
           </thead>
@@ -145,6 +180,7 @@
               <td>{{ schedule.name }}</td>
               <td>{{ formatDateTime(schedule.startDateTime) }}</td>
               <td>{{ formatDateTime(schedule.endDateTime) }}</td>
+              <td>{{ schedule.place || '' }}</td>
               <td>
                 <button @click="editSchedule(index)">Edit</button>
                 <button @click="deleteSchedule(index)">Delete</button>
@@ -211,6 +247,8 @@ import { useInspectionStore } from '@/stores/inspectionStore';
 import { useInspectedSpecialtyStore } from '@/stores/inspectedSpecialtyStore';
 import { useLocationStore } from '@/stores/locationStore';
 import { useInspectorStore } from '@/stores/inspectorStore';
+import { useInspectedProviderStore } from '@/stores/inspectedProviderStore';
+import { useServiceAreaStore } from '@/stores/serviceAreaStore';
 import { useAuthStore } from '@/stores/authStore';
 import { useToast } from 'vue-toastification';
 import { apiEntityCRUD } from '@/services/apiServices';
@@ -233,6 +271,8 @@ const store = useInspectionStore();
 const locationStore = useLocationStore();
 const inspectorStore = useInspectorStore();
 const iSpecialtyStore = useInspectedSpecialtyStore();
+const inspectedProviderStore = useInspectedProviderStore();
+const serviceAreaStore = useServiceAreaStore();
 const authStore = useAuthStore();
 const toast = useToast();
 const appState = ref('viewing');
@@ -241,10 +281,16 @@ const schedulesState = ref(false);
 const serviceTable = ref({});
 const schedules = ref([]);
 const originalSchedules = ref([]);
-const currentSchedule = ref({ name: '', startDateTime: '', endDateTime: '' });
+const currentSchedule = ref({ name: '', startDateTime: '', endDateTime: '', place: '' });
 const editingScheduleIndex = ref(null);
 const schedulesChanged = ref(false);
 const NONE_VALUE = ref("NONE");
+
+const selectedProviderId = ref(NONE_VALUE.value);
+const providersState = ref(false);
+const showProviderDropdown = ref(false);
+const availableProviders = ref([]);
+const providerInspections = ref([]);
 
 const canManageStatus = computed(() => {
   return authStore.hasRole('admin') || authStore.hasRole('planner');
@@ -352,7 +398,74 @@ const cancelEdit = () => {
 const viewElement = (inspectionData) => {
   Object.assign(newInspection.value, inspectionData);
   appState.value = 'viewing';
+  loadProviderInspections();
+  loadAvailableProviders();
 }
+
+const loadProviderInspections = async () => {
+  if (!newInspection.value.id || newInspection.value.id === 'new') {
+    providerInspections.value = [];
+    return;
+  }
+  try {
+    await inspectedProviderStore.getInspectedProviders(newInspection.value.id);
+    providerInspections.value = inspectedProviderStore.getForInspection(newInspection.value.id);
+  } catch (error) {
+    toast.error("Could not load providers: " + error.message);
+  }
+};
+
+const loadAvailableProviders = async () => {
+  if (!newInspection.value.locationId || newInspection.value.locationId === NONE_VALUE.value) {
+    availableProviders.value = [];
+    return;
+  }
+  try {
+    await locationStore.getLocationServices(newInspection.value.locationId);
+    const providers = {};
+    for (const service of locationStore.locationServices) {
+      const { data: locServices } = await apiEntityCRUD('query', 'LocationService', null, { id: service.id });
+      if (locServices && locServices.list) {
+        for (const ls of locServices.list) {
+          if (ls.serviceProviderId) {
+            providers[ls.serviceProviderId] = {
+              id: ls.serviceProviderId,
+              name: ls.serviceProviderName || ls.serviceProviderId,
+            };
+          }
+        }
+      }
+    }
+    availableProviders.value = Object.values(providers);
+  } catch (error) {
+    toast.error("Could not load available providers: " + error.message);
+  }
+};
+
+const addProviderInspection = async (serviceProviderId, serviceProviderName) => {
+  try {
+    await inspectedProviderStore.addInspectedProvider(newInspection.value.id, serviceProviderId, serviceProviderName);
+    await loadProviderInspections();
+    toast.success("Provider added");
+  } catch (error) {
+    toast.error("Could not add provider: " + error.message);
+  }
+};
+
+const removeProviderInspection = async (providerInspectionId) => {
+  if (confirm('Remove this provider from the inspection?')) {
+    try {
+      await inspectedProviderStore.removeInspectedProvider(providerInspectionId, newInspection.value.id);
+      await loadProviderInspections();
+      if (selectedProviderId.value === providerInspectionId) {
+        selectedProviderId.value = NONE_VALUE.value;
+      }
+      toast.success("Provider removed");
+    } catch (error) {
+      toast.error("Could not remove provider: " + error.message);
+    }
+  }
+};
 
 const removeInspection = async (inspection) => {
   if (isActive(inspection.status)) {
@@ -530,7 +643,8 @@ const loadSchedules = async () => {
         id: s.id,
         name: s.name,
         startDateTime: toInputDateTime(s.startDateTime),
-        endDateTime: toInputDateTime(s.endDateTime)
+        endDateTime: toInputDateTime(s.endDateTime),
+        place: s.place || ''
       }));
       originalSchedules.value = JSON.parse(JSON.stringify(schedules.value));
       schedulesChanged.value = false;
@@ -576,7 +690,7 @@ const cancelScheduleEdit = () => {
 }
 
 const resetScheduleForm = () => {
-  currentSchedule.value = { name: '', startDateTime: '', endDateTime: '' };
+  currentSchedule.value = { name: '', startDateTime: '', endDateTime: '', place: '' };
   editingScheduleIndex.value = null;
 }
 
@@ -597,6 +711,7 @@ const saveSchedules = async () => {
         name: schedule.name,
         startDateTime: toBackendDateTime(schedule.startDateTime),
         endDateTime: toBackendDateTime(schedule.endDateTime),
+        place: schedule.place || '',
         inspectionId: newInspection.value.id
       };
 
@@ -1019,6 +1134,102 @@ input:focus {
   .data-table {
     font-size: 0.875rem; 
   }
+}
+
+.provider-group {
+  width: 50%;
+  margin-bottom: 1rem;
+}
+
+.provider-header {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 0.5rem;
+}
+
+.provider-label {
+  font-weight: 600;
+  color: var(--primary-color);
+  white-space: nowrap;
+}
+
+.provider-header select {
+  padding: 0.5rem;
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  flex: 1;
+}
+
+.provider-dropdown {
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  max-height: 200px;
+  overflow-y: auto;
+  margin-bottom: 0.5rem;
+  background: white;
+}
+
+.provider-option {
+  padding: 0.5rem 1rem;
+  cursor: pointer;
+}
+
+.provider-option:hover {
+  background-color: #e3f2fd;
+}
+
+.provider-empty {
+  padding: 0.5rem 1rem;
+  color: #9e9e9e;
+  font-style: italic;
+}
+
+.provider-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.provider-tag {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.25rem 0.5rem;
+  border: 1px solid var(--border-color);
+  border-radius: 16px;
+  cursor: pointer;
+  font-size: 0.85rem;
+  background: #f5f5f5;
+  transition: background 0.2s;
+}
+
+.provider-tag:hover {
+  background: #e3f2fd;
+}
+
+.provider-tag-selected {
+  background: #bbdefb;
+  border-color: var(--secondary-color);
+  font-weight: 600;
+}
+
+.provider-remove {
+  background: none;
+  border: none;
+  color: #757575;
+  font-size: 1rem;
+  cursor: pointer;
+  padding: 0 0.25rem;
+  line-height: 1;
+}
+
+.provider-remove:hover {
+  color: #e53935;
+}
+
+@media (max-width: 1024px) {
+  .provider-group { width: 100%; }
 }
 
 </style>

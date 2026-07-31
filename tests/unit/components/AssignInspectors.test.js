@@ -11,6 +11,14 @@ import { useToast } from 'vue-toastification';
 vi.mock('../../../src/stores/inspectionStore');
 vi.mock('../../../src/stores/inspectorStore');
 vi.mock('../../../src/stores/inspectedSpecialtyStore');
+vi.mock('../../../src/stores/inspectedProviderStore', () => ({
+  useInspectedProviderStore: vi.fn(() => ({
+    getInspectedProviders: vi.fn().mockResolvedValue(undefined),
+    getForInspection: vi.fn(() => [
+      { id: 'IP1', inspectionId: 'Inspection1', serviceProviderId: 'SP1', serviceProviderName: 'Provider A', name: 'Provider A' },
+    ]),
+  })),
+}));
 vi.mock('vue-toastification', () => ({
   useToast: vi.fn(),
 }));
@@ -192,6 +200,10 @@ describe('AssignInspectors.vue', () => {
       await selectButtons[0].trigger('click');
       await wrapper.vm.$nextTick();
 
+      wrapper.vm.currentProviderId = 'IP1';
+      await wrapper.vm.onProviderChange();
+      await wrapper.vm.$nextTick();
+
       expect(mockInspectedStore.getInspectedSpecialties).toHaveBeenCalledWith('Inspection1');
     });
 
@@ -206,6 +218,10 @@ describe('AssignInspectors.vue', () => {
 
       const selectButtons = wrapper.findAll('button[id^="select-"]');
       await selectButtons[0].trigger('click');
+      await wrapper.vm.$nextTick();
+
+      wrapper.vm.currentProviderId = 'IP1';
+      await wrapper.vm.onProviderChange();
       await wrapper.vm.$nextTick();
 
       expect(mockInspectedStore.loadActingInspectors).toHaveBeenCalledWith({"inspectedSpecialtyId": ["InspectedSpecialty1","InspectedSpecialty2"] });
@@ -244,6 +260,10 @@ describe('AssignInspectors.vue', () => {
       await selectButtons[0].trigger('click');
       await wrapper.vm.$nextTick();
 
+      wrapper.vm.currentProviderId = 'IP1';
+      await wrapper.vm.onProviderChange();
+      await wrapper.vm.$nextTick();
+
       const inspectorList = wrapper.findAll('.inspectors-list');
       expect(inspectorList.length).toBe(2); // 2 specialties
       const inspectorListItems = inspectorList.flatMap(list => list.findAll('label'));
@@ -275,7 +295,11 @@ describe('AssignInspectors.vue', () => {
 
       const selectButtons = wrapper.findAll('button[id^="select-"]');
       await selectButtons[0].trigger('click');
-      await wrapper.vm.$nextTick(); 
+      await wrapper.vm.$nextTick();
+
+      wrapper.vm.currentProviderId = 'IP1';
+      await wrapper.vm.onProviderChange();
+      await wrapper.vm.$nextTick();
       // Select inspectors for specialties
       const inspectorCheckboxes = wrapper.findAll('.inspectors-list input[type="checkbox"]');
       await inspectorCheckboxes[0].setChecked(); // Select Alice for Specialty1

@@ -10,6 +10,12 @@ import { apiInspectionByIdOrCode, apiInspectionPlan } from '@/services/apiServic
 
 vi.mock('@/stores/inspectionStore');
 vi.mock('@/stores/inspectedSpecialtyStore');
+vi.mock('@/stores/serviceAreaStore', () => ({
+  useServiceAreaStore: vi.fn(() => ({
+    serviceAreas: [],
+    refreshServiceAreas: vi.fn().mockResolvedValue(undefined),
+  })),
+}));
 vi.mock('@/stores/authStore');
 vi.mock('@/services/apiServices');
 vi.mock('vue-toastification', () => ({ useToast: vi.fn() }));
@@ -98,7 +104,7 @@ describe('InspectionPlan.vue', () => {
     await wrapper.find('#generateBtn').trigger('click');
     await flushPromises();
 
-    expect(apiInspectionPlan).toHaveBeenCalledWith('MDPP-2026-01');
+    expect(apiInspectionPlan).toHaveBeenCalledWith('MDPP-2026-01', null);
     expect(toast.success).toHaveBeenCalledWith('Inspection plan generated successfully.');
   });
 
