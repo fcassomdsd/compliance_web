@@ -101,6 +101,7 @@ import { useInspectedSpecialtyStore } from '@/stores/inspectedSpecialtyStore';
 import { useLocationStore } from '@/stores/locationStore';
 import { useToast } from 'vue-toastification';
 import { apiEntityCRUD } from '@/services/apiServices';
+import { INSPECTION_STATUS } from '@/utils/siteVisitStatus';
 import saveImg from '@/assets/images/icons/save.png';
 import cancelImg from '@/assets/images/icons/cancel.png';
 import editImg from '@/assets/images/icons/edit.png';
@@ -221,6 +222,7 @@ const toggleServices = async () => {
           }
         }
         toast.success('Services saved');
+        await checkAndTransitionToDefined();
       } catch (error) {
         toast.error('Could not save services: ' + error.message);
       }
@@ -322,6 +324,7 @@ const saveSchedules = async () => {
     originalSchedules.value = JSON.parse(JSON.stringify(schedules.value));
     schedulesChanged.value = false;
     toast.success('Schedules saved');
+    await checkAndTransitionToDefined();
   } catch (error) {
     toast.error('Could not save schedules: ' + error.message);
   }
@@ -350,6 +353,41 @@ const cancelEdit = () => {
   appState.value = 'viewing';
   const list = inspectionStore.getForInspectedProvider(inspectedProviderId);
   if (list.length > 0) { inspectionData.value = { ...list[0] }; }
+};
+
+const checkAndTransitionToDefined = async () => {
+  if (!inspectedProviderId || !siteVisitId) return;
+
+  let siteVisit = siteVisitStore.siteVisits.find((sv) => sv.id === siteVisitId);
+  if (!siteVisit || siteVisit.status !== INSPECTION_STATUS.CREATED) return;
+
+  let hasServices = false;
+  try {
+    hasServices = iSpecialtyStore.inspectedServices
+      && Object.keys(iSpecialtyStore.inspectedServices).length > 0;
+  } catch {
+    hasServices = false;
+  }
+
+  let hasSchedules = false;
+  try {
+    const { data: sched } = await apiEntityCRUD('query', 'InspectionSchedule', null, {
+      inspectionId: inspectionData.value.id,
+    });
+    hasSchedules = ('list' in sched) && sched.list.length > 0;
+  } catch {
+    hasSchedules = false;
+  }
+
+  if (hasServices && hasSchedules) {
+    try {
+      await siteVisitStore.updateSiteVisitStatus(siteVisitId, INSPECTION_STATUS.DEFINED);
+      await siteVisitStore.refreshSiteVisits();
+      toast.success('Site visit status updated to Defined');
+    } catch (error) {
+      toast.warning('Could not update status to Defined: ' + error.message);
+    }
+  }
 };
 
 const formatDateTime = (dateTimeStr) => {
