@@ -8,10 +8,12 @@ import { useToast } from 'vue-toastification';
 import { apiInspectionPlan } from '@/services/apiServices';
 
 vi.mock('@/stores/siteVisitStore');
-vi.mock('@/stores/serviceAreaStore', () => ({
-  useServiceAreaStore: vi.fn(() => ({
-    serviceAreas: [],
-    refreshServiceAreas: vi.fn().mockResolvedValue(undefined),
+vi.mock('@/stores/inspectedProviderStore', () => ({
+  useInspectedProviderStore: vi.fn(() => ({
+    getInspectedProviders: vi.fn().mockResolvedValue(undefined),
+    getForInspection: vi.fn(() => [
+      { id: 'IP1', serviceProviderId: 'SP1', serviceProviderName: 'Provider A', name: 'Provider A' },
+    ]),
   })),
 }));
 vi.mock('@/stores/authStore');
@@ -66,14 +68,16 @@ describe('InspectionPlan.vue', () => {
     expect(wrapper.find('button[id="select-INS1"]').exists()).toBe(true);
   });
 
-  it('generates plan with service area filter', async () => {
+  it('generates plan with provider filter', async () => {
     const wrapper = createWrapper();
     await flushPromises();
     await wrapper.find('button[id="select-INS1"]').trigger('click');
+    await flushPromises();
+    await wrapper.find('#providerSelect').setValue('IP1');
     await wrapper.find('#generateBtn').trigger('click');
     await flushPromises();
 
-    expect(apiInspectionPlan).toHaveBeenCalledWith('MDPP-2026-01', null);
+    expect(apiInspectionPlan).toHaveBeenCalledWith('MDPP-2026-01', 'IP1');
     expect(toast.success).toHaveBeenCalledWith('Inspection plan generated successfully.');
   });
 

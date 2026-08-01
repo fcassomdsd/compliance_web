@@ -10,11 +10,11 @@
         <input id="locationName" type="text" :value="selectedInspection?.locationName || ''" disabled />
       </div>
       <div class="grid-cell3 grid-item">
-        <label for="serviceAreaSelect">Service Area:</label>
-        <select id="serviceAreaSelect" v-model="selectedServiceAreaId" :disabled="!selectedInspection">
-          <option value="">All service areas</option>
-          <option v-for="area in serviceAreaStore.serviceAreas" :key="area.id" :value="area.id">
-            {{ area.name }}
+        <label for="providerSelect">Provider:</label>
+        <select id="providerSelect" v-model="selectedProviderId" :disabled="!selectedInspection">
+          <option value="">Select a provider</option>
+          <option v-for="pi in providerInspections" :key="pi.id" :value="pi.id">
+            {{ pi.serviceProviderName || pi.name || pi.serviceProviderId }}
           </option>
         </select>
       </div>
@@ -66,7 +66,7 @@
 import { computed, ref, onMounted } from 'vue';
 import BaseManager from '@/components/base/BaseManager.vue';
 import { useSiteVisitStore } from '@/stores/siteVisitStore';
-import { useServiceAreaStore } from '@/stores/serviceAreaStore';
+import { useInspectedProviderStore } from '@/stores/inspectedProviderStore';
 import { useAuthStore } from '@/stores/authStore';
 import { useToast } from 'vue-toastification';
 import { apiInspectionPlan } from '@/services/apiServices';
@@ -74,12 +74,13 @@ import { canGeneratePlan, isActive } from '@/utils/siteVisitStatus';
 import viewImg from '@/assets/images/icons/view.png';
 
 const siteVisitStore = useSiteVisitStore();
-const serviceAreaStore = useServiceAreaStore();
+const inspectedProviderStore = useInspectedProviderStore();
 const authStore = useAuthStore();
 const toast = useToast();
 
 const selectedInspection = ref(null);
-const selectedServiceAreaId = ref('');
+const selectedProviderId = ref('');
+const providerInspections = ref([]);
 const loading = ref(false);
 
 const planEligibleInspections = computed(() => {
@@ -93,27 +94,30 @@ const hasPlanPermission = computed(() => {
 });
 
 const canGenerate = computed(() => {
-  return hasPlanPermission.value && !!selectedInspection.value;
+  return hasPlanPermission.value && !!selectedInspection.value && !!selectedProviderId.value;
 });
 
 onMounted(async () => {
   await siteVisitStore.refreshSiteVisits();
-  try {
-    await serviceAreaStore.refreshServiceAreas();
-  } catch {
-    // Service areas are optional
-  }
 });
 
-const selectInspection = (inspection) => {
+const selectInspection = async (inspection) => {
   selectedInspection.value = inspection;
+  selectedProviderId.value = '';
+  providerInspections.value = [];
+  try {
+    await inspectedProviderStore.getInspectedProviders(inspection.id);
+    providerInspections.value = inspectedProviderStore.getForInspection(inspection.id);
+  } catch {
+    providerInspections.value = [];
+  }
 };
 
 const generatePlan = async () => {
   if (!selectedInspection.value || !canGenerate.value) return;
   loading.value = true;
   try {
-    await apiInspectionPlan(selectedInspection.value.code, selectedServiceAreaId.value || null);
+    await apiInspectionPlan(selectedInspection.value.code, selectedProviderId.value);
     toast.success('Inspection plan generated successfully.');
     await siteVisitStore.refreshSiteVisits();
   } catch (error) {

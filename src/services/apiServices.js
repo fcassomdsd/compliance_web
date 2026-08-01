@@ -229,14 +229,14 @@ export async function apiEntityLinks(method, entityName, entityId, linkName, ent
 
 }
 
-export async function apiInspectionPlan(inspectionCode, serviceAreaId = null) {
+export async function apiInspectionPlan(inspectionCode, inspectedProviderId = null) {
   try {
     if (!inspectionCode || typeof inspectionCode !== 'string' || inspectionCode.trim().length === 0) {
       throw new Error('inspectionCode is required');
     }
     let url = `${apiServer}/inspectionPlan?inspection=${encodeURIComponent(inspectionCode.trim())}`;
-    if (serviceAreaId) {
-      url += `&serviceArea=${encodeURIComponent(serviceAreaId)}`;
+    if (inspectedProviderId) {
+      url += `&provider=${encodeURIComponent(inspectedProviderId)}`;
     }
     const result = await axios({
       method: 'get',
