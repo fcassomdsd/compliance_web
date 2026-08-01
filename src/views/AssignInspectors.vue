@@ -2,15 +2,15 @@
   <BaseManager title="Assign Inspectors">
     <div class="input-group">
       <div class="grid-cell1 grid-item">
-        <label for="selectedInspection">Selected Inspection:</label>
-        <input id="selectedInspection" type="text" :value="currentInspection?.code || 'None'" disabled />
+        <label for="selectedSiteVisit">Selected Site Visit:</label>
+        <input id="selectedSiteVisit" type="text" :value="currentInspection?.code || 'None'" disabled />
       </div>
       <div class="grid-cell2 grid-item">
         <label for="locationName">Location:</label>
         <input id="locationName" type="text" :value="currentInspection?.locationName || ''" disabled />
       </div>
       <div class="input-buttons">
-        <button id="saveBtn" @click="saveAssignments" :disabled="!currentInspection"><img :src="saveImg" alt="Save" class="icon-btn"/></button>
+        <button id="saveBtn" @click="saveAssignments" :disabled="!currentInspection || currentProviderId === 'NONE'"><img :src="saveImg" alt="Save" class="icon-btn"/></button>
         <button id="cancelBtn" @click="cancelAssignments" :disabled="!currentInspection"><img :src="cancelImg" alt="Cancel" class="icon-btn"/></button>
       </div>
     </div>
@@ -93,6 +93,7 @@
 <script setup>
 import { onMounted, ref, computed } from 'vue';
 import BaseManager from '@/components/base/BaseManager.vue';
+import { useSiteVisitStore } from '@/stores/siteVisitStore';
 import { useInspectionStore } from '@/stores/inspectionStore';
 import { useInspectorStore } from '@/stores/inspectorStore';
 import { useInspectedSpecialtyStore } from '@/stores/inspectedSpecialtyStore';
@@ -106,6 +107,7 @@ import viewImg from '@/assets/images/icons/view.png';
 import { apiEntityLinks } from '@/services/apiServices';
 import { INSPECTION_STATUS, canAssignInspectors, isActive, shouldRevertToAssignedOnReassign } from '@/utils/siteVisitStatus';
 
+const siteVisitStore = useSiteVisitStore();
 const inspectionStore = useInspectionStore();
 const inspectorStore = useInspectorStore();
 const inspectedStore = useInspectedSpecialtyStore();
@@ -121,14 +123,14 @@ const allowedInspectorList = ref({});
 const assigned = ref({}); // key -> Set of inspector ids
 
 const assignableInspections = computed(() => {
-  return inspectionStore.inspections.filter(
+  return (siteVisitStore.siteVisits || []).filter(
     (i) => canAssignInspectors(i.status) && isActive(i.status)
   );
 });
 
 onMounted(async () => {
-  // load inspections
-  await inspectionStore.refreshInspections();
+  // load site visits
+  await siteVisitStore.refreshSiteVisits();
 
   // load inspector data (list and specialties) so we can prefill assignments
   await inspectorStore.refreshInspectors();
@@ -190,9 +192,20 @@ const selectInspection = async (inspection) => {
 
 const onProviderChange = async () => {
   if (!currentInspection.value || currentProviderId.value === 'NONE') return;
-  await inspectedStore.getInspectedSpecialties(currentInspection.value.id);
+  try {
+    await inspectionStore.getInspections(currentProviderId.value);
+    const inspections = inspectionStore.getForInspectedProvider(currentProviderId.value);
+    if (inspections.length > 0) {
+      const insp = inspections[0];
+      await inspectedStore.getInspectedSpecialties(insp.id);
+    }
+  } catch {
+    // fall through
+  }
   const inspectedSpecialtyIds = Object.values(inspectedStore.inspectedSpecialties).map(spec => spec.id);
-  await inspectedStore.loadActingInspectors({ 'inspectedSpecialtyId': inspectedSpecialtyIds });
+  if (inspectedSpecialtyIds.length > 0) {
+    await inspectedStore.loadActingInspectors({ 'inspectedSpecialtyId': inspectedSpecialtyIds });
+  }
   buildSpecialtiesList();
 };
 
@@ -252,11 +265,11 @@ const saveAssignments = async () => {
       toast.success('Inspector assignments saved successfully.');
 
       if (currentInspection.value.status === INSPECTION_STATUS.DEFINED) {
-        await inspectionStore.updateInspectionStatus(currentInspection.value.id, INSPECTION_STATUS.ASSIGNED);
+        await siteVisitStore.updateSiteVisitStatus(currentInspection.value.id, INSPECTION_STATUS.ASSIGNED);
         currentInspection.value.status = INSPECTION_STATUS.ASSIGNED;
         toast.success('Inspection status updated to Assigned');
       } else if (shouldRevertToAssignedOnReassign(currentInspection.value.status)) {
-        await inspectionStore.updateInspectionStatus(currentInspection.value.id, INSPECTION_STATUS.ASSIGNED);
+        await siteVisitStore.updateSiteVisitStatus(currentInspection.value.id, INSPECTION_STATUS.ASSIGNED);
         currentInspection.value.status = INSPECTION_STATUS.ASSIGNED;
         toast.success('Inspection status reverted to Assigned');
       }
