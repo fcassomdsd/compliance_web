@@ -421,9 +421,17 @@ const loadAvailableProviders = async () => {
     return;
   }
   try {
+    if (!locationStore.servicesLoaded) {
+      await locationStore.loadLocationServices();
+    }
     await locationStore.getLocationServices(newInspection.value.locationId);
+    const services = locationStore.locationServices;
+    if (!services || !Array.isArray(services)) {
+      availableProviders.value = [];
+      return;
+    }
     const providers = {};
-    for (const service of locationStore.locationServices) {
+    for (const service of services) {
       const { data: locServices } = await apiEntityCRUD('query', 'LocationService', null, { id: service.id });
       if (locServices && locServices.list) {
         for (const ls of locServices.list) {
@@ -438,7 +446,7 @@ const loadAvailableProviders = async () => {
     }
     availableProviders.value = Object.values(providers);
   } catch (error) {
-    toast.error("Could not load available providers: " + error.message);
+    availableProviders.value = [];
   }
 };
 
