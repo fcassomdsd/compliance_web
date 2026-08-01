@@ -18,6 +18,7 @@
         <textarea id="scope" v-model="inspectionData.scope" :disabled="appState != 'editing'" placeholder="Inspection scope"/>
       </div>
       <div class="input-buttons">
+        <button id="editBtn" @click="startEdit" v-if="appState == 'viewing' && inspectionData.id" :disabled="false"><img :src="editImg" alt="Edit" class="icon-btn" /></button>
         <button id="saveBtn" @click="saveInspection" :disabled="(appState != 'editing')"><img :src="saveImg" alt="Save" class="icon-btn" /></button>
         <button id="cancelBtn" @click="cancelEdit" :disabled="appState != 'editing'"><img :src="cancelImg" alt="Cancel" class="icon-btn" /></button>
       </div>
@@ -90,12 +91,14 @@ import { ref, onMounted } from 'vue';
 import { useRoute } from 'vue-router';
 import BaseManager from '@/components/base/BaseManager.vue';
 import { useInspectionStore } from '@/stores/inspectionStore';
+import { useInspectedProviderStore } from '@/stores/inspectedProviderStore';
 import { useInspectedSpecialtyStore } from '@/stores/inspectedSpecialtyStore';
 import { useLocationStore } from '@/stores/locationStore';
 import { useToast } from 'vue-toastification';
 import { apiEntityCRUD } from '@/services/apiServices';
 import saveImg from '@/assets/images/icons/save.png';
 import cancelImg from '@/assets/images/icons/cancel.png';
+import editImg from '@/assets/images/icons/edit.png';
 
 const route = useRoute();
 const siteVisitId = route.params.siteVisitId;
@@ -103,6 +106,7 @@ const providerId = route.params.providerId;
 const siteVisitCode = route.query.code || '';
 
 const inspectionStore = useInspectionStore();
+const inspectedProviderStore = useInspectedProviderStore();
 const iSpecialtyStore = useInspectedSpecialtyStore();
 const locationStore = useLocationStore();
 const toast = useToast();
@@ -111,6 +115,8 @@ const appState = ref('viewing');
 const servicesState = ref(false);
 const schedulesState = ref(false);
 const serviceTable = ref({});
+
+let inspectedProviderId = '';
 
 const schedules = ref([]);
 const originalSchedules = ref([]);
@@ -131,17 +137,35 @@ const editingSchedules = ref([]);
 onMounted(async () => {
   if (!siteVisitId || !providerId) return;
   try {
-    const inspections = await inspectionStore.getInspections(siteVisitId);
-    const current = (inspectionStore.getForSiteVisit(siteVisitId) || []).find(
-      (i) => i.inspectedProviderId === providerId,
-    );
-    if (current) {
-      inspectionData.value = { ...current };
+    await inspectedProviderStore.getInspectedProviders(siteVisitId);
+    const providerInspections = inspectedProviderStore.getForInspection(siteVisitId);
+    const target = providerInspections.find((pi) => pi.serviceProviderId === providerId);
+    if (!target) {
+      toast.error('Provider not found for this site visit.');
+      return;
+    }
+    inspectedProviderId = target.id;
+
+    await inspectionStore.getInspections(inspectedProviderId);
+    const list = inspectionStore.getForInspectedProvider(inspectedProviderId);
+    if (list.length > 0) {
+      inspectionData.value = { ...list[0] };
+    } else {
+      await inspectionStore.addInspection(siteVisitId, inspectedProviderId, {}, siteVisitCode);
+      await inspectionStore.getInspections(inspectedProviderId);
+      const created = inspectionStore.getForInspectedProvider(inspectedProviderId);
+      if (created.length > 0) {
+        inspectionData.value = { ...created[0] };
+      }
     }
   } catch (error) {
     toast.error('Could not load inspection: ' + error.message);
   }
 });
+
+const startEdit = () => {
+  appState.value = 'editing';
+};
 
 const toggleServices = async () => {
   if (servicesState.value) {
@@ -272,10 +296,16 @@ const saveSchedules = async () => {
 const saveInspection = async () => {
   try {
     if (!inspectionData.value.id) {
-      await inspectionStore.addInspection(siteVisitId, providerId, inspectionData.value);
+      await inspectionStore.addInspection(siteVisitId, inspectedProviderId, inspectionData.value, siteVisitCode);
     } else {
-      await inspectionStore.updateInspection(inspectionData.value);
+      await inspectionStore.updateInspection(inspectionData.value, inspectedProviderId);
     }
+    await inspectionStore.getInspections(inspectedProviderId);
+    const list = inspectionStore.getForInspectedProvider(inspectedProviderId);
+    if (list.length > 0) {
+      inspectionData.value = { ...list[0] };
+    }
+    appState.value = 'viewing';
     toast.success('Inspection saved');
   } catch (error) {
     toast.error('Could not save inspection: ' + error.message);
@@ -284,11 +314,8 @@ const saveInspection = async () => {
 
 const cancelEdit = () => {
   appState.value = 'viewing';
-  if (inspectionData.value.id) {
-    const inspections = inspectionStore.getForSiteVisit(siteVisitId);
-    const current = inspections.find(i => i.id === inspectionData.value.id);
-    if (current) { inspectionData.value = { ...current }; }
-  }
+  const list = inspectionStore.getForInspectedProvider(inspectedProviderId);
+  if (list.length > 0) { inspectionData.value = { ...list[0] }; }
 };
 
 const formatDateTime = (dateTimeStr) => {

@@ -33,7 +33,7 @@ export const useSiteVisitStore = defineStore('siteVisit', {
         }
         const addData = {};
         for (const key of Object.keys(siteVisitToAdd)) {
-          if (key !== 'id') addData[key] = siteVisitToAdd[key];
+          if (key !== 'id' && typeof siteVisitToAdd[key] !== 'function') addData[key] = siteVisitToAdd[key];
         }
 
         if (!addData.locationId || typeof addData.locationId !== 'string') {
@@ -77,8 +77,8 @@ export const useSiteVisitStore = defineStore('siteVisit', {
         }
 
         const { data: added } = await apiEntityCRUD('add', 'SiteVisit', null, addData);
-        if (!added || !('id' in added)) {
-          throw new Error('API call for "add" returned invalid data');
+        if (!added || typeof added !== 'object' || !('id' in added)) {
+          throw new Error('API call for "add" returned invalid data: ' + (typeof added === 'string' ? added : JSON.stringify(added)));
         }
 
         const { data: wholeRecord } = await apiEntityCRUD('query', 'SiteVisit', null, { id: added.id });
@@ -145,7 +145,7 @@ export const useSiteVisitStore = defineStore('siteVisit', {
         const result = await apiEntityCRUD('update', 'SiteVisit', updateId, updateData);
         if (result.status !== 204) {
           const updated = result.data;
-          if (!updated || !('id' in updated)) {
+          if (!updated || typeof updated !== 'object' || !('id' in updated)) {
             throw new Error('API call for "update" returned invalid data');
           }
           const index = this.siteVisits.findIndex((x) => x.id === updateId);

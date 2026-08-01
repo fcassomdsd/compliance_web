@@ -55,32 +55,37 @@
     </div>
     <div class="provider-group" v-if="newSiteVisit.id && newSiteVisit.id !== 'new'">
       <div class="provider-header">
-        <span class="provider-label">Providers:</span>
-        <select v-model="selectedProviderId" :disabled="appState === 'editing'">
-          <option :value="NONE_VALUE">All providers</option>
-          <option v-for="pi in providerInspections" :key="pi.id" :value="pi.id">
-            {{ pi.serviceProviderName || pi.name || pi.serviceProviderId }}
-          </option>
-        </select>
+        <span class="provider-label">Providers to inspect:</span>
+      </div>
+      <div class="provider-list-header">
         <button id="addProviderBtn" @click="showProviderDropdown = !showProviderDropdown"
                 :disabled="appState === 'editing' || !canAssignServices(newSiteVisit.status)"
-                class="push-button">Add Provider</button>
+                class="push-button">+ Add Provider</button>
+        <span v-if="providerInspections.length === 0 && !loadingProviders" class="provider-hint">Click to select providers for this site visit.</span>
       </div>
+      <div v-if="loadingProviders" class="provider-loading">Loading providers...</div>
       <div v-if="showProviderDropdown" class="provider-dropdown">
-        <div v-if="availableProviders.length === 0" class="provider-empty">No providers available. Load location services first.</div>
+        <div v-if="loadingAvailableProviders" class="provider-empty">Loading...</div>
+        <div v-else-if="availableProviders.length === 0" class="provider-empty">No service providers found for this location. Ensure location services are configured in AtroCore.</div>
         <div v-for="provider in availableProviders" :key="provider.id" class="provider-option"
              @click="addProviderInspection(provider.id, provider.name); showProviderDropdown = false">
-          {{ provider.name }}
+          {{ provider.name }} ({{ provider.id }})
         </div>
       </div>
       <div class="provider-list" v-if="providerInspections.length > 0">
-        <span v-for="pi in providerInspections" :key="pi.id" class="provider-tag"
-              :class="{ 'provider-tag-selected': selectedProviderId === pi.id }"
-              @click="selectedProviderId = pi.id">
-          {{ pi.serviceProviderName || pi.name || pi.serviceProviderId }}
-          <button class="provider-remove" @click.stop="removeProviderInspection(pi.id)"
-                  :disabled="appState === 'editing'">×</button>
-        </span>
+        <div v-for="pi in providerInspections" :key="pi.id" class="provider-card"
+             :class="{ 'provider-card-selected': selectedProviderId === pi.id }"
+             @click="selectedProviderId = pi.id">
+          <div class="provider-card-header">
+            <strong>{{ pi.serviceProviderName || pi.name || pi.serviceProviderId }}</strong>
+            <button class="provider-remove" @click.stop="removeProviderInspection(pi.id)"
+                    :disabled="appState === 'editing'">Remove</button>
+          </div>
+          <router-link
+            v-if="selectedProviderId === pi.id"
+            :to="`/site-visit/${newSiteVisit.id}/provider/${pi.serviceProviderId}?code=${newSiteVisit.code}`"
+            class="provider-action-link">Manage Inspection</router-link>
+        </div>
       </div>
     </div>
     <div class="detail-group">
@@ -281,6 +286,8 @@ const NONE_VALUE = ref("NONE");
 const selectedProviderId = ref(NONE_VALUE.value);
 const providersState = ref(false);
 const showProviderDropdown = ref(false);
+const loadingProviders = ref(false);
+const loadingAvailableProviders = ref(false);
 const availableProviders = ref([]);
 const providerInspections = ref([]);
 
@@ -349,7 +356,7 @@ const isLocationLocked = () => isPersistedInspectionWithCode(newSiteVisit.value)
 
 const startAdd = () => {
   appState.value = 'editing';
-  Object.assign(newSiteVisit.value, DEFAULT_INSPECTION);
+  Object.assign(newSiteVisit.value, DEFAULT_SITEVISIT);
   newSiteVisit.value.id = 'new';
 };
 
@@ -365,7 +372,7 @@ const saveEdit = async (inspection) => {
     } else {
       await store.updateSiteVisit(inspectionToSave);
     }
-    Object.assign(newSiteVisit.value, DEFAULT_INSPECTION);
+    Object.assign(newSiteVisit.value, DEFAULT_SITEVISIT);
     appState.value = 'viewing';
     toast.success("Site visit data saved!")
   } catch (error) {
@@ -375,7 +382,7 @@ const saveEdit = async (inspection) => {
 
 const cancelEdit = () => {
   if (newSiteVisit.value.id == 'new') {
-    Object.assign(newSiteVisit.value, DEFAULT_INSPECTION);
+    Object.assign(newSiteVisit.value, DEFAULT_SITEVISIT);
   } else {
     const index = store.siteVisits.findIndex((x) => (x.id == newSiteVisit.value.id))
     Object.assign(newSiteVisit.value, store.siteVisits[index]);
@@ -395,11 +402,14 @@ const loadProviderInspections = async () => {
     providerInspections.value = [];
     return;
   }
+  loadingProviders.value = true;
   try {
     await inspectedProviderStore.getInspectedProviders(newSiteVisit.value.id);
     providerInspections.value = inspectedProviderStore.getForInspection(newSiteVisit.value.id);
-  } catch (error) {
-    toast.error("Could not load providers: " + error.message);
+  } catch {
+    providerInspections.value = [];
+  } finally {
+    loadingProviders.value = false;
   }
 };
 
@@ -408,37 +418,41 @@ const loadAvailableProviders = async () => {
     availableProviders.value = [];
     return;
   }
+  loadingAvailableProviders.value = true;
   try {
-    if (!locationStore.servicesLoaded) {
-      await locationStore.loadLocationServices();
-    }
-    await locationStore.getLocationServices(newSiteVisit.value.locationId);
-    const services = locationStore.locationServices;
-    if (!services || !Array.isArray(services)) {
+    const { data: result } = await apiEntityCRUD('query', 'LocationService', null, {
+      locationId: newSiteVisit.value.locationId,
+      deleted: false,
+    });
+    if (!result || typeof result !== 'object' || !('list' in result)) {
       availableProviders.value = [];
       return;
     }
     const providers = {};
-    for (const service of services) {
-      const { data: locServices } = await apiEntityCRUD('query', 'LocationService', null, { id: service.id });
-      if (locServices && locServices.list) {
-        for (const ls of locServices.list) {
-          if (ls.serviceProviderId) {
-            providers[ls.serviceProviderId] = {
-              id: ls.serviceProviderId,
-              name: ls.serviceProviderName || ls.serviceProviderId,
-            };
-          }
-        }
+    for (const ls of result.list) {
+      if (ls.serviceProviderId) {
+        providers[ls.serviceProviderId] = {
+          id: ls.serviceProviderId,
+          name: ls.serviceProviderName || ls.serviceProviderId,
+        };
       }
     }
     availableProviders.value = Object.values(providers);
-  } catch (error) {
+  } catch {
     availableProviders.value = [];
+  } finally {
+    loadingAvailableProviders.value = false;
   }
 };
 
 const addProviderInspection = async (serviceProviderId, serviceProviderName) => {
+  const exists = providerInspections.value.some(
+    (pi) => pi.serviceProviderId === serviceProviderId,
+  );
+  if (exists) {
+    toast.warning("Provider already added to this site visit.");
+    return;
+  }
   try {
     await inspectedProviderStore.addInspectedProvider(newSiteVisit.value.id, serviceProviderId, serviceProviderName);
     await loadProviderInspections();
@@ -463,7 +477,7 @@ const removeProviderInspection = async (providerInspectionId) => {
   }
 };
 
-const removeInspection = async (inspection) => {
+const removeSiteVisit = async (inspection) => {
   if (isActive(inspection.status)) {
     if (confirm('Inactivate this site visit? It will remain in the system but will not be available for operations.')) {
       try {
@@ -487,7 +501,7 @@ const removeInspection = async (inspection) => {
   }
 };
 
-const inactivateInspection = async () => {
+const inactivateSiteVisit = async () => {
   if (confirm('Inactivate this site visit? It will remain in the system but will not be available for operations.')) {
     try {
       await store.inactivateSiteVisit(newSiteVisit.value.id);
@@ -500,7 +514,7 @@ const inactivateInspection = async () => {
   }
 };
 
-const reactivateInspection = async () => {
+const reactivateSiteVisit = async () => {
   if (confirm('Reactivate this site visit?')) {
     try {
       await store.reactivateSiteVisit(newSiteVisit.value.id);
@@ -1150,11 +1164,23 @@ input:focus {
   white-space: nowrap;
 }
 
-.provider-header select {
-  padding: 0.5rem;
-  border: 1px solid var(--border-color);
-  border-radius: 4px;
-  flex: 1;
+.provider-list-header {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 0.5rem;
+}
+
+.provider-hint {
+  color: #9e9e9e;
+  font-style: italic;
+  font-size: 0.85rem;
+}
+
+.provider-loading {
+  color: #757575;
+  font-size: 0.85rem;
+  padding: 0.5rem 0;
 }
 
 .provider-dropdown {
@@ -1162,7 +1188,7 @@ input:focus {
   border-radius: 4px;
   max-height: 200px;
   overflow-y: auto;
-  margin-bottom: 0.5rem;
+  margin-bottom: 0.75rem;
   background: white;
 }
 
@@ -1179,49 +1205,63 @@ input:focus {
   padding: 0.5rem 1rem;
   color: #9e9e9e;
   font-style: italic;
+  font-size: 0.85rem;
 }
 
 .provider-list {
   display: flex;
-  flex-wrap: wrap;
+  flex-direction: column;
   gap: 0.5rem;
 }
 
-.provider-tag {
-  display: flex;
-  align-items: center;
-  gap: 0.25rem;
-  padding: 0.25rem 0.5rem;
+.provider-card {
   border: 1px solid var(--border-color);
-  border-radius: 16px;
+  border-radius: 8px;
+  padding: 0.5rem 0.75rem;
   cursor: pointer;
-  font-size: 0.85rem;
-  background: #f5f5f5;
-  transition: background 0.2s;
+  transition: border-color 0.2s, background 0.2s;
 }
 
-.provider-tag:hover {
+.provider-card:hover {
+  border-color: var(--secondary-color);
+}
+
+.provider-card-selected {
+  border-color: var(--secondary-color);
   background: #e3f2fd;
 }
 
-.provider-tag-selected {
-  background: #bbdefb;
-  border-color: var(--secondary-color);
-  font-weight: 600;
+.provider-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
 }
 
 .provider-remove {
   background: none;
-  border: none;
+  border: 1px solid #e0e0e0;
+  border-radius: 4px;
   color: #757575;
-  font-size: 1rem;
+  font-size: 0.8rem;
   cursor: pointer;
-  padding: 0 0.25rem;
-  line-height: 1;
+  padding: 0.15rem 0.5rem;
 }
 
 .provider-remove:hover {
   color: #e53935;
+  border-color: #e53935;
+}
+
+.provider-action-link {
+  display: inline-block;
+  margin-top: 0.35rem;
+  font-size: 0.85rem;
+  color: var(--secondary-color);
+  text-decoration: none;
+}
+
+.provider-action-link:hover {
+  text-decoration: underline;
 }
 
 @media (max-width: 1024px) {

@@ -15,19 +15,22 @@ export const useInspectedProviderStore = defineStore('inspectedProvider', {
       try {
         const { data: queryResults } = await apiEntityCRUD(
           'query', 'InspectedProvider', null,
-          { deleted: false, siteVisitId },
+          { deleted: false },
         );
-        if (!queryResults || typeof queryResults !== 'object' || !('list' in queryResults) || !Array.isArray(queryResults.list)) {
+        if (!queryResults || typeof queryResults !== 'object' || !('list' in queryResults)) {
           this.inspectedProviders[siteVisitId] = [];
           return;
         }
-        this.inspectedProviders[siteVisitId] = queryResults.list.map((entity) => ({
-          id: entity.id,
-          siteVisitId: entity.siteVisitId,
-          serviceProviderId: entity.serviceProviderId,
-          serviceProviderName: entity.serviceProviderName,
-          name: entity.name,
-        }));
+        const list = Array.isArray(queryResults.list) ? queryResults.list : [];
+        this.inspectedProviders[siteVisitId] = list
+          .filter((entity) => entity.siteVisitId === siteVisitId || entity.siteVisit === siteVisitId)
+          .map((entity) => ({
+            id: entity.id,
+            siteVisitId: entity.siteVisitId || entity.siteVisit || siteVisitId,
+            serviceProviderId: entity.serviceProviderId,
+            serviceProviderName: entity.serviceProviderName,
+            name: entity.name,
+          }));
       } catch {
         this.inspectedProviders[siteVisitId] = [];
       } finally {
@@ -44,8 +47,8 @@ export const useInspectedProviderStore = defineStore('inspectedProvider', {
           name: serviceProviderName || serviceProviderId,
         };
         const { data: added } = await apiEntityCRUD('add', 'InspectedProvider', null, data);
-        if (!added || !('id' in added)) {
-          throw new Error('API call returned invalid data');
+        if (!added || typeof added !== 'object' || !('id' in added)) {
+          throw new Error('API call returned invalid data: ' + (typeof added === 'string' ? added : ''));
         }
         await this.getInspectedProviders(siteVisitId);
         return added;

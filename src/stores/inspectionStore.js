@@ -10,55 +10,48 @@ export const useInspectionStore = defineStore('inspection', {
 
   actions: {
 
-    async addInspection(siteVisitId, inspectedProviderId, data) {
+    async addInspection(siteVisitId, inspectedProviderId, data, siteVisitCode = '') {
       try {
         const addData = {
           siteVisitId,
           inspectedProviderId,
+          code: siteVisitCode,
           inspectionType: data.inspectionType || '',
           objective: data.objective || '',
           scope: data.scope || '',
         };
 
         const { data: added } = await apiEntityCRUD('add', 'Inspection', null, addData);
-        if (!added || !('id' in added)) {
-          throw new Error('API call returned invalid data');
+        if (!added || typeof added !== 'object' || !('id' in added)) {
+          throw new Error('API call returned invalid data: ' + (typeof added === 'string' ? added : ''));
         }
 
         const inspectionId = added.id;
 
-        const { data: siteVisitQuery } = await apiEntityCRUD('query', 'SiteVisit', null, { id: siteVisitId });
-        if (('list' in siteVisitQuery) && siteVisitQuery.list.length > 0) {
-          const sv = siteVisitQuery.list[0];
-          const schedules = [
-            {
-              name: 'Opening Meeting',
-              startDateTime: `${sv.startDate} 10:00:00`,
-              endDateTime: `${sv.startDate} 10:30:00`,
-              place: '',
-              inspectionId,
-            },
-            {
-              name: 'Closing Meeting',
-              startDateTime: `${sv.endDate} 11:00:00`,
-              endDateTime: `${sv.endDate} 11:30:00`,
-              place: '',
-              inspectionId,
-            },
-          ];
-          for (const s of schedules) {
-            await apiEntityCRUD('add', 'InspectionSchedule', null, s);
+        try {
+          const { data: siteVisitQuery } = await apiEntityCRUD('query', 'SiteVisit', null, { id: siteVisitId });
+          if (('list' in siteVisitQuery) && siteVisitQuery.list.length > 0) {
+            const sv = siteVisitQuery.list[0];
+            const schedules = [
+              { name: 'Opening Meeting', startDateTime: `${sv.startDate} 10:00:00`, endDateTime: `${sv.startDate} 10:30:00`, place: '', inspectionId },
+              { name: 'Closing Meeting', startDateTime: `${sv.endDate} 11:00:00`, endDateTime: `${sv.endDate} 11:30:00`, place: '', inspectionId },
+            ];
+            for (const s of schedules) {
+              await apiEntityCRUD('add', 'InspectionSchedule', null, s);
+            }
           }
+        } catch {
+          // Schedules are optional
         }
 
-        await this.getInspections(siteVisitId);
+        await this.getInspections(inspectedProviderId);
         return added;
       } catch (error) {
         throw new Error('addInspection: ' + error.message);
       }
     },
 
-    async updateInspection(inspectionToUpdate) {
+    async updateInspection(inspectionToUpdate, inspectedProviderId) {
       try {
         if (!inspectionToUpdate || !('id' in inspectionToUpdate)) {
           throw new Error('Missing inspection ID');
@@ -66,54 +59,53 @@ export const useInspectionStore = defineStore('inspection', {
         const updateId = inspectionToUpdate.id;
         const updateData = {};
         for (const key of Object.keys(inspectionToUpdate)) {
-          if (key !== 'id' && key !== 'siteVisitId') updateData[key] = inspectionToUpdate[key];
+          if (key !== 'id' && key !== 'siteVisitId' && key !== 'inspectedProviderId') {
+            updateData[key] = inspectionToUpdate[key];
+          }
         }
         await apiEntityCRUD('update', 'Inspection', updateId, updateData);
-
-        const { data: updated } = await apiEntityCRUD('query', 'Inspection', null, { id: updateId });
-        if (('list' in updated) && updated.list.length > 0) {
-          const siteVisitId = updated.list[0].siteVisitId;
-          await this.getInspections(siteVisitId);
-        }
+        await this.getInspections(inspectedProviderId);
       } catch (error) {
         throw new Error('updateInspection: ' + error.message);
       }
     },
 
-    async getInspections(siteVisitId) {
+    async getInspections(inspectedProviderId) {
       this.loading = true;
       try {
         const { data: queryResults } = await apiEntityCRUD(
           'query', 'Inspection', null,
-          { deleted: false, siteVisitId },
+          { deleted: false, inspectedProviderId },
         );
         if (!queryResults || typeof queryResults !== 'object' || !('list' in queryResults)) {
-          this.inspections[siteVisitId] = [];
+          this.inspections[inspectedProviderId] = [];
           return;
         }
-        this.inspections[siteVisitId] = (queryResults.list || []).map((entity) => ({
+        const list = Array.isArray(queryResults.list) ? queryResults.list : [];
+        this.inspections[inspectedProviderId] = list.map((entity) => ({
           id: entity.id,
           siteVisitId: entity.siteVisitId,
           inspectedProviderId: entity.inspectedProviderId,
-          inspectionType: entity.inspectionType,
-          objective: entity.objective,
-          scope: entity.scope,
+          inspectionType: entity.inspectionType || '',
+          objective: entity.objective || '',
+          scope: entity.scope || '',
+          code: entity.code || '',
         }));
       } catch {
-        this.inspections[siteVisitId] = [];
+        this.inspections[inspectedProviderId] = [];
       } finally {
         this.loading = false;
       }
     },
 
-    getForSiteVisit(siteVisitId) {
-      return this.inspections[siteVisitId] || [];
+    getForInspectedProvider(inspectedProviderId) {
+      return this.inspections[inspectedProviderId] || [];
     },
 
-    async deleteInspection(id, siteVisitId) {
+    async deleteInspection(id, inspectedProviderId) {
       try {
         await apiEntityCRUD('delete', 'Inspection', id);
-        await this.getInspections(siteVisitId);
+        await this.getInspections(inspectedProviderId);
       } catch (error) {
         throw new Error('deleteInspection: ' + error.message);
       }

@@ -46,7 +46,7 @@ const message = computed(() => {
 async function onSubmit() {
   try {
     await authStore.login(username.value, password.value);
-    const redirectTarget = typeof route.query.redirect === 'string' ? route.query.redirect : '/inspection';
+    const redirectTarget = typeof route.query.redirect === 'string' ? route.query.redirect : '/site-visit';
     await router.push(redirectTarget);
   } catch {
     // Error state is already captured by auth store.
