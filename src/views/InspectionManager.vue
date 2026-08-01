@@ -228,7 +228,7 @@ const toggleServices = async () => {
   } else {
     for (const key of Object.keys(serviceTable.value)) { delete serviceTable[key]; }
     if (!locationStore.servicesLoaded) { await locationStore.loadLocationServices(); }
-    await locationStore.getLocationServices(locationId);
+    await locationStore.getLocationServices(locationId, providerId);
     if (inspectionData.value.id) {
       await iSpecialtyStore.getInspectedServices(inspectionData.value.id);
     }
@@ -310,11 +310,11 @@ const saveSchedules = async () => {
         startDateTime: toBackendDateTime(schedule.startDateTime),
         endDateTime: toBackendDateTime(schedule.endDateTime),
         place: schedule.place || '',
-        inspectionId: inspectionData.value.id,
       };
       if (schedule.id) {
         await apiEntityCRUD('update', 'InspectionSchedule', schedule.id, data);
       } else {
+        data.inspectionId = inspectionData.value.id;
         const { data: added } = await apiEntityCRUD('add', 'InspectionSchedule', null, data);
         schedule.id = added.id;
       }
@@ -360,11 +360,15 @@ const formatDateTime = (dateTimeStr) => {
 const toInputDateTime = (dateTimeStr) => {
   if (!dateTimeStr) return '';
   const normalized = dateTimeStr.trim().replace('Z', '');
+  if (normalized.includes(' ')) {
+    const parts = normalized.split(' ');
+    return `${parts[0]}T${(parts[1] || '00:00:00').slice(0, 5)}`;
+  }
   if (normalized.includes('T')) {
     const [datePart, timePart] = normalized.split('T');
     return `${datePart}T${timePart.slice(0, 5)}`;
   }
-  return dateTimeStr;
+  return normalized;
 };
 
 const toBackendDateTime = (dateTimeStr) => {

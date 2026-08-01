@@ -7,6 +7,7 @@ export const useLocationStore = defineStore('locationStore', {
     return {
       locations : [],
       services : {},
+      locationServiceProviders : {},
       locationServices : [],
       loading : false,
     }
@@ -42,10 +43,16 @@ export const useLocationStore = defineStore('locationStore', {
       }
     },
 
-    async getLocationServices(id) {
+    async getLocationServices(locationId, providerId = null) {
 
-      this.locationServices = this.services[id];
-     
+      this.locationServices = this.services[locationId] || [];
+
+      if (providerId) {
+        this.locationServices = this.locationServices.filter((svc) => {
+          return svc && this.locationServiceProviders[svc.id] === providerId;
+        });
+      }
+      
     },
 
     async loadLocationServices() {
@@ -78,6 +85,8 @@ export const useLocationStore = defineStore('locationStore', {
         }
         
         for (const entity of queryResults.list ) {
+
+          this.locationServiceProviders[entity.id] = entity.serviceProviderId || null;
 
           if (!this.services[entity.locationId]) {
             this.services[entity.locationId] = [];
