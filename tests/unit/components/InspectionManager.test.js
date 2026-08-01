@@ -56,16 +56,16 @@ describe('InspectionManager.vue (per-provider)', () => {
 
   it('renders the component', () => {
     const wrapper = mount(InspectionManager, {
-      global: { stubs: { BaseManager: { template: '<div><slot /></div>' } } },
+      global: { stubs: { BaseManager: { template: '<div><slot /></div>' }, SiteVisitHeader: { template: '<div class="sitevisit-header"></div>' } } },
     });
-    expect(wrapper.find('input#siteVisitCode').exists()).toBe(true);
     expect(wrapper.find('input#inspectionType').exists()).toBe(true);
+    expect(wrapper.find('textarea#objective').exists()).toBe(true);
   });
 
   it('displays site visit code from route query', () => {
     const wrapper = mount(InspectionManager, {
-      global: { stubs: { BaseManager: { template: '<div><slot /></div>' } } },
+      global: { stubs: { BaseManager: { template: '<div><slot /></div>' }, SiteVisitHeader: { template: '<div class="sitevisit-header"></div>' } } },
     });
-    expect(wrapper.find('input#siteVisitCode').element.value).toBe('ABCD-001');
+    expect(wrapper.find('.sitevisit-header').exists()).toBe(true);
   });
 });

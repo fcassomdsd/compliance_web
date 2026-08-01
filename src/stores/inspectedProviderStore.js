@@ -69,6 +69,11 @@ export const useInspectedProviderStore = defineStore('inspectedProvider', {
     getForInspection(siteVisitId) {
       return this.inspectedProviders[siteVisitId] || [];
     },
+
+    getProviderByServiceProvider(siteVisitId, serviceProviderId) {
+      const list = this.inspectedProviders[siteVisitId] || [];
+      return list.find((pi) => pi.serviceProviderId === serviceProviderId) || null;
+    },
   },
 
 });

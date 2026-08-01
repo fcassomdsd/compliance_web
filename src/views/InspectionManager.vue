@@ -1,10 +1,13 @@
 <template>
-  <BaseManager :title="'Inspection: ' + (inspectionData.inspectedProviderName || '')">
+  <BaseManager :title="'Inspection: ' + (inspectionData.inspectedProviderName || providerName)">
+    <SiteVisitHeader
+      :code="siteVisitCode"
+      :locationName="siteVisitData.locationName"
+      :startDate="siteVisitData.startDate"
+      :endDate="siteVisitData.endDate"
+      :providerName="providerName"
+    />
     <div class="input-group">
-      <div class="grid-cell1 grid-item">
-        <label for="siteVisitCode">Site Visit:</label>
-        <input id="siteVisitCode" type="text" :value="siteVisitCode" disabled />
-      </div>
       <div class="grid-cell2 grid-item">
         <label for="inspectionType">Inspection Type:</label>
         <input id="inspectionType" type="text" v-model="inspectionData.inspectionType" :disabled="appState != 'editing'" placeholder="e.g. Ramp Inspection" />
@@ -90,7 +93,9 @@
 import { ref, onMounted } from 'vue';
 import { useRoute } from 'vue-router';
 import BaseManager from '@/components/base/BaseManager.vue';
+import SiteVisitHeader from '@/components/inspection/SiteVisitHeader.vue';
 import { useInspectionStore } from '@/stores/inspectionStore';
+import { useSiteVisitStore } from '@/stores/siteVisitStore';
 import { useInspectedProviderStore } from '@/stores/inspectedProviderStore';
 import { useInspectedSpecialtyStore } from '@/stores/inspectedSpecialtyStore';
 import { useLocationStore } from '@/stores/locationStore';
@@ -106,6 +111,7 @@ const providerId = route.params.providerId;
 const siteVisitCode = route.query.code || '';
 
 const inspectionStore = useInspectionStore();
+const siteVisitStore = useSiteVisitStore();
 const inspectedProviderStore = useInspectedProviderStore();
 const iSpecialtyStore = useInspectedSpecialtyStore();
 const locationStore = useLocationStore();
@@ -117,6 +123,14 @@ const schedulesState = ref(false);
 const serviceTable = ref({});
 
 let inspectedProviderId = '';
+let locationId = '';
+const providerName = ref('');
+
+const siteVisitData = ref({
+  locationName: '',
+  startDate: '',
+  endDate: '',
+});
 
 const schedules = ref([]);
 const originalSchedules = ref([]);
@@ -137,14 +151,34 @@ const editingSchedules = ref([]);
 onMounted(async () => {
   if (!siteVisitId || !providerId) return;
   try {
+    let siteVisit = siteVisitStore.siteVisits.find((sv) => sv.id === siteVisitId);
+    if (!siteVisit) {
+      await siteVisitStore.refreshSiteVisits();
+      siteVisit = siteVisitStore.siteVisits.find((sv) => sv.id === siteVisitId);
+    }
+    if (!siteVisit) {
+      const { data: svQuery } = await apiEntityCRUD('query', 'SiteVisit', null, { id: siteVisitId });
+      if (svQuery && svQuery.list && svQuery.list.length > 0) {
+        siteVisit = svQuery.list[0];
+      }
+    }
+    if (siteVisit) {
+      siteVisitData.value = {
+        locationName: siteVisit.locationName || '',
+        startDate: siteVisit.startDate || '',
+        endDate: siteVisit.endDate || '',
+      };
+      locationId = siteVisit.locationId || '';
+    }
+
     await inspectedProviderStore.getInspectedProviders(siteVisitId);
-    const providerInspections = inspectedProviderStore.getForInspection(siteVisitId);
-    const target = providerInspections.find((pi) => pi.serviceProviderId === providerId);
+    const target = inspectedProviderStore.getProviderByServiceProvider(siteVisitId, providerId);
     if (!target) {
       toast.error('Provider not found for this site visit.');
       return;
     }
     inspectedProviderId = target.id;
+    providerName.value = target.serviceProviderName || target.name || target.serviceProviderId || '';
 
     await inspectionStore.getInspections(inspectedProviderId);
     const list = inspectionStore.getForInspectedProvider(inspectedProviderId);
@@ -194,7 +228,7 @@ const toggleServices = async () => {
   } else {
     for (const key of Object.keys(serviceTable.value)) { delete serviceTable[key]; }
     if (!locationStore.servicesLoaded) { await locationStore.loadLocationServices(); }
-    await locationStore.getLocationServices(inspectionData.value.locationId || '');
+    await locationStore.getLocationServices(locationId);
     if (inspectionData.value.id) {
       await iSpecialtyStore.getInspectedServices(inspectionData.value.id);
     }

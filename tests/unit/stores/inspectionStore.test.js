@@ -64,9 +64,9 @@ describe('Inspection Store (per-provider)', () => {
   });
 
   describe('getInspections', () => {
-    it('loads inspections for a site visit', async () => {
-      await store.getInspections('SV1');
-      const list = store.getForSiteVisit('SV1');
+    it('loads inspections for an inspected provider', async () => {
+      await store.getInspections('IP1');
+      const list = store.getForInspectedProvider('IP1');
       expect(list.length).toBe(1);
       expect(list[0].inspectionType).toBe('Ramp Inspection');
     });
@@ -74,7 +74,7 @@ describe('Inspection Store (per-provider)', () => {
 
   describe('updateInspection', () => {
     it('updates inspection fields', async () => {
-      await store.updateInspection({ id: 'INSP1', objective: 'Updated' });
+      await store.updateInspection({ id: 'INSP1', objective: 'Updated' }, 'IP1');
       expect(apiEntityCRUD).toHaveBeenCalledWith('update', 'Inspection', 'INSP1', expect.objectContaining({
         objective: 'Updated',
       }));
@@ -83,7 +83,7 @@ describe('Inspection Store (per-provider)', () => {
 
   describe('deleteInspection', () => {
     it('deletes inspection and refreshes', async () => {
-      await store.deleteInspection('INSP1', 'SV1');
+      await store.deleteInspection('INSP1', 'IP1');
       expect(apiEntityCRUD).toHaveBeenCalledWith('delete', 'Inspection', 'INSP1');
     });
   });
