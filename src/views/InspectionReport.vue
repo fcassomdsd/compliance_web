@@ -94,7 +94,7 @@ import { useInspectedSpecialtyStore } from '@/stores/inspectedSpecialtyStore';
 import { useAuthStore } from '@/stores/authStore';
 import { useToast } from 'vue-toastification';
 import { apiInspectionByIdOrCode, apiInspectionReport } from '@/services/apiServices';
-import { canGenerateReport, isActive } from '@/utils/inspectionStatus';
+import { canGenerateReport, isActive } from '@/utils/siteVisitStatus';
 import viewImg from '@/assets/images/icons/view.png';
 
 const inspectionStore = useInspectionStore();

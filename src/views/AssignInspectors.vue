@@ -104,7 +104,7 @@ import saveImg from '@/assets/images/icons/save.png';
 import cancelImg from '@/assets/images/icons/cancel.png';
 import viewImg from '@/assets/images/icons/view.png';
 import { apiEntityLinks } from '@/services/apiServices';
-import { INSPECTION_STATUS, canAssignInspectors, isActive, shouldRevertToAssignedOnReassign } from '@/utils/inspectionStatus';
+import { INSPECTION_STATUS, canAssignInspectors, isActive, shouldRevertToAssignedOnReassign } from '@/utils/siteVisitStatus';
 
 const inspectionStore = useInspectionStore();
 const inspectorStore = useInspectorStore();

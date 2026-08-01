@@ -90,7 +90,7 @@ import { useServiceAreaStore } from '@/stores/serviceAreaStore';
 import { useAuthStore } from '@/stores/authStore';
 import { useToast } from 'vue-toastification';
 import { apiInspectionByIdOrCode, apiInspectionPlan } from '@/services/apiServices';
-import { canGeneratePlan, isActive } from '@/utils/inspectionStatus';
+import { canGeneratePlan, isActive } from '@/utils/siteVisitStatus';
 import viewImg from '@/assets/images/icons/view.png';
 
 const inspectionStore = useInspectionStore();

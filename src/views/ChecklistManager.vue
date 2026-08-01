@@ -123,7 +123,7 @@ import { useInspectedSpecialtyStore } from '@/stores/inspectedSpecialtyStore';
 import { useInspectionStore } from '@/stores/inspectionStore';
 import { useAuthStore } from '@/stores/authStore';
 import { useToast } from 'vue-toastification';
-import { canProcessChecklists, isActive } from '@/utils/inspectionStatus';
+import { canProcessChecklists, isActive } from '@/utils/siteVisitStatus';
 
 const protocolQuestionStore = useProtocolQuestionStore();
 const inspectionQuestionStore = useInspectionQuestionStore();
