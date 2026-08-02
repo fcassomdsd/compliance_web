@@ -10,18 +10,18 @@
         <input id="locationName" type="text" :value="selectedInspection?.locationName || ''" disabled />
       </div>
       <div class="grid-cell3 grid-item">
-        <label for="reportDate">Report Date:</label>
-        <input id="reportDate" type="date" v-model="reportDate" :disabled="!selectedInspection" />
-      </div>
-      <div class="grid-cell4 grid-item">
-        <label for="serviceProvider">Service Provider:</label>
-        <select id="serviceProvider" v-model="selectedServiceProviderId"
-                :disabled="!selectedInspection || serviceProviders.length === 0">
-          <option value="">Select a service provider</option>
-          <option v-for="sp in serviceProviders" :key="sp.id" :value="sp.id">
-            {{ sp.name }}
+        <label for="providerSelect">Provider:</label>
+        <select id="providerSelect" v-model="selectedProviderId"
+                :disabled="!selectedInspection" @change="onProviderChange">
+          <option value="">Select a provider</option>
+          <option v-for="pi in providerInspections" :key="pi.id" :value="pi.serviceProviderId">
+            {{ pi.serviceProviderName || pi.name || pi.serviceProviderId }}
           </option>
         </select>
+      </div>
+      <div class="grid-cell4 grid-item">
+        <label for="reportDate">Report Date:</label>
+        <input id="reportDate" type="date" v-model="reportDate" :disabled="!selectedInspection || !selectedProviderId" />
       </div>
       <div class="input-buttons">
         <button id="generateBtn" @click="generateReport" :disabled="!canGenerate || loading">
@@ -29,9 +29,6 @@
         </button>
       </div>
     </div>
-    <p v-if="selectedInspection && serviceProviders.length === 0 && !loading" class="warning-text">
-      No service providers found for this inspection.
-    </p>
     <div v-if="loading" class="loader"></div>
 
     <div class="data-table">
@@ -74,22 +71,22 @@
 import { ref, computed, onMounted } from 'vue';
 import BaseManager from '@/components/base/BaseManager.vue';
 import { useSiteVisitStore } from '@/stores/siteVisitStore';
-import { useInspectedSpecialtyStore } from '@/stores/inspectedSpecialtyStore';
+import { useInspectedProviderStore } from '@/stores/inspectedProviderStore';
 import { useAuthStore } from '@/stores/authStore';
 import { useToast } from 'vue-toastification';
-import { apiInspectionByIdOrCode, apiInspectionReport } from '@/services/apiServices';
+import { apiInspectionReport } from '@/services/apiServices';
 import { isActive } from '@/utils/siteVisitStatus';
 import viewImg from '@/assets/images/icons/view.png';
 
 const siteVisitStore = useSiteVisitStore();
-const inspectedStore = useInspectedSpecialtyStore();
+const inspectedProviderStore = useInspectedProviderStore();
 const authStore = useAuthStore();
 const toast = useToast();
 
 const selectedInspection = ref(null);
+const selectedProviderId = ref('');
+const providerInspections = ref([]);
 const reportDate = ref('');
-const selectedServiceProviderId = ref('');
-const serviceProviders = ref([]);
 const loading = ref(false);
 
 const reportEligibleInspections = computed(() => {
@@ -105,8 +102,8 @@ const hasReportPermission = computed(() => {
 const canGenerate = computed(() =>
   hasReportPermission.value &&
   !!selectedInspection.value &&
-  reportDate.value.trim().length > 0 &&
-  selectedServiceProviderId.value !== ''
+  !!selectedProviderId.value &&
+  reportDate.value.trim().length > 0
 );
 
 onMounted(async () => {
@@ -115,17 +112,18 @@ onMounted(async () => {
 
 const selectInspection = async (inspection) => {
   selectedInspection.value = inspection;
-  selectedServiceProviderId.value = '';
-  serviceProviders.value = [];
-  loading.value = true;
+  selectedProviderId.value = '';
+  providerInspections.value = [];
   try {
-    await inspectedStore.getInspectedServices(inspection.id);
-    serviceProviders.value = await inspectedStore.getServiceProviders();
-  } catch (error) {
-    toast.error('Could not load service providers: ' + error.message);
-  } finally {
-    loading.value = false;
+    await inspectedProviderStore.getInspectedProviders(inspection.id);
+    providerInspections.value = inspectedProviderStore.getForInspection(inspection.id);
+  } catch {
+    providerInspections.value = [];
   }
+};
+
+const onProviderChange = () => {
+  // selectedProviderId is already the serviceProviderId from the dropdown value
 };
 
 const generateReport = async () => {
@@ -135,7 +133,7 @@ const generateReport = async () => {
     await apiInspectionReport(
       selectedInspection.value.code,
       reportDate.value,
-      selectedServiceProviderId.value
+      selectedProviderId.value,
     );
     toast.success('Inspection report generated successfully.');
     await siteVisitStore.refreshSiteVisits();
@@ -156,28 +154,6 @@ const generateReport = async () => {
     "input-buttons input-buttons";
   gap: 1rem;
   grid-template-columns: 1fr 1fr;
-}
-.warning-text {
-  color: var(--warning-color, #e65100);
-  font-size: 0.9rem;
-  margin-top: 0.5rem;
-}
-.authority-info {
-  margin-top: 0.75rem;
-  border: 1px solid #d8e3ef;
-  border-radius: 8px;
-  padding: 0.75rem;
-  background: #f7fbff;
-  color: #33485f;
-}
-
-.authority-info.authorized {
-  border-color: #b6dfbc;
-  background: #f2fbf3;
-}
-
-.authority-info p {
-  margin: 0.2rem 0;
 }
 .selected-row {
   background-color: var(--highlight-color, #e3f2fd);
