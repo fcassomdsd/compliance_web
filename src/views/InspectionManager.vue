@@ -61,7 +61,7 @@
           <h3>{{ editingScheduleIndex !== null ? 'Edit Schedule' : 'Add Schedule' }}</h3>
           <div class="schedule-fields">
             <div><label for="schedule-name">Name:</label><input id="schedule-name" type="text" v-model="currentSchedule.name" placeholder="Event name"/></div>
-            <div><label for="schedule-start">Start Date/Time:</label><input id="schedule-start" type="datetime-local" v-model="currentSchedule.startDateTime"/></div>
+            <div><label for="schedule-start">Start Date/Time:</label><input id="schedule-start" type="datetime-local" v-model="currentSchedule.startDateTime" @focus="onScheduleStartFocus" @blur="onScheduleStartBlur"/></div>
             <div><label for="schedule-end">End Date/Time:</label><input id="schedule-end" type="datetime-local" v-model="currentSchedule.endDateTime"/></div>
             <div><label for="schedule-place">Place:</label><input id="schedule-place" type="text" v-model="currentSchedule.place" placeholder="Event location"/></div>
           </div>
@@ -300,8 +300,25 @@ const deleteSchedule = (index) => {
 };
 
 const resetScheduleForm = () => {
-  currentSchedule.value = { name: '', startDateTime: '', endDateTime: '', place: '' };
+  currentSchedule.value = {
+    name: '',
+    startDateTime: siteVisitData.value.startDate ? `${siteVisitData.value.startDate}T10:00` : '',
+    endDateTime: '',
+    place: '',
+  };
   editingScheduleIndex.value = null;
+};
+
+const onScheduleStartFocus = () => {
+  if (!currentSchedule.value.startDateTime && siteVisitData.value.startDate) {
+    currentSchedule.value.startDateTime = `${siteVisitData.value.startDate}T10:00`;
+  }
+};
+
+const onScheduleStartBlur = () => {
+  if (currentSchedule.value.startDateTime && !currentSchedule.value.endDateTime) {
+    currentSchedule.value.endDateTime = currentSchedule.value.startDateTime;
+  }
 };
 
 const saveSchedules = async () => {

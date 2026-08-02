@@ -17,7 +17,7 @@
       </div>      
       <div class="grid-cell3 grid-item">
         <label for="startDate">Start Date:</label>
-        <input id="startDate" type="date" size="12" v-model="newSiteVisit.startDate" :disabled="(appState != 'editing')" placeholder="Start date"/>
+        <input id="startDate" type="date" size="12" v-model="newSiteVisit.startDate" :disabled="(appState != 'editing')" placeholder="Start date" @blur="onStartDateBlur"/>
       </div>      
       <div class="grid-cell4 grid-item">
         <label for="endDate">End Date:</label>
@@ -358,6 +358,18 @@ const startAdd = () => {
   appState.value = 'editing';
   Object.assign(newSiteVisit.value, DEFAULT_SITEVISIT);
   newSiteVisit.value.id = 'new';
+  const d = new Date();
+  d.setDate(d.getDate() + 20);
+  newSiteVisit.value.startDate = d.toISOString().slice(0, 10);
+  newSiteVisit.value.endDate = '';
+};
+
+const onStartDateBlur = () => {
+  if (newSiteVisit.value.startDate && !newSiteVisit.value.endDate) {
+    const sd = new Date(newSiteVisit.value.startDate);
+    sd.setDate(sd.getDate() + 1);
+    newSiteVisit.value.endDate = sd.toISOString().slice(0, 10);
+  }
 };
 
 const saveEdit = async (inspection) => {

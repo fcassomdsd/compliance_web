@@ -108,6 +108,7 @@ const canGenerate = computed(() =>
 
 onMounted(async () => {
   await siteVisitStore.refreshSiteVisits();
+  reportDate.value = new Date().toISOString().slice(0, 10);
 });
 
 const selectInspection = async (inspection) => {
