@@ -471,13 +471,9 @@ const saveChecklist = async () => {
       throw new Error('No specialty selected');
     }
 
-    // Delete all existing inspection questions for this specialty
-    await inspectionQuestionStore.deleteAllForSpecialty(selectedInspectedSpecialtyId.value);
+    const questionsToSave = [];
 
-    // Add selected questions with persisted sequence (per topic order)
     if (selectedQuestionIds.value.length > 0) {
-      const questionsToSave = [];
-
       if (Object.keys(groupedQuestions.value).length === 0) {
         selectedQuestionIds.value.forEach((item, index) => {
           questionsToSave.push({
@@ -507,12 +503,12 @@ const saveChecklist = async () => {
           }
         }
       }
-
-      await inspectionQuestionStore.addMultipleQuestions(
-        selectedInspectedSpecialtyId.value,
-        questionsToSave
-      );
     }
+
+    await inspectionQuestionStore.upsertChecklist(
+      selectedInspectedSpecialtyId.value,
+      questionsToSave,
+    );
 
     successMessage.value = `Checklist saved successfully! ${selectedQuestionIds.value.length} questions selected.`;
     toast.success('Checklist saved successfully!');

@@ -251,6 +251,80 @@ export const useInspectionQuestionStore = defineStore('inspectionQuestion', {
       }
     },
 
+    async upsertChecklist(inspectedSpecialtyId, selectedQuestions) {
+      try {
+        if (!inspectedSpecialtyId || inspectedSpecialtyId.length === 0) {
+          throw new Error('inspectedSpecialtyId is required');
+        }
+
+        const existing = this.inspectionQuestionsBySpecialty[inspectedSpecialtyId] || [];
+        const existingById = new Map(existing.map((q) => [q.protocolQuestionId, q]));
+        const selectedIds = new Set(selectedQuestions.map((q) => q.id));
+
+        const selectedMap = new Map();
+        for (const q of selectedQuestions) {
+          selectedMap.set(q.id, q);
+        }
+
+        let deleted = 0;
+        let added = 0;
+        let updated = 0;
+
+        for (const q of existing) {
+          if (!selectedIds.has(q.protocolQuestionId)) {
+            await apiEntityCRUD('delete', 'InspectionQuestion', q.id);
+            delete this.inspectionQuestions[q.id];
+            if (this.inspectionQuestionsBySpecialty[inspectedSpecialtyId]) {
+              this.inspectionQuestionsBySpecialty[inspectedSpecialtyId] = this.inspectionQuestionsBySpecialty[inspectedSpecialtyId]
+                .filter((x) => x.id !== q.id);
+            }
+            deleted++;
+          }
+        }
+
+        for (const sq of selectedQuestions) {
+          const existingQ = existingById.get(sq.id);
+          if (!existingQ) {
+            try {
+              const questionData = {
+                inspectedSpecialtyId,
+                protocolQuestionId: sq.id,
+                code: sq.code,
+                sequence: sq.sequence,
+                riskLevel: sq.riskLevel || null,
+              };
+              await this.addInspectionQuestion(questionData);
+              added++;
+            } catch (error) {
+              console.error(`Failed to add protocol question ${sq?.id}: ${error.message}`);
+            }
+          } else if (
+            existingQ.sequence !== sq.sequence ||
+            (existingQ.riskLevel || null) !== (sq.riskLevel || null)
+          ) {
+            try {
+              const updateData = {};
+              if (typeof sq.sequence === 'number') updateData.sequence = sq.sequence;
+              if (sq.riskLevel !== undefined) updateData.riskLevel = sq.riskLevel || null;
+              const result = await apiEntityCRUD('update', 'InspectionQuestion', existingQ.id, updateData);
+              if (result.status !== 204) {
+                existingQ.sequence = sq.sequence;
+                existingQ.riskLevel = sq.riskLevel || null;
+              }
+              updated++;
+            } catch (error) {
+              console.error(`Failed to update protocol question ${sq?.id}: ${error.message}`);
+            }
+          }
+        }
+
+        return { deleted, added, updated };
+      } catch (error) {
+        this.error = error.message;
+        throw new Error('upsertChecklist: ' + error.message);
+      }
+    },
+
     /**
      * Get selected protocol question IDs for a specialty
      * @param {string} inspectedSpecialtyId - The inspected specialty ID

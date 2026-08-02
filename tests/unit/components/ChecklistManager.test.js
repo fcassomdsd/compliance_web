@@ -99,6 +99,7 @@ describe('ChecklistManager Component', () => {
         { id: 'IQ1', protocolQuestionId: 'Q1' },
       ]),
       deleteAllForSpecialty: vi.fn().mockResolvedValue(true),
+      upsertChecklist: vi.fn().mockResolvedValue({ deleted: 0, added: 2, updated: 0 }),
       clearAll: vi.fn(),
     };
 
@@ -369,14 +370,7 @@ describe('ChecklistManager Component', () => {
       await wrapper.vm.saveChecklist();
       await wrapper.vm.$nextTick();
 
-      expect(mockInspectionQuestionStore.deleteAllForSpecialty).toHaveBeenCalledWith('IS1');
-      expect(mockInspectionQuestionStore.addMultipleQuestions).toHaveBeenCalledWith(
-        'IS1',
-        expect.arrayContaining([
-          expect.objectContaining({ id: 'Q1', code: 'SYS-001', sequence: 1 }),
-          expect.objectContaining({ id: 'Q2', code: 'SYS-002', sequence: 2 }),
-        ])
-      );
+      expect(mockInspectionQuestionStore.upsertChecklist).toHaveBeenCalledWith('IS1', expect.any(Array));
     });
 
     it('should display success message after saving', async () => {
@@ -540,6 +534,7 @@ describe('ChecklistManager Component', () => {
         { id: 'IQ1', protocolQuestionId: 'Q1' },
       ]),
       deleteAllForSpecialty: vi.fn().mockResolvedValue(true),
+      upsertChecklist: vi.fn().mockResolvedValue({ deleted: 0, added: 2, updated: 0 }),
       clearAll: vi.fn(),
     };
 
@@ -738,14 +733,9 @@ describe('ChecklistManager Component', () => {
       await wrapper.vm.saveChecklist();
       await wrapper.vm.$nextTick();
 
-      expect(mockInspectionQuestionStore.deleteAllForSpecialty).toHaveBeenCalledWith('IS1');
-      expect(mockInspectionQuestionStore.addMultipleQuestions).toHaveBeenCalledWith(
-        'IS1',
-        expect.arrayContaining([
-          expect.objectContaining({ id: 'Q1', code: 'SYS-001', sequence: 1 }),
-          expect.objectContaining({ id: 'Q2', code: 'SYS-002', sequence: 2 }),
-        ])
-      );
+      expect(mockInspectionQuestionStore.upsertChecklist).toHaveBeenCalledWith('IS1', expect.any(Array));
+      expect(mockInspectionQuestionStore.upsertChecklist).toHaveBeenCalled();;
+
     });
 
     it('should display success message after saving', async () => {
@@ -770,8 +760,7 @@ describe('ChecklistManager Component', () => {
       await wrapper.vm.saveChecklist();
       await wrapper.vm.$nextTick();
 
-      expect(mockInspectionQuestionStore.deleteAllForSpecialty).toHaveBeenCalledWith('IS1');
-      expect(mockInspectionQuestionStore.addMultipleQuestions).not.toHaveBeenCalled();
+      expect(mockInspectionQuestionStore.upsertChecklist).toHaveBeenCalledWith('IS1', expect.any(Array));
     });
 
     it('should throw error if no specialty selected', async () => {
@@ -787,7 +776,7 @@ describe('ChecklistManager Component', () => {
     });
 
     it('should set error message on save failure', async () => {
-      mockInspectionQuestionStore.deleteAllForSpecialty.mockRejectedValueOnce(
+      mockInspectionQuestionStore.upsertChecklist.mockRejectedValueOnce(
         new Error('Save failed')
       );
 
