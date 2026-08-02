@@ -51,6 +51,8 @@
         <button id="editBtn" @click="appState = 'editing'" :disabled="newSiteVisit.id == null || appState != 'viewing' || !canEditBasicValues(newSiteVisit.status)"><img :src="editImg" alt="Edit" class="icon-btn" /></button>
         <button id="saveBtn" @click="saveEdit(newSiteVisit)" :disabled="(appState != 'editing' || !newSiteVisit.valid())"><img :src="saveImg" alt="Save" class="icon-btn" /></button>
         <button id="cancelBtn" @click="cancelEdit()" :disabled="appState != 'editing'"><img :src="cancelImg" alt="Cancel" class="icon-btn" /></button>
+        <button v-if="newSiteVisit.id && newSiteVisit.status === INSPECTION_STATUS.INACTIVE && canManageStatus" id="reactivateBtn" class="push-button" @click="reactivateSiteVisit()">Reactivate</button>
+        <button v-if="newSiteVisit.id && canInactivate(newSiteVisit.status) && canManageStatus" id="inactivateBtn" class="push-button push-button-warning" @click="inactivateSiteVisit()">Inactivate</button>
       </div>
     </div>
     <div class="provider-group" v-if="newSiteVisit.id && newSiteVisit.id !== 'new'">
@@ -85,109 +87,6 @@
             v-if="selectedProviderId === pi.id"
             :to="`/site-visit/${newSiteVisit.id}/provider/${pi.serviceProviderId}?code=${newSiteVisit.code}`"
             class="provider-action-link">Manage Inspection</router-link>
-        </div>
-      </div>
-    </div>
-    <div class="detail-group">
-      <div class="detail-buttons">
-        <button id="services" class="push-button" :class="{'button-down' : servicesState}" :disabled="(appState == 'editing' || !newSiteVisit.id || !canAssignServices(newSiteVisit.status))" @click="toggleServices()">Services</button>
-        <button id="schedules" class="push-button" :class="{'button-down' : schedulesState}" :disabled="(appState == 'editing' || !newSiteVisit.id || !canAssignServices(newSiteVisit.status))" @click="toggleSchedules()">Schedules</button>
-        <button
-          v-if="newSiteVisit.id && newSiteVisit.status === INSPECTION_STATUS.INACTIVE && canManageStatus"
-          id="reactivateBtn" class="push-button" @click="reactivateInspection()">Reactivate</button>
-        <button
-          v-if="newSiteVisit.id && canInactivate(newSiteVisit.status) && canManageStatus"
-          id="inactivateBtn" class="push-button push-button-warning" @click="inactivateInspection()">Inactivate</button>
-      </div>
-      <div id="services" class="service-group" v-show="servicesState" >
-        <table class="service-table">
-          <colgroup>
-            <col style="width: 50%;">
-            <col style="width: 50%;">
-          </colgroup>
-          <thead>
-            <tr>
-              <th>Service Name</th>
-              <th>Specialty</th>
-            </tr>
-          </thead>
-          <tr v-for="locService in locationStore.locationServices" :key="locService.id">
-            <td :id="`service-name-${locService.id}`">
-              {{ locService.name }}
-            </td>          
-            <td :id="`specialty-list-${locService.id}`">
-              <table class="specialties-table">
-                <tr v-for="specialty in locService.specialties" :key="specialty.id">
-                  <td>
-                      <input type="checkbox" 
-                        :id="`checkbox-${specialty.id}`" 
-                        :checked="( serviceTable[locService.id] !== undefined && serviceTable[locService.id][specialty.id] )" 
-                        @change="toggleSpecialty(locService.id, specialty.id)"
-                      />
-                    <span>
-                      <label :for="`checkbox-${specialty.id}`">{{ specialty.name }}</label>
-                    </span>                  
-                  </td>                 
-                </tr>
-              </table>
-            </td>          
-          </tr>
-        </table>
-      </div>
-      <div id="schedules" class="schedule-group" v-show="schedulesState">
-        <div class="schedule-form">
-          <h3>{{ editingScheduleIndex !== null ? 'Edit Schedule' : 'Add Schedule' }}</h3>
-          <div class="schedule-fields">
-            <div>
-              <label for="schedule-name">Name:</label>
-              <input id="schedule-name" type="text" v-model="currentSchedule.name" placeholder="Event name"/>
-            </div>
-            <div>
-              <label for="schedule-start">Start Date/Time:</label>
-              <input id="schedule-start" type="datetime-local" v-model="currentSchedule.startDateTime"/>
-            </div>
-            <div>
-              <label for="schedule-end">End Date/Time:</label>
-              <input id="schedule-end" type="datetime-local" v-model="currentSchedule.endDateTime"/>
-            </div>
-            <div>
-              <label for="schedule-place">Place:</label>
-              <input id="schedule-place" type="text" v-model="currentSchedule.place" placeholder="Event location"/>
-            </div>
-          </div>
-          <div class="schedule-buttons">
-            <button @click="addOrUpdateSchedule" :disabled="!currentSchedule.name || !currentSchedule.startDateTime || !currentSchedule.endDateTime">
-              {{ editingScheduleIndex !== null ? 'Update' : 'Add' }}
-            </button>
-            <button @click="cancelScheduleEdit" v-if="editingScheduleIndex !== null">Cancel</button>
-          </div>
-        </div>
-        <table class="schedule-table" v-if="schedules.length > 0">
-          <thead>
-            <tr>
-              <th>Name</th>
-              <th>Start Date/Time</th>
-              <th>End Date/Time</th>
-              <th>Place</th>
-              <th>Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="(schedule, index) in schedules" :key="index">
-              <td>{{ schedule.name }}</td>
-              <td>{{ formatDateTime(schedule.startDateTime) }}</td>
-              <td>{{ formatDateTime(schedule.endDateTime) }}</td>
-              <td>{{ schedule.place || '' }}</td>
-              <td>
-                <button @click="editSchedule(index)">Edit</button>
-                <button @click="deleteSchedule(index)">Delete</button>
-              </td>
-            </tr>
-          </tbody>
-        </table>
-        <p v-else>No schedules defined yet.</p>
-        <div class="schedule-actions">
-          <button @click="saveSchedules" :disabled="!schedulesChanged">Save All</button>
         </div>
       </div>
     </div>
@@ -241,11 +140,9 @@
 import { ref, computed } from 'vue';
 import BaseManager from '@/components/base/BaseManager.vue';
 import { useSiteVisitStore } from '@/stores/siteVisitStore';
-import { useInspectedSpecialtyStore } from '@/stores/inspectedSpecialtyStore';
 import { useLocationStore } from '@/stores/locationStore';
 import { useInspectorStore } from '@/stores/inspectorStore';
 import { useInspectedProviderStore } from '@/stores/inspectedProviderStore';
-import { useServiceAreaStore } from '@/stores/serviceAreaStore';
 import { useAuthStore } from '@/stores/authStore';
 import { useToast } from 'vue-toastification';
 import { apiEntityCRUD } from '@/services/apiServices';
@@ -267,20 +164,10 @@ import viewImg from '@/assets/images/icons/view.png';
 const store = useSiteVisitStore();
 const locationStore = useLocationStore();
 const inspectorStore = useInspectorStore();
-const iSpecialtyStore = useInspectedSpecialtyStore();
 const inspectedProviderStore = useInspectedProviderStore();
-const serviceAreaStore = useServiceAreaStore();
 const authStore = useAuthStore();
 const toast = useToast();
 const appState = ref('viewing');
-const servicesState = ref(false);
-const schedulesState = ref(false);
-const serviceTable = ref({});
-const schedules = ref([]);
-const originalSchedules = ref([]);
-const currentSchedule = ref({ name: '', startDateTime: '', endDateTime: '', place: '' });
-const editingScheduleIndex = ref(null);
-const schedulesChanged = ref(false);
 const NONE_VALUE = ref("NONE");
 
 const selectedProviderId = ref(NONE_VALUE.value);
@@ -539,273 +426,6 @@ const reactivateSiteVisit = async () => {
   }
 };
 
-const checkAndTransitionToDefined = async () => {
-  const currentStatus = newSiteVisit.value.status;
-  if (currentStatus !== INSPECTION_STATUS.CREATED) return;
-
-  const hasServices = iSpecialtyStore.inspectedServices
-    && Object.keys(iSpecialtyStore.inspectedServices).length > 0;
-
-  let hasSchedules = false;
-  try {
-    const { data: scheduleQuery } = await apiEntityCRUD('query', 'InspectionSchedule', null, { inspectionId: newSiteVisit.value.id });
-    hasSchedules = ('list' in scheduleQuery) && scheduleQuery.list.length > 0;
-  } catch {
-    hasSchedules = false;
-  }
-
-  if (hasServices && hasSchedules) {
-    try {
-      await store.updateSiteVisitStatus(newSiteVisit.value.id, INSPECTION_STATUS.DEFINED);
-      newSiteVisit.value.status = INSPECTION_STATUS.DEFINED;
-      toast.success("Site visit status updated to Defined");
-    } catch (error) {
-      toast.warning("Could not update status to Defined: " + error.message);
-    }
-  }
-};
-
-const toggleServices = async () => {
-
-  if (servicesState.value) {
-
-    
-
-    // check if there are any changes that need saving
-    let changed = false;
-    for (const locationService of locationStore.locationServices) {
-      for (const specialty of locationService.specialties) {
-        if (serviceTable.value[locationService.id][specialty.id] !== iSpecialtyStore.inspectedSpecialtySelected(locationService.id, specialty.id)) {
-          changed = true;
-        }
-      }
-    }
-
-    // check if there are any changes that need saving
-    if (changed && confirm('Changes detected.  Do you want to save them?')) {
-      try {
-        for (const locationService of locationStore.locationServices) {
-          for (const specialty of locationService.specialties) {
-            if (serviceTable.value[locationService.id][specialty.id] !== iSpecialtyStore.inspectedSpecialtySelected(locationService.id, specialty.id)) {
-                  await iSpecialtyStore.updateInspectedSpecialty(newSiteVisit.value.id,
-                                                       locationService.id,
-                                                       locationService.name,
-                                                       specialty.id,
-                                                       specialty.name,
-                                                       serviceTable.value[locationService.id][specialty.id]);
-            }
-          }
-        }
-        toast.success("Services saved!");
-        await checkAndTransitionToDefined();
-      } catch (error) {
-        toast.error("Could not save changes to services: " + error.message);      
-      }
-    } else {
-      if (changed) {
-        toast.info("Save cancelled");      
-      }    
-    }
-    appState.value = 'viewing';
-  } else {
-    for (const key of Object.keys(serviceTable.value)) {
-      delete serviceTable[key];    
-    }
-    if (!locationStore.servicesLoaded) {
-      await locationStore.loadLocationServices();    
-    }
-    await locationStore.getLocationServices(newSiteVisit.value.locationId);
-    await iSpecialtyStore.getInspectedServices(newSiteVisit.value.id);
-
-    for (const locationService of locationStore.locationServices) {
-      serviceTable.value[locationService.id] = {};
-      for (const specialty of locationService.specialties) {
-        serviceTable.value[locationService.id][specialty.id] = (iSpecialtyStore.inspectedSpecialtySelected(locationService.id, specialty.id))
-      }
-    }
-    appState.value = 'services';
-  }
-  servicesState.value = !servicesState.value;
-}
-
-const toggleSpecialty = (locServiceId, specialtyId) => {
-  if (!serviceTable.value[locServiceId]) {
-    serviceTable.value[locServiceId] = {};
-  }
-  if (serviceTable.value[locServiceId][specialtyId] === undefined) {
-    serviceTable.value[locServiceId][specialtyId] = false;
-  }
-  serviceTable.value[locServiceId][specialtyId] = !serviceTable.value[locServiceId][specialtyId];
-}
-
-const toggleSchedules = async () => {
-  if (schedulesState.value) {
-    if (schedulesChanged.value && confirm('Changes detected. Do you want to save them?')) {
-      await saveSchedules();
-    } else if (schedulesChanged.value) {
-      // Restore original schedules
-      schedules.value = JSON.parse(JSON.stringify(originalSchedules.value));
-      schedulesChanged.value = false;
-      toast.info("Changes cancelled");
-    }
-    resetScheduleForm();
-    appState.value = 'viewing';
-  } else {
-    await loadSchedules();
-    appState.value = 'schedules';
-  }
-  schedulesState.value = !schedulesState.value;
-}
-
-const loadSchedules = async () => {
-  try {
-    const { data: queryResults } = await apiEntityCRUD('query', 'InspectionSchedule', null, { inspectionId: newSiteVisit.value.id });
-    if ('list' in queryResults) {
-      schedules.value = queryResults.list.map(s => ({
-        id: s.id,
-        name: s.name,
-        startDateTime: toInputDateTime(s.startDateTime),
-        endDateTime: toInputDateTime(s.endDateTime),
-        place: s.place || ''
-      }));
-      originalSchedules.value = JSON.parse(JSON.stringify(schedules.value));
-      schedulesChanged.value = false;
-    } else {
-      schedules.value = [];
-      originalSchedules.value = [];
-    }
-  } catch (error) {
-    toast.error("Could not load schedules: " + error.message);
-    schedules.value = [];
-    originalSchedules.value = [];
-  }
-}
-
-const addOrUpdateSchedule = () => {
-  if (editingScheduleIndex.value !== null) {
-    schedules.value[editingScheduleIndex.value] = { ...currentSchedule.value };
-    editingScheduleIndex.value = null;
-  } else {
-    schedules.value.push({ ...currentSchedule.value });
-  }
-  resetScheduleForm();
-  schedulesChanged.value = true;
-}
-
-const editSchedule = (index) => {
-  currentSchedule.value = { ...schedules.value[index] };
-  editingScheduleIndex.value = index;
-}
-
-const deleteSchedule = (index) => {
-  if (confirm('Are you sure you want to delete this schedule?')) {
-    schedules.value.splice(index, 1);
-    schedulesChanged.value = true;
-    if (editingScheduleIndex.value === index) {
-      resetScheduleForm();
-    }
-  }
-}
-
-const cancelScheduleEdit = () => {
-  resetScheduleForm();
-}
-
-const resetScheduleForm = () => {
-  currentSchedule.value = { name: '', startDateTime: '', endDateTime: '', place: '' };
-  editingScheduleIndex.value = null;
-}
-
-const saveSchedules = async () => {
-  try {
-    // Delete schedules that were removed
-    for (const origSchedule of originalSchedules.value) {
-      if (!schedules.value.find(s => s.id === origSchedule.id)) {
-        if (origSchedule.id) {
-          await apiEntityCRUD('delete', 'InspectionSchedule', origSchedule.id);
-        }
-      }
-    }
-
-    // Add or update schedules
-    for (const schedule of schedules.value) {
-      const scheduleData = {
-        name: schedule.name,
-        startDateTime: toBackendDateTime(schedule.startDateTime),
-        endDateTime: toBackendDateTime(schedule.endDateTime),
-        place: schedule.place || '',
-        inspectionId: newSiteVisit.value.id
-      };
-
-      if (schedule.id) {
-        // Update existing schedule
-        await apiEntityCRUD('update', 'InspectionSchedule', schedule.id, scheduleData);
-      } else {
-        // Add new schedule
-        const { data: addedSchedule } = await apiEntityCRUD('add', 'InspectionSchedule', null, scheduleData);
-        schedule.id = addedSchedule.id;
-      }
-    }
-
-    originalSchedules.value = JSON.parse(JSON.stringify(schedules.value));
-    schedulesChanged.value = false;
-    toast.success("Schedules saved successfully!");
-    await checkAndTransitionToDefined();
-  } catch (error) {
-    toast.error("Could not save schedules: " + error.message);
-  }
-}
-
-const formatDateTime = (dateTimeStr) => {
-  if (!dateTimeStr) return '';
-  const dt = new Date(dateTimeStr);
-  return dt.toLocaleString('en-US', {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit'
-  });
-}
-
-const toInputDateTime = (dateTimeStr) => {
-  if (!dateTimeStr) return '';
-  const trimmed = dateTimeStr.trim();
-  const normalized = trimmed.replace('Z', '');
-  if (normalized.includes('T')) {
-    const [datePart, timePart] = normalized.split('T');
-    return `${datePart}T${timePart.slice(0, 5)}`;
-  }
-  if (normalized.includes(' ')) {
-    const [datePart, timePart] = normalized.split(' ');
-    return `${datePart}T${timePart.slice(0, 5)}`;
-  }
-  return '';
-}
-
-const toBackendDateTime = (dateTimeStr) => {
-  if (!dateTimeStr) return null;
-  const trimmed = dateTimeStr.trim();
-  let datePart = '';
-  let timePart = '';
-  if (trimmed.includes('T')) {
-    [datePart, timePart] = trimmed.split('T');
-  } else if (trimmed.includes(' ')) {
-    [datePart, timePart] = trimmed.split(' ');
-  } else {
-    datePart = trimmed;
-  }
-
-  const [year, month, day] = datePart.split('-');
-  if (!year || !month || !day) return null;
-  const timeSegments = (timePart || '00:00:00').split(':');
-  const hour = timeSegments[0] || '00';
-  const minute = timeSegments[1] || '00';
-  const second = timeSegments[2] || '00';
-  const pad = (value) => value.toString().padStart(2, '0');
-  return `${year}-${pad(month)}-${pad(day)} ${pad(hour)}:${pad(minute)}:${pad(second)}`;
-}
-
 </script>
 <style scoped>
 
@@ -845,34 +465,10 @@ input:focus {
   margin-bottom: 1rem;
 }
 
-
 .text-area {
   display: flex;
   align-items: center;
   box-sizing: border-box;
-}
-
-.push-button:focus {
-  outline: 2px solid var(--secondary-color);
-}
-
-.push-button:active {
-  background-color: #1565c0;
-  box-shadow: 0 2px 4px rgba(50, 156, 249, 0.3);
-}
-
-
-
-.button-down {
-  background-color: #1565c0;
-  transform: translateY(4px);
-  box-shadow: 0 2px 4px rgba(10, 116, 209, 0.3);
-}
-
-.button-down:hover {
-  background-color: #1565c0;
-  transform: translateY(2px);
-  box-shadow: 0 4px 8px rgba(10, 116, 209, 0.3);
 }
 
 .grid-item {
@@ -951,16 +547,6 @@ input:focus {
   width : 100%;
 }
 
-.detail-group {
-  width: 50%;
-}
-
-.detail-buttons {
-  display: flex;
-  gap: 1rem;
-  margin-bottom: 1rem;
-}
-
 .service-group {
   display: flex;
   gap: 2rem;
@@ -970,86 +556,6 @@ input:focus {
   display: flex;
   flex-direction: column;
   gap: 1rem;
-}
-
-.schedule-form {
-  border: 1px solid var(--border-color);
-  padding: 1rem;
-  border-radius: 4px;
-}
-
-.schedule-form h3 {
-  margin-top: 0;
-  margin-bottom: 1rem;
-}
-
-.schedule-fields {
-  display: grid;
-  grid-template-columns: 1fr 1fr 1fr;
-  gap: 1rem;
-  margin-bottom: 1rem;
-}
-
-.schedule-fields > div {
-  display: flex;
-  flex-direction: column;
-}
-
-.schedule-fields label {
-  margin-bottom: 0.5rem;
-  font-weight: bold;
-}
-
-.schedule-fields input {
-  padding: 0.5rem;
-  border: 1px solid var(--border-color);
-  border-radius: 4px;
-}
-
-.schedule-buttons {
-  display: flex;
-  gap: 0.5rem;
-}
-
-.schedule-table {
-  width: 100%;
-  border-collapse: collapse;
-  border: 1px solid var(--border-color);
-}
-
-.schedule-table th,
-.schedule-table td {
-  padding: 0.5rem;
-  text-align: left;
-  border: 1px solid var(--border-color);
-}
-
-.schedule-table th {
-  background-color: var(--primary-color);
-  color: white;
-}
-
-.schedule-table td button {
-  margin-right: 0.5rem;
-  padding: 0.25rem 0.5rem;
-}
-
-.schedule-actions {
-  display: flex;
-  justify-content: flex-end;
-  margin-top: 1rem;
-}
-
-.service-table {
-  overflow-x: auto;
-  border-collapse: collapse;
-  border: 1px solid var(--border-color);
-  width: 100%;
-}
-
-.specialties-table td {
-  border : 0;
-  padding : 0;
 }
 
 .actions-cell {
@@ -1132,10 +638,9 @@ input:focus {
 
 .data-table input[type=text] {
   width: 100%;
+}
 
 @media (max-width: 1024px) {
- .data-table, .detail-group { width: 100%; }
- }
 }
 
 @media (max-width: 768px){

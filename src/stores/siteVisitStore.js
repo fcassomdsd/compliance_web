@@ -173,6 +173,20 @@ export const useSiteVisitStore = defineStore('siteVisit', {
           throw new Error('Site visits at ' + currentStatus + ' status or beyond cannot be inactivated.');
         }
 
+        // Check all inspections are pre-Uploaded
+        const { data: inspQuery } = await apiEntityCRUD('query', 'Inspection', null, { deleted: false, siteVisitId: id });
+        if (inspQuery && inspQuery.list) {
+          for (const insp of inspQuery.list) {
+            if (!canInactivate(insp.status)) {
+              throw new Error('Cannot inactivate: inspection for provider is at ' + insp.status + ' status.');
+            }
+          }
+          // Cascade inactivation to all inspections
+          for (const insp of inspQuery.list) {
+            await apiEntityCRUD('update', 'Inspection', insp.id, { status: INSPECTION_STATUS.INACTIVE });
+          }
+        }
+
         await apiEntityCRUD('update', 'SiteVisit', id, { status: INSPECTION_STATUS.INACTIVE });
 
         const index = this.siteVisits.findIndex((p) => p.id === id);
