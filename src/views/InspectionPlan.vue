@@ -14,7 +14,7 @@
         <select id="providerSelect" v-model="selectedProviderId" :disabled="!selectedInspection">
           <option value="">Select a provider</option>
           <option v-for="pi in providerInspections" :key="pi.id" :value="pi.id">
-            {{ pi.serviceProviderName || pi.name || pi.serviceProviderId }}
+            {{ pi.serviceProviderName || pi.name || pi.id }}
           </option>
         </select>
       </div>

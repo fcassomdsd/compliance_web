@@ -234,7 +234,7 @@ export async function apiInspectionPlan(inspectionCode, inspectedProviderId = nu
     if (!inspectionCode || typeof inspectionCode !== 'string' || inspectionCode.trim().length === 0) {
       throw new Error('inspectionCode is required');
     }
-    let url = `${apiServer}/inspectionPlan?inspection=${encodeURIComponent(inspectionCode.trim())}`;
+    let url = `${apiServer}/inspectionPlan?siteVisit=${encodeURIComponent(inspectionCode.trim())}`;
     if (inspectedProviderId) {
       url += `&provider=${encodeURIComponent(inspectedProviderId)}`;
     }
@@ -262,7 +262,7 @@ export async function apiInspectionReport(inspectionCode, reportDate, servicePro
     }
     const result = await axios({
       method: 'get',
-      url: `${apiServer}/inspectionReport?inspection=${encodeURIComponent(inspectionCode.trim())}&reportDate=${encodeURIComponent(reportDate.trim())}&provider=${encodeURIComponent(serviceProviderId.trim())}`,
+      url: `${apiServer}/inspectionReport?siteVisit=${encodeURIComponent(inspectionCode.trim())}&reportDate=${encodeURIComponent(reportDate.trim())}&provider=${encodeURIComponent(serviceProviderId.trim())}`,
       headers: buildNodeRedHeaders(),
     });
     return { data: result.data, status: result.status };
@@ -309,7 +309,7 @@ export async function apiInspectionByIdOrCode(inspectionRef) {
 
     const result = await axios({
       method: 'get',
-      url: `${apiServer}/inspection/${encodeURIComponent(inspectionRef.trim())}`,
+      url: `${apiServer}/siteVisit/${encodeURIComponent(inspectionRef.trim())}`,
       headers: buildNodeRedHeaders(),
     });
     return { data: result.data, status: result.status };

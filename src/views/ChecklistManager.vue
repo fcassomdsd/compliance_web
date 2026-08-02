@@ -1,16 +1,16 @@
 <template>
   <BaseManager title="Inspection Checklist">
-    <!-- Inspection Selection Section -->
+    <!-- Site Visit Selection -->
     <div class="input-group">
       <div class="grid-cell1 grid-item">
-        <label for="inspectionSelect">Select Inspection:</label>
+        <label for="inspectionSelect">Select Site Visit:</label>
         <select 
           id="inspectionSelect" 
           v-model="selectedInspectionId"
           @change="onInspectionChange"
           :disabled="loadingInspections"
         >
-          <option :value="`${NONE_VALUE}`">Choose an inspection...</option>
+          <option :value="`${NONE_VALUE}`">Choose a site visit...</option>
           <option 
             v-for="inspection in availableInspections" 
             :key="inspection.id" 
@@ -22,8 +22,30 @@
       </div>
     </div>
 
-    <!-- Specialty Selection Section (shown only after inspection is selected) -->
+    <!-- Provider Selection (shown after site visit is selected) -->
     <div v-if="selectedInspectionId !== NONE_VALUE" class="input-group">
+      <div class="grid-cell1 grid-item">
+        <label for="providerSelect">Select Provider:</label>
+        <select 
+          id="providerSelect" 
+          v-model="selectedProviderId"
+          @change="onProviderChange"
+          :disabled="loading"
+        >
+          <option :value="`${NONE_VALUE}`">Choose a provider...</option>
+          <option 
+            v-for="pi in providerInspections" 
+            :key="pi.id" 
+            :value="pi.id"
+          >
+            {{ pi.serviceProviderName || pi.name || pi.serviceProviderId }}
+          </option>
+        </select>
+      </div>
+    </div>
+
+    <!-- Specialty Selection Section (shown only after provider is selected) -->
+    <div v-if="selectedProviderId !== NONE_VALUE" class="input-group">
       <div class="grid-cell1 grid-item">
         <label for="specialtySelect">Select Specialty:</label>
         <select 
@@ -120,6 +142,8 @@ import TopicChecklistGroup from '@/components/TopicChecklistGroup.vue';
 import { useProtocolQuestionStore } from '@/stores/protocolQuestionStore';
 import { useInspectionQuestionStore } from '@/stores/inspectionQuestionStore';
 import { useInspectedSpecialtyStore } from '@/stores/inspectedSpecialtyStore';
+import { useSiteVisitStore } from '@/stores/siteVisitStore';
+import { useInspectedProviderStore } from '@/stores/inspectedProviderStore';
 import { useInspectionStore } from '@/stores/inspectionStore';
 import { useAuthStore } from '@/stores/authStore';
 import { useToast } from 'vue-toastification';
@@ -128,11 +152,15 @@ import { canProcessChecklists, isActive } from '@/utils/siteVisitStatus';
 const protocolQuestionStore = useProtocolQuestionStore();
 const inspectionQuestionStore = useInspectionQuestionStore();
 const inspectedSpecialtyStore = useInspectedSpecialtyStore();
+const siteVisitStore = useSiteVisitStore();
+const inspectedProviderStore = useInspectedProviderStore();
 const inspectionStore = useInspectionStore();
 const authStore = useAuthStore();
 const toast = useToast();
 
 const selectedInspectionId = ref('NONE');
+const selectedProviderId = ref('NONE');
+const providerInspections = ref([]);
 const selectedInspectedSpecialtyId = ref('NONE');
 const selectedQuestionIds = ref([]);
 const groupedQuestions = ref({});
@@ -148,12 +176,9 @@ const NONE_VALUE = 'NONE';
 onMounted(async () => {
   try {
     loadingInspections.value = true;
-    // Inspections are already loaded in the store, but ensure they're available
-    if (inspectionStore.inspections.length === 0) {
-      // If needed, the store would load inspections here
-    }
+    await siteVisitStore.refreshSiteVisits();
   } catch (err) {
-    console.error('Failed to load inspections:', err);
+    console.error('Failed to load site visits:', err);
   } finally {
     loadingInspections.value = false;
   }
@@ -163,7 +188,7 @@ onMounted(async () => {
  * Get available inspections from the store
  */
 const availableInspections = computed(() => {
-  return (inspectionStore.inspections || []).filter(
+  return (siteVisitStore.siteVisits || []).filter(
     (i) => canProcessChecklists(i.status) && isActive(i.status)
   );
 });
@@ -219,25 +244,55 @@ const isInspectorScopeFiltered = computed(() => {
  */
 const onInspectionChange = async () => {
   try {
+    selectedProviderId.value = NONE_VALUE;
     selectedInspectedSpecialtyId.value = NONE_VALUE;
     selectedQuestionIds.value = [];
     groupedQuestions.value = {};
     error.value = null;
     successMessage.value = null;
+    providerInspections.value = [];
 
     if (selectedInspectionId.value === NONE_VALUE) {
       return;
     }
 
     loading.value = true;
-
-    // Refresh in-session Atrocore inspector context when available.
     await authStore.refreshDomainContext();
 
-    // Load inspected services/specialties for this inspection
-    await inspectedSpecialtyStore.getInspectedServices(selectedInspectionId.value);
+    await inspectedProviderStore.getInspectedProviders(selectedInspectionId.value);
+    providerInspections.value = inspectedProviderStore.getForInspection(selectedInspectionId.value);
+  } catch (err) {
+    error.value = 'Failed to load providers: ' + err.message;
+    console.error('Error loading providers:', err);
+    toast.error('Failed to load providers');
+  } finally {
+    loading.value = false;
+  }
+};
 
-    // Load assignment map so inspectors only see specialties assigned to them in this inspection.
+const onProviderChange = async () => {
+  try {
+    selectedInspectedSpecialtyId.value = NONE_VALUE;
+    selectedQuestionIds.value = [];
+    groupedQuestions.value = {};
+    error.value = null;
+
+    if (selectedProviderId.value === NONE_VALUE) {
+      return;
+    }
+
+    loading.value = true;
+
+    await inspectionStore.getInspections(selectedProviderId.value);
+    const inspections = inspectionStore.getForInspectedProvider(selectedProviderId.value);
+    if (inspections.length === 0) {
+      error.value = 'No inspection found for this provider. Please configure it first.';
+      return;
+    }
+    const inspectionId = inspections[0].id;
+
+    await inspectedSpecialtyStore.getInspectedServices(inspectionId);
+
     const inspectedSpecialtyIds = [];
     for (const locServiceId in inspectedSpecialtyStore.inspectedServices) {
       const locService = inspectedSpecialtyStore.inspectedServices[locServiceId];
@@ -253,9 +308,9 @@ const onInspectionChange = async () => {
       await inspectedSpecialtyStore.loadActingInspectors({ inspectedSpecialtyId: inspectedSpecialtyIds });
     }
   } catch (err) {
-    error.value = 'Failed to load inspected specialties: ' + err.message;
-    console.error('Error loading inspected specialties:', err);
-    toast.error('Failed to load inspected specialties');
+    error.value = 'Failed to load inspection specialties: ' + err.message;
+    console.error('Error loading inspection:', err);
+    toast.error('Failed to load inspection specialties');
   } finally {
     loading.value = false;
   }
