@@ -10,43 +10,24 @@
         <input id="locationName" type="text" :value="selectedInspection?.locationName || ''" disabled />
       </div>
       <div class="grid-cell3 grid-item">
-        <label for="reportDate">Report Date:</label>
-        <input id="reportDate" type="date" v-model="reportDate" :disabled="!selectedInspection" />
-      </div>
-      <div class="grid-cell4 grid-item">
-        <label for="serviceProvider">Service Provider:</label>
-        <select id="serviceProvider" v-model="selectedServiceProviderId"
-                :disabled="!selectedInspection || serviceProviders.length === 0">
-          <option value="">Select a service provider</option>
-          <option v-for="sp in serviceProviders" :key="sp.id" :value="sp.id">
-            {{ sp.name }}
+        <label for="providerSelect">Provider:</label>
+        <select id="providerSelect" v-model="selectedProviderId"
+                :disabled="!selectedInspection" @change="onProviderChange">
+          <option value="">Select a provider</option>
+          <option v-for="pi in providerInspections" :key="pi.id" :value="pi.serviceProviderId">
+            {{ pi.serviceProviderName || pi.name || pi.serviceProviderId }}
           </option>
         </select>
+      </div>
+      <div class="grid-cell4 grid-item">
+        <label for="reportDate">Report Date:</label>
+        <input id="reportDate" type="date" v-model="reportDate" :disabled="!selectedInspection || !selectedProviderId" />
       </div>
       <div class="input-buttons">
         <button id="generateBtn" @click="generateReport" :disabled="!canGenerate || loading">
           Generate Report
         </button>
       </div>
-    </div>
-    <p v-if="selectedInspection && serviceProviders.length === 0 && !loading" class="warning-text">
-      No service providers found for this inspection.
-    </p>
-    <p v-if="selectedInspection && !hasReportPermission && !loading" class="warning-text">
-      Only the main or secondary inspector assigned to this inspection can generate reports.
-    </p>
-    <div v-if="selectedInspection && !loading && authorityContext" class="authority-info" :class="{ authorized: hasReportPermission }">
-      <p>
-        Main inspector: <strong>{{ authorityContext.mainInspectorName || 'Not assigned' }}</strong>
-        | Secondary inspector: <strong>{{ authorityContext.secondaryInspectorName || 'Not assigned' }}</strong>
-      </p>
-      <p>
-        Your inspector profile: <strong>{{ authorityContext.currentInspectorName || 'Not linked' }}</strong>
-        ({{ authorityContext.currentInspectorId || 'N/A' }})
-      </p>
-      <p>
-        Authorization: <strong>{{ hasReportPermission ? 'Allowed' : 'Not allowed for this inspection' }}</strong>
-      </p>
     </div>
     <div v-if="loading" class="loader"></div>
 
@@ -89,77 +70,61 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue';
 import BaseManager from '@/components/base/BaseManager.vue';
-import { useInspectionStore } from '@/stores/inspectionStore';
-import { useInspectedSpecialtyStore } from '@/stores/inspectedSpecialtyStore';
+import { useSiteVisitStore } from '@/stores/siteVisitStore';
+import { useInspectedProviderStore } from '@/stores/inspectedProviderStore';
 import { useAuthStore } from '@/stores/authStore';
 import { useToast } from 'vue-toastification';
-import { apiInspectionByIdOrCode, apiInspectionReport } from '@/services/apiServices';
-import { canGenerateReport, isActive } from '@/utils/inspectionStatus';
+import { apiInspectionReport } from '@/services/apiServices';
+import { isActive } from '@/utils/siteVisitStatus';
 import viewImg from '@/assets/images/icons/view.png';
 
-const inspectionStore = useInspectionStore();
-const inspectedStore = useInspectedSpecialtyStore();
+const siteVisitStore = useSiteVisitStore();
+const inspectedProviderStore = useInspectedProviderStore();
 const authStore = useAuthStore();
 const toast = useToast();
 
 const selectedInspection = ref(null);
+const selectedProviderId = ref('');
+const providerInspections = ref([]);
 const reportDate = ref('');
-const selectedServiceProviderId = ref('');
-const serviceProviders = ref([]);
 const loading = ref(false);
-const hasInspectionAuthority = ref(false);
-const authorityContext = ref(null);
 
 const reportEligibleInspections = computed(() => {
-  return inspectionStore.inspections.filter(
-    (i) => canGenerateReport(i.status) && isActive(i.status)
+  return (siteVisitStore.siteVisits || []).filter(
+    (i) => isActive(i.status)
   );
 });
 
 const hasReportPermission = computed(() => {
-  return authStore.hasRole('admin') || hasInspectionAuthority.value;
+  return authStore.hasRole('admin') || authStore.hasRole('planner');
 });
 
 const canGenerate = computed(() =>
   hasReportPermission.value &&
   !!selectedInspection.value &&
-  reportDate.value.trim().length > 0 &&
-  selectedServiceProviderId.value !== ''
+  !!selectedProviderId.value &&
+  reportDate.value.trim().length > 0
 );
 
 onMounted(async () => {
-  await inspectionStore.refreshInspections();
+  await siteVisitStore.refreshSiteVisits();
+  reportDate.value = new Date().toISOString().slice(0, 10);
 });
 
 const selectInspection = async (inspection) => {
   selectedInspection.value = inspection;
-  selectedServiceProviderId.value = '';
-  serviceProviders.value = [];
-  hasInspectionAuthority.value = false;
-  authorityContext.value = null;
-  loading.value = true;
+  selectedProviderId.value = '';
+  providerInspections.value = [];
   try {
-    await authStore.refreshDomainContext();
-    const { data: inspectionDetails } = await apiInspectionByIdOrCode(inspection.id || inspection.code);
-    const inspectorId = authStore.inspectorProfile?.id;
-    hasInspectionAuthority.value = Boolean(
-      inspectorId &&
-      (inspectionDetails?.mainInspectorId === inspectorId || inspectionDetails?.secondaryInspectorId === inspectorId)
-    );
-    authorityContext.value = {
-      mainInspectorName: inspectionDetails?.mainInspectorName,
-      secondaryInspectorName: inspectionDetails?.secondaryInspectorName,
-      currentInspectorId: inspectorId,
-      currentInspectorName: authStore.inspectorProfile?.name,
-    };
-
-    await inspectedStore.getInspectedServices(inspection.id);
-    serviceProviders.value = await inspectedStore.getServiceProviders();
-  } catch (error) {
-    toast.error('Could not load service providers: ' + error.message);
-  } finally {
-    loading.value = false;
+    await inspectedProviderStore.getInspectedProviders(inspection.id);
+    providerInspections.value = inspectedProviderStore.getForInspection(inspection.id);
+  } catch {
+    providerInspections.value = [];
   }
+};
+
+const onProviderChange = () => {
+  // selectedProviderId is already the serviceProviderId from the dropdown value
 };
 
 const generateReport = async () => {
@@ -169,10 +134,10 @@ const generateReport = async () => {
     await apiInspectionReport(
       selectedInspection.value.code,
       reportDate.value,
-      selectedServiceProviderId.value
+      selectedProviderId.value,
     );
     toast.success('Inspection report generated successfully.');
-    await inspectionStore.refreshInspections();
+    await siteVisitStore.refreshSiteVisits();
   } catch (error) {
     toast.error('Could not generate inspection report: ' + error.message);
   } finally {
@@ -190,28 +155,6 @@ const generateReport = async () => {
     "input-buttons input-buttons";
   gap: 1rem;
   grid-template-columns: 1fr 1fr;
-}
-.warning-text {
-  color: var(--warning-color, #e65100);
-  font-size: 0.9rem;
-  margin-top: 0.5rem;
-}
-.authority-info {
-  margin-top: 0.75rem;
-  border: 1px solid #d8e3ef;
-  border-radius: 8px;
-  padding: 0.75rem;
-  background: #f7fbff;
-  color: #33485f;
-}
-
-.authority-info.authorized {
-  border-color: #b6dfbc;
-  background: #f2fbf3;
-}
-
-.authority-info p {
-  margin: 0.2rem 0;
 }
 .selected-row {
   background-color: var(--highlight-color, #e3f2fd);

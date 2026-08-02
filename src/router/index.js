@@ -4,11 +4,17 @@ import { applyAuthGuards } from '@/router/guards';
 const routes = [
   {
     path: '/',
-    redirect: '/inspection',
+    redirect: '/site-visit',
   },
   {
-    path: '/inspection',
-    name: 'inspection',
+    path: '/site-visit',
+    name: 'siteVisit',
+    component: () => import('@/views/SiteVisitManager.vue'),
+    meta: { requiresAuth: true, requiredRoles: ['planner', 'admin'] },
+  },
+  {
+    path: '/site-visit/:siteVisitId/provider/:providerId',
+    name: 'providerInspection',
     component: () => import('@/views/InspectionManager.vue'),
     meta: { requiresAuth: true, requiredRoles: ['planner', 'admin'] },
   },

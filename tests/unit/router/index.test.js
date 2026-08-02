@@ -17,14 +17,16 @@ describe('router index', () => {
 
     expect(applyAuthGuards).toHaveBeenCalledWith(router);
 
-    const inspection = router.getRoutes().find((route) => route.name === 'inspection');
+    const siteVisit = router.getRoutes().find((route) => route.name === 'siteVisit');
+    const providerInspection = router.getRoutes().find((route) => route.name === 'providerInspection');
     const assignInspectors = router.getRoutes().find((route) => route.name === 'assignInspectors');
     const checklist = router.getRoutes().find((route) => route.name === 'checklist');
     const inspectionPlan = router.getRoutes().find((route) => route.name === 'inspectionPlan');
     const inspectionReport = router.getRoutes().find((route) => route.name === 'inspectionReport');
     const followUps = router.getRoutes().find((route) => route.name === 'followUps');
 
-    expect(inspection.meta.requiredRoles).toEqual(['planner', 'admin']);
+    expect(siteVisit.meta.requiredRoles).toEqual(['planner', 'admin']);
+    expect(providerInspection.meta.requiredRoles).toEqual(['planner', 'admin']);
     expect(assignInspectors.meta.requiredRoles).toEqual(['assigner', 'admin']);
     expect(checklist.meta.requiredRoles).toEqual(['inspector', 'admin']);
     expect(inspectionPlan.meta.requiredRoles).toEqual(['planner', 'inspector', 'admin']);

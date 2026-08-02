@@ -15,8 +15,8 @@
       </div>
     </div>
     <div class="controls-container">
-      <RouterLink to="/inspection" class="nav-link" exact-active-class="active-view">
-        Inspection Manager
+      <RouterLink to="/site-visit" class="nav-link" exact-active-class="active-view">
+        Site Visits
       </RouterLink>
       <RouterLink to="/assign-inspectors" class="nav-link" exact-active-class="active-view">
         Assign Inspectors

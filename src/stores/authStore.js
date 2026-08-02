@@ -36,6 +36,12 @@ export const useAuthStore = defineStore('auth', {
     assignerSpecialtyIds: (state) => {
       return new Set((state.assignerSpecialties || []).map((specialty) => specialty?.id).filter(Boolean));
     },
+    canManageServiceArea: (state) => (serviceAreaId) => {
+      if (!state.hasRole('planner')) return false;
+      const plannerArea = state.inspectorProfile?.serviceAreaId;
+      if (plannerArea === null || plannerArea === undefined) return true;
+      return plannerArea === serviceAreaId;
+    },
   },
 
   actions: {

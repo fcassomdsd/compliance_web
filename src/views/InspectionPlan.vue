@@ -2,37 +2,27 @@
   <BaseManager title="Inspection Plan">
     <div class="input-group">
       <div class="grid-cell1 grid-item">
-        <label for="selectedInspection">Selected Inspection:</label>
+        <label for="selectedInspection">Selected Site Visit:</label>
         <input id="selectedInspection" type="text" :value="selectedInspection?.code || 'None'" disabled />
       </div>
       <div class="grid-cell2 grid-item">
         <label for="locationName">Location:</label>
         <input id="locationName" type="text" :value="selectedInspection?.locationName || ''" disabled />
       </div>
+      <div class="grid-cell3 grid-item">
+        <label for="providerSelect">Provider:</label>
+        <select id="providerSelect" v-model="selectedProviderId" :disabled="!selectedInspection">
+          <option value="">Select a provider</option>
+          <option v-for="pi in providerInspections" :key="pi.id" :value="pi.id">
+            {{ pi.serviceProviderName || pi.name || pi.id }}
+          </option>
+        </select>
+      </div>
       <div class="input-buttons">
         <button id="generateBtn" @click="generatePlan" :disabled="!canGenerate || loading">
           Generate Plan
         </button>
       </div>
-    </div>
-    <p v-if="selectedInspection && !hasPlanPermission && !loading" class="warning-text">
-      Only planners, or the main/secondary inspectors assigned to this inspection, can generate the plan.
-    </p>
-    <p v-else-if="selectedInspection && !hasAssignments && !loading" class="warning-text">
-      Inspectors must be assigned to this inspection before generating the plan.
-    </p>
-    <div v-if="selectedInspection && !loading && authorityContext" class="authority-info" :class="{ authorized: hasPlanPermission }">
-      <p>
-        Main inspector: <strong>{{ authorityContext.mainInspectorName || 'Not assigned' }}</strong>
-        | Secondary inspector: <strong>{{ authorityContext.secondaryInspectorName || 'Not assigned' }}</strong>
-      </p>
-      <p>
-        Your inspector profile: <strong>{{ authorityContext.currentInspectorName || 'Not linked' }}</strong>
-        ({{ authorityContext.currentInspectorId || 'N/A' }})
-      </p>
-      <p>
-        Authorization: <strong>{{ hasPlanPermission ? 'Allowed' : 'Not allowed for this inspection' }}</strong>
-      </p>
     </div>
     <div v-if="loading" class="loader"></div>
 
@@ -75,75 +65,51 @@
 <script setup>
 import { computed, ref, onMounted } from 'vue';
 import BaseManager from '@/components/base/BaseManager.vue';
-import { useInspectionStore } from '@/stores/inspectionStore';
-import { useInspectedSpecialtyStore } from '@/stores/inspectedSpecialtyStore';
+import { useSiteVisitStore } from '@/stores/siteVisitStore';
+import { useInspectedProviderStore } from '@/stores/inspectedProviderStore';
 import { useAuthStore } from '@/stores/authStore';
 import { useToast } from 'vue-toastification';
-import { apiInspectionByIdOrCode, apiInspectionPlan } from '@/services/apiServices';
-import { canGeneratePlan, isActive } from '@/utils/inspectionStatus';
+import { apiInspectionPlan } from '@/services/apiServices';
+import { isActive } from '@/utils/siteVisitStatus';
 import viewImg from '@/assets/images/icons/view.png';
 
-const inspectionStore = useInspectionStore();
-const inspectedStore = useInspectedSpecialtyStore();
+const siteVisitStore = useSiteVisitStore();
+const inspectedProviderStore = useInspectedProviderStore();
 const authStore = useAuthStore();
 const toast = useToast();
 
 const selectedInspection = ref(null);
-const hasAssignments = ref(false);
-const hasInspectionAuthority = ref(false);
-const authorityContext = ref(null);
+const selectedProviderId = ref('');
+const providerInspections = ref([]);
 const loading = ref(false);
 
 const planEligibleInspections = computed(() => {
-  return inspectionStore.inspections.filter(
-    (i) => canGeneratePlan(i.status) && isActive(i.status)
+  return (siteVisitStore.siteVisits || []).filter(
+    (i) => isActive(i.status)
   );
 });
 
 const hasPlanPermission = computed(() => {
-  return authStore.hasRole('admin') || authStore.hasRole('planner') || hasInspectionAuthority.value;
+  return authStore.hasRole('admin') || authStore.hasRole('planner');
 });
 
 const canGenerate = computed(() => {
-  return hasPlanPermission.value && hasAssignments.value;
+  return hasPlanPermission.value && !!selectedInspection.value && !!selectedProviderId.value;
 });
 
 onMounted(async () => {
-  await inspectionStore.refreshInspections();
+  await siteVisitStore.refreshSiteVisits();
 });
 
 const selectInspection = async (inspection) => {
   selectedInspection.value = inspection;
-  hasAssignments.value = false;
-  hasInspectionAuthority.value = false;
-  authorityContext.value = null;
-  loading.value = true;
+  selectedProviderId.value = '';
+  providerInspections.value = [];
   try {
-    await authStore.refreshDomainContext();
-    const { data: inspectionDetails } = await apiInspectionByIdOrCode(inspection.id || inspection.code);
-    const inspectorId = authStore.inspectorProfile?.id;
-    hasInspectionAuthority.value = Boolean(
-      inspectorId &&
-      (inspectionDetails?.mainInspectorId === inspectorId || inspectionDetails?.secondaryInspectorId === inspectorId)
-    );
-    authorityContext.value = {
-      mainInspectorName: inspectionDetails?.mainInspectorName,
-      secondaryInspectorName: inspectionDetails?.secondaryInspectorName,
-      currentInspectorId: inspectorId,
-      currentInspectorName: authStore.inspectorProfile?.name,
-    };
-
-    await inspectedStore.getInspectedSpecialties(inspection.id);
-    const specialtyIds = Object.values(inspectedStore.inspectedSpecialties).map(s => s.id);
-    if (specialtyIds.length === 0) {
-      return;
-    }
-    await inspectedStore.loadActingInspectors({ inspectedSpecialtyId: specialtyIds });
-    hasAssignments.value = Object.keys(inspectedStore.inspectors).length > 0;
-  } catch (error) {
-    toast.error('Could not validate plan permissions: ' + error.message);
-  } finally {
-    loading.value = false;
+    await inspectedProviderStore.getInspectedProviders(inspection.id);
+    providerInspections.value = inspectedProviderStore.getForInspection(inspection.id);
+  } catch {
+    providerInspections.value = [];
   }
 };
 
@@ -151,9 +117,9 @@ const generatePlan = async () => {
   if (!selectedInspection.value || !canGenerate.value) return;
   loading.value = true;
   try {
-    await apiInspectionPlan(selectedInspection.value.code);
+    await apiInspectionPlan(selectedInspection.value.code, selectedProviderId.value);
     toast.success('Inspection plan generated successfully.');
-    await inspectionStore.refreshInspections();
+    await siteVisitStore.refreshSiteVisits();
   } catch (error) {
     toast.error('Could not generate inspection plan: ' + error.message);
   } finally {

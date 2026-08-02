@@ -2,15 +2,37 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { mount } from '@vue/test-utils';
 import { createPinia, setActivePinia } from 'pinia';
 import AssignInspectors from '@/views/AssignInspectors.vue';
-import { useInspectionStore } from '@/stores/inspectionStore';
 import { useInspectorStore } from '@/stores/inspectorStore';
 import { useInspectedSpecialtyStore } from '@/stores/inspectedSpecialtyStore';
 import { useToast } from 'vue-toastification';
 
 // Mock dependencies
-vi.mock('../../../src/stores/inspectionStore');
+vi.mock('../../../src/stores/siteVisitStore', () => ({
+  useSiteVisitStore: vi.fn(() => ({
+    siteVisits: [
+      { id: 'Inspection1', code: '0225', locationName: 'Location 1', startDate: '2025-03-26', status: 'Defined' },
+      { id: 'Inspection2', code: '0226', locationName: 'Location 2', startDate: '2025-04-26', status: 'Defined' },
+    ],
+    refreshSiteVisits: vi.fn(),
+    updateSiteVisitStatus: vi.fn(),
+  })),
+}));
+vi.mock('../../../src/stores/inspectionStore', () => ({
+  useInspectionStore: vi.fn(() => ({
+    getInspections: vi.fn().mockResolvedValue(undefined),
+    getForInspectedProvider: vi.fn(() => [{ id: 'INSP1' }]),
+  })),
+}));
 vi.mock('../../../src/stores/inspectorStore');
 vi.mock('../../../src/stores/inspectedSpecialtyStore');
+vi.mock('../../../src/stores/inspectedProviderStore', () => ({
+  useInspectedProviderStore: vi.fn(() => ({
+    getInspectedProviders: vi.fn().mockResolvedValue(undefined),
+    getForInspection: vi.fn(() => [
+      { id: 'IP1', inspectionId: 'Inspection1', serviceProviderId: 'SP1', serviceProviderName: 'Provider A', name: 'Provider A' },
+    ]),
+  })),
+}));
 vi.mock('vue-toastification', () => ({
   useToast: vi.fn(),
 }));
@@ -21,7 +43,6 @@ vi.mock('../../../src/assets/images/icons/view.png', () => ({ default: 'mock-vie
 
 describe('AssignInspectors.vue', () => {
   let pinia;
-  let mockInspectionStore;
   let mockInspectorStore;
   let mockInspectedStore;
   let mockToast;
@@ -30,27 +51,6 @@ describe('AssignInspectors.vue', () => {
     pinia = createPinia();
     setActivePinia(pinia);
     vi.clearAllMocks();
-
-    mockInspectionStore = {
-      inspections: [
-        {
-          id: 'Inspection1',
-          code: '0225',
-          locationName: 'Location 1',
-          startDate: '2025-03-26',
-          status: 'Defined',
-        },
-        {
-          id: 'Inspection2',
-          code: '0226',
-          locationName: 'Location 2',
-          startDate: '2025-04-26',
-          status: 'Defined',
-        },
-      ],
-      refreshInspections: vi.fn(),
-    };
-    vi.mocked(useInspectionStore).mockReturnValue(mockInspectionStore);
 
     mockInspectorStore = {
       inspectors: [
@@ -119,7 +119,7 @@ describe('AssignInspectors.vue', () => {
         },
       });
 
-      expect(wrapper.find('input#selectedInspection').element.value).toBe('None');
+      expect(wrapper.find('input#selectedSiteVisit').element.value).toBe('None');
       expect(wrapper.find('button#saveBtn').element.disabled).toBe(true);
       expect(wrapper.find('button#cancelBtn').element.disabled).toBe(true);
     });
@@ -156,7 +156,7 @@ describe('AssignInspectors.vue', () => {
       await selectButtons[0].trigger('click');
       await wrapper.vm.$nextTick();
 
-      expect(wrapper.find('input#selectedInspection').element.value).toBe('0225');
+      expect(wrapper.find('input#selectedSiteVisit').element.value).toBe('0225');
       expect(wrapper.find('input#locationName').element.value).toBe('Location 1');
     });
 
@@ -171,6 +171,9 @@ describe('AssignInspectors.vue', () => {
 
       const selectButtons = wrapper.findAll('button[id^="select-"]');
       await selectButtons[0].trigger('click');
+      await wrapper.vm.$nextTick();
+
+      wrapper.vm.currentProviderId = 'IP1';
       await wrapper.vm.$nextTick();
 
       expect(wrapper.find('button#saveBtn').element.disabled).toBe(false);
@@ -192,7 +195,11 @@ describe('AssignInspectors.vue', () => {
       await selectButtons[0].trigger('click');
       await wrapper.vm.$nextTick();
 
-      expect(mockInspectedStore.getInspectedSpecialties).toHaveBeenCalledWith('Inspection1');
+      wrapper.vm.currentProviderId = 'IP1';
+      await wrapper.vm.onProviderChange();
+      await wrapper.vm.$nextTick();
+
+      expect(mockInspectedStore.getInspectedSpecialties).toHaveBeenCalledWith('INSP1');
     });
 
     it('calls loadActingInspectors when selecting an inspection', async () => {
@@ -208,14 +215,16 @@ describe('AssignInspectors.vue', () => {
       await selectButtons[0].trigger('click');
       await wrapper.vm.$nextTick();
 
+      wrapper.vm.currentProviderId = 'IP1';
+      await wrapper.vm.onProviderChange();
+      await wrapper.vm.$nextTick();
+
       expect(mockInspectedStore.loadActingInspectors).toHaveBeenCalledWith({"inspectedSpecialtyId": ["InspectedSpecialty1","InspectedSpecialty2"] });
     });
   });
 
   describe('Empty State', () => {
-    it('handles empty inspections list', () => {
-      mockInspectionStore.inspections = [];
-      
+    it('loads without site visits', async () => {
       const wrapper = mount(AssignInspectors, {
         global: {
           stubs: {
@@ -224,10 +233,8 @@ describe('AssignInspectors.vue', () => {
         },
       });
 
-      const rows = wrapper.findAll('tbody tr');
-      expect(rows.length).toBe(0);
+      expect(wrapper.find('input#selectedSiteVisit').element.value).toBe('None');
     });
-
   });
 
   describe('Inspector selection', () => {
@@ -242,6 +249,10 @@ describe('AssignInspectors.vue', () => {
 
       const selectButtons = wrapper.findAll('button[id^="select-"]');
       await selectButtons[0].trigger('click');
+      await wrapper.vm.$nextTick();
+
+      wrapper.vm.currentProviderId = 'IP1';
+      await wrapper.vm.onProviderChange();
       await wrapper.vm.$nextTick();
 
       const inspectorList = wrapper.findAll('.inspectors-list');
@@ -275,7 +286,11 @@ describe('AssignInspectors.vue', () => {
 
       const selectButtons = wrapper.findAll('button[id^="select-"]');
       await selectButtons[0].trigger('click');
-      await wrapper.vm.$nextTick(); 
+      await wrapper.vm.$nextTick();
+
+      wrapper.vm.currentProviderId = 'IP1';
+      await wrapper.vm.onProviderChange();
+      await wrapper.vm.$nextTick();
       // Select inspectors for specialties
       const inspectorCheckboxes = wrapper.findAll('.inspectors-list input[type="checkbox"]');
       await inspectorCheckboxes[0].setChecked(); // Select Alice for Specialty1

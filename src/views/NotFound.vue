@@ -2,7 +2,7 @@
   <section class="not-found">
     <h1>Page not found</h1>
     <p>The page you requested does not exist.</p>
-    <RouterLink class="home-link" to="/inspection">Go to Inspection Manager</RouterLink>
+    <RouterLink class="home-link" to="/site-visit">Go to Site Visit Manager</RouterLink>
   </section>
 </template>
 

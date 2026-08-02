@@ -1,289 +1,129 @@
 import { defineStore } from 'pinia';
 import { apiEntityCRUD } from '@/services/apiServices';
-import { INSPECTION_STATUS, canInactivate, isActive } from '@/utils/inspectionStatus';
-
-const GENERATED_CODE_PATTERN = /^([A-Za-z0-9]{4})-(\d{3})$/;
-
-const parseCodeParts = (codeValue) => {
-  if (!codeValue || typeof codeValue !== 'string') return null;
-  const match = codeValue.trim().match(GENERATED_CODE_PATTERN);
-  if (!match) return null;
-  return {
-    icaoCode: match[1].toUpperCase(),
-    sequence: Number.parseInt(match[2], 10),
-  };
-};
+import { INSPECTION_STATUS } from '@/utils/siteVisitStatus';
 
 export const useInspectionStore = defineStore('inspection', {
 
   state: () => ({
-    inspections: [],
+    inspections: {},
     loading: false,
   }),
 
   actions: {
 
-    async addInspection(inspectionToAdd) {
+    async addInspection(siteVisitId, inspectedProviderId, data, siteVisitCode = '') {
       try {
-        if (!inspectionToAdd || (Object.keys(inspectionToAdd).length === 0)) {
-          throw new Error('No inspection data provided to add');
-        }
-        if (typeof inspectionToAdd !== 'object') {
-          throw new Error('Inspection data is of wrong data type: ' + typeof inspectionToAdd);
-        }
-        const addData = {};
-        for (const key of Object.keys(inspectionToAdd)) {
-          if (key !== 'id') addData[key] = inspectionToAdd[key];
-        }
-
-        if (!addData.locationId || typeof addData.locationId !== 'string') {
-          throw new Error('Location is required to add an inspection');
-        }
-        if (!addData.startDate || typeof addData.startDate !== 'string') {
-          throw new Error('Start date is required to add an inspection');
-        }
-
-        const { data: locationQueryResults } = await apiEntityCRUD('query', 'Location', null, { id: addData.locationId });
-        if (!('list' in locationQueryResults) || locationQueryResults.list.length === 0) {
-          throw new Error('Could not find location for inspection code generation');
-        }
-
-        const location = locationQueryResults.list[0];
-        const locationIcaoCode = location.icaoCode?.trim().toUpperCase();
-        if (!locationIcaoCode || locationIcaoCode.length !== 4) {
-          throw new Error('Selected location has an invalid ICAO code');
-        }
-
-        const { data: inspectionQueryResults } = await apiEntityCRUD('query', 'Inspection', null, { deleted: false, locationId: addData.locationId });
-        if (!('list' in inspectionQueryResults)) {
-          throw new Error('Could not query existing inspections for code generation');
-        }
-
-        let maxSequence = 0;
-        for (const existingInspection of inspectionQueryResults.list) {
-          const codeParts = parseCodeParts(existingInspection.code);
-          if (!codeParts) continue;
-          if (codeParts.icaoCode !== locationIcaoCode) continue;
-          if (Number.isInteger(codeParts.sequence) && codeParts.sequence > maxSequence) {
-            maxSequence = codeParts.sequence;
-          }
-        }
-
-        const nextSequence = (maxSequence + 1).toString().padStart(3, '0');
-        addData.code = `${locationIcaoCode}-${nextSequence}`;
-
-        if (!addData.status || addData.status === INSPECTION_STATUS.INACTIVE) {
-          addData.status = INSPECTION_STATUS.CREATED;
-        }
-
-        const { data: addedInspection } = await apiEntityCRUD('add', 'Inspection', null, addData);
-        if (!addedInspection || !('id' in addedInspection)) {
-          throw new Error('API call for "add" returned invalid data');
-        }
-
-        const { data: wholeRecord } = await apiEntityCRUD('query', 'Inspection', null, { id: addedInspection.id });
-        if (!('list' in wholeRecord) || wholeRecord.list.length === 0) {
-          throw new Error('API query failed for ' + addedInspection.id);
-        }
-
-        const entity = wholeRecord.list[0];
-        const entityObj = {
-          id: entity.id,
-          code: entity.code,
-          startDate: entity.startDate,
-          endDate: entity.endDate,
-          objective: entity.objective,
-          scope: entity.scope,
-          status: entity.status,
-          locationId: entity.locationId,
-          locationName: entity.locationName,
-          mainInspectorId: entity.mainInspectorId,
-          mainInspectorName: entity.mainInspectorName,
-          secondaryInspectorId: entity.secondaryInspectorId,
-          secondaryInspectorName: entity.secondaryInspectorName,  
+        const addData = {
+          siteVisitId,
+          inspectedProviderId,
+          code: siteVisitCode,
+          status: INSPECTION_STATUS.CREATED,
+          inspectionType: data.inspectionType || '',
+          objective: data.objective || '',
+          scope: data.scope || '',
         };
-        this.inspections.push(entityObj);
-        return true;
+
+        const { data: added } = await apiEntityCRUD('add', 'Inspection', null, addData);
+        if (!added || typeof added !== 'object' || !('id' in added)) {
+          throw new Error('API call returned invalid data: ' + (typeof added === 'string' ? added : ''));
+        }
+
+        const inspectionId = added.id;
+
+        try {
+          const { data: siteVisitQuery } = await apiEntityCRUD('query', 'SiteVisit', null, { id: siteVisitId });
+          if (('list' in siteVisitQuery) && siteVisitQuery.list.length > 0) {
+            const sv = siteVisitQuery.list[0];
+            const schedules = [
+              { name: 'Opening Meeting', startDateTime: `${sv.startDate} 10:00:00`, endDateTime: `${sv.startDate} 10:30:00`, place: '', inspectionId },
+              { name: 'Closing Meeting', startDateTime: `${sv.endDate} 11:00:00`, endDateTime: `${sv.endDate} 11:30:00`, place: '', inspectionId },
+            ];
+            for (const s of schedules) {
+              await apiEntityCRUD('add', 'InspectionSchedule', null, s);
+            }
+          }
+        } catch {
+          // Schedules are optional
+        }
+
+        await this.getInspections(inspectedProviderId);
+        return added;
       } catch (error) {
         throw new Error('addInspection: ' + error.message);
       }
     },
 
-    async updateInspection(inspectionToUpdate) {
+    async updateInspection(inspectionToUpdate, inspectedProviderId) {
       try {
-        if (!inspectionToUpdate || (Object.keys(inspectionToUpdate).length === 0)) {
-          throw new Error('No inspection data provided to update');
+        if (!inspectionToUpdate || !('id' in inspectionToUpdate)) {
+          throw new Error('Missing inspection ID');
         }
-        if (typeof inspectionToUpdate !== 'object') {
-          throw new Error('Inspection data is of wrong data type: ' + typeof inspectionToUpdate);
-        }
-        if (!('id' in inspectionToUpdate) || typeof inspectionToUpdate.id !== 'string') {
-          throw new Error('Missing or bad ID for inspection data: ' + inspectionToUpdate.id);
-        }
-
         const updateId = inspectionToUpdate.id;
         const updateData = {};
         for (const key of Object.keys(inspectionToUpdate)) {
-          if (key !== 'id') updateData[key] = inspectionToUpdate[key];
-        }
-
-        const { data: currentInspectionQuery } = await apiEntityCRUD('query', 'Inspection', null, { id: updateId });
-        if (!('list' in currentInspectionQuery) || currentInspectionQuery.list.length === 0) {
-          throw new Error('Could not find existing inspection for update validation');
-        }
-
-        const currentInspection = currentInspectionQuery.list[0];
-
-        if ('locationId' in updateData && updateData.locationId !== currentInspection.locationId) {
-          throw new Error('Location cannot be changed after inspection code is generated');
-        }
-
-        if ('code' in updateData && updateData.code !== currentInspection.code) {
-          throw new Error('Inspection code cannot be manually modified');
-        }
-
-        updateData.code = currentInspection.code;
-
-        const result = await apiEntityCRUD('update', 'Inspection', updateId, updateData);
-        // check result for a not modified status.  If not modified, do not update local record.
-        if (result.status !== 204) {
-          const updatedInspection = result.data;
-          if (!updatedInspection || !('id' in updatedInspection)) {
-            throw new Error('API call for "update" returned invalid data: ' + result.status.toString());
-          }
-          const index = this.inspections.findIndex((x) => x.id === updateId);
-          if (index === -1) throw new Error('Could not find ID in displayed list: ' + updateId);
-          for (const key of Object.keys(updatedInspection)) {
-            this.inspections[index][key] = updatedInspection[key];
+          if (key !== 'id' && key !== 'siteVisitId' && key !== 'inspectedProviderId') {
+            updateData[key] = inspectionToUpdate[key];
           }
         }
+        await apiEntityCRUD('update', 'Inspection', updateId, updateData);
+        await this.getInspections(inspectedProviderId);
       } catch (error) {
         throw new Error('updateInspection: ' + error.message);
       }
     },
 
-    async inactivateInspection(id) {
+    async updateInspectionStatus(inspectedProviderId, newStatus) {
       try {
-        if (!id || (typeof id !== 'string')) throw new Error('Invalid ID : ' + id?.toString());
-
-        const { data: currentQuery } = await apiEntityCRUD('query', 'Inspection', null, { id });
-        if (!('list' in currentQuery) || currentQuery.list.length === 0) {
-          throw new Error('Could not find inspection to inactivate');
-        }
-
-        const currentStatus = currentQuery.list[0].status;
-        if (!canInactivate(currentStatus)) {
-          throw new Error('Inspections at ' + currentStatus + ' status or beyond cannot be inactivated.');
-        }
-
-        await apiEntityCRUD('update', 'Inspection', id, { status: INSPECTION_STATUS.INACTIVE });
-
-        const index = this.inspections.findIndex((p) => p.id === id);
-        if (index !== -1) {
-          this.inspections[index].status = INSPECTION_STATUS.INACTIVE;
-        }
-      } catch (error) {
-        throw new Error('inactivateInspection: ' + error.message);
-      }
-    },
-
-    async reactivateInspection(id) {
-      try {
-        if (!id || (typeof id !== 'string')) throw new Error('Invalid ID : ' + id?.toString());
-
-        const { data: currentQuery } = await apiEntityCRUD('query', 'Inspection', null, { id });
-        if (!('list' in currentQuery) || currentQuery.list.length === 0) {
-          throw new Error('Could not find inspection to reactivate');
-        }
-
-        const currentStatus = currentQuery.list[0].status;
-        if (currentStatus !== INSPECTION_STATUS.INACTIVE) {
-          throw new Error('Only inactive inspections can be reactivated.');
-        }
-
-        await apiEntityCRUD('update', 'Inspection', id, { status: INSPECTION_STATUS.CREATED });
-
-        const index = this.inspections.findIndex((p) => p.id === id);
-        if (index !== -1) {
-          this.inspections[index].status = INSPECTION_STATUS.CREATED;
-        }
-      } catch (error) {
-        throw new Error('reactivateInspection: ' + error.message);
-      }
-    },
-
-    async updateInspectionStatus(id, newStatus) {
-      try {
-        if (!id || (typeof id !== 'string')) throw new Error('Invalid ID : ' + id?.toString());
-        if (!newStatus || (typeof newStatus !== 'string')) throw new Error('Invalid status value');
-
-        await apiEntityCRUD('update', 'Inspection', id, { status: newStatus });
-
-        const index = this.inspections.findIndex((p) => p.id === id);
-        if (index !== -1) {
-          this.inspections[index].status = newStatus;
-        }
+        const list = this.getForInspectedProvider(inspectedProviderId);
+        if (list.length === 0) return;
+        const inspId = list[0].id;
+        await this.updateInspection({ id: inspId, status: newStatus }, inspectedProviderId);
       } catch (error) {
         throw new Error('updateInspectionStatus: ' + error.message);
       }
     },
 
-    async deleteInspection(id) {
-      try {
-        if (!id || (typeof id !== 'string')) throw new Error('Invalid ID : ' + id?.toString());
-
-        const { data: currentQuery } = await apiEntityCRUD('query', 'Inspection', null, { id });
-        if (('list' in currentQuery) && currentQuery.list.length > 0) {
-          const currentStatus = currentQuery.list[0].status;
-          if (isActive(currentStatus)) {
-            await apiEntityCRUD('update', 'Inspection', id, { status: INSPECTION_STATUS.INACTIVE });
-            const index = this.inspections.findIndex((p) => p.id === id);
-            if (index !== -1) {
-              this.inspections[index].status = INSPECTION_STATUS.INACTIVE;
-            }
-            return;
-          }
-        }
-
-        const { data: result } = await apiEntityCRUD('delete', 'Inspection', id);
-        if (!result) throw new Error('API call for "delete" unsuccessful');
-        this.inspections = this.inspections.filter((p) => p.id !== id);
-      } catch (error) {
-        throw new Error('deleteInspection: ' + error.message);
-      }
-    },
-
-    async refreshInspections() {
+    async getInspections(inspectedProviderId) {
       this.loading = true;
       try {
-        const { data: queryResults } = await apiEntityCRUD('query', 'Inspection', null, { deleted: false });
-        if (!('list' in queryResults) || !Array.isArray(queryResults.list)) throw new Error('API query failed');
-        this.inspections = [];
-        for (const entity of queryResults.list) {
-          const obj = {
-            id: entity.id,
-            code: entity.code,
-            startDate: entity.startDate,
-            endDate: entity.endDate,
-            objective: entity.objective,
-            scope: entity.scope,
-            status: entity.status,
-            locationId: entity.locationId,
-            locationName: entity.locationName,
-            mainInspectorId: entity.mainInspectorId,
-            mainInspectorName: entity.mainInspectorName,
-            secondaryInspectorId: entity.secondaryInspectorId,
-            secondaryInspectorName: entity.secondaryInspectorName,  
-          };
-          this.inspections.push(obj);
+        const { data: queryResults } = await apiEntityCRUD(
+          'query', 'Inspection', null,
+          { deleted: false, inspectedProviderId },
+        );
+        if (!queryResults || typeof queryResults !== 'object' || !('list' in queryResults)) {
+          this.inspections[inspectedProviderId] = [];
+          return;
         }
-      } catch (error) {
-        throw new Error('refreshInspections: ' + error.message);
+        const list = Array.isArray(queryResults.list) ? queryResults.list : [];
+        this.inspections[inspectedProviderId] = list.map((entity) => ({
+          id: entity.id,
+          siteVisitId: entity.siteVisitId,
+          inspectedProviderId: entity.inspectedProviderId,
+          status: entity.status || INSPECTION_STATUS.CREATED,
+          inspectionType: entity.inspectionType || '',
+          objective: entity.objective || '',
+          scope: entity.scope || '',
+          code: entity.code || '',
+        }));
+      } catch {
+        this.inspections[inspectedProviderId] = [];
       } finally {
         this.loading = false;
       }
     },
 
+    getForInspectedProvider(inspectedProviderId) {
+      return this.inspections[inspectedProviderId] || [];
+    },
+
+    async deleteInspection(id, inspectedProviderId) {
+      try {
+        await apiEntityCRUD('delete', 'Inspection', id);
+        await this.getInspections(inspectedProviderId);
+      } catch (error) {
+        throw new Error('deleteInspection: ' + error.message);
+      }
+    },
   },
 
 });

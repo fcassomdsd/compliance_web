@@ -90,18 +90,18 @@ describe('auth-facing views', () => {
     expect(routerPush).toHaveBeenCalledWith({ name: 'login' });
   });
 
-  it('NotFound renders recovery navigation', () => {
+   it('NotFound renders recovery navigation', () => {
     const wrapper = mount(NotFound, {
       global: {
         stubs: {
           RouterLink: {
-            template: '<a href="/inspection"><slot /></a>',
+            template: '<a href="/site-visit"><slot /></a>',
           },
         },
       },
     });
 
     expect(wrapper.text()).toContain('Page not found');
-    expect(wrapper.text()).toContain('Go to Inspection Manager');
+    expect(wrapper.text()).toContain('Go to Site Visit Manager');
   });
 });
