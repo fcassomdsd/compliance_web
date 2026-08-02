@@ -147,7 +147,7 @@ import { useInspectedProviderStore } from '@/stores/inspectedProviderStore';
 import { useInspectionStore } from '@/stores/inspectionStore';
 import { useAuthStore } from '@/stores/authStore';
 import { useToast } from 'vue-toastification';
-import { canProcessChecklists, isActive } from '@/utils/siteVisitStatus';
+import { isActive } from '@/utils/siteVisitStatus';
 
 const protocolQuestionStore = useProtocolQuestionStore();
 const inspectionQuestionStore = useInspectionQuestionStore();
@@ -189,7 +189,7 @@ onMounted(async () => {
  */
 const availableInspections = computed(() => {
   return (siteVisitStore.siteVisits || []).filter(
-    (i) => canProcessChecklists(i.status) && isActive(i.status)
+    (i) => isActive(i.status)
   );
 });
 

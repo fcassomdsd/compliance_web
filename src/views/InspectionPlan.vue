@@ -70,7 +70,7 @@ import { useInspectedProviderStore } from '@/stores/inspectedProviderStore';
 import { useAuthStore } from '@/stores/authStore';
 import { useToast } from 'vue-toastification';
 import { apiInspectionPlan } from '@/services/apiServices';
-import { canGeneratePlan, isActive } from '@/utils/siteVisitStatus';
+import { isActive } from '@/utils/siteVisitStatus';
 import viewImg from '@/assets/images/icons/view.png';
 
 const siteVisitStore = useSiteVisitStore();
@@ -85,7 +85,7 @@ const loading = ref(false);
 
 const planEligibleInspections = computed(() => {
   return (siteVisitStore.siteVisits || []).filter(
-    (i) => canGeneratePlan(i.status) && isActive(i.status)
+    (i) => isActive(i.status)
   );
 });
 

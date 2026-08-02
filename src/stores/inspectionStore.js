@@ -1,5 +1,6 @@
 import { defineStore } from 'pinia';
 import { apiEntityCRUD } from '@/services/apiServices';
+import { INSPECTION_STATUS } from '@/utils/siteVisitStatus';
 
 export const useInspectionStore = defineStore('inspection', {
 
@@ -16,6 +17,7 @@ export const useInspectionStore = defineStore('inspection', {
           siteVisitId,
           inspectedProviderId,
           code: siteVisitCode,
+          status: INSPECTION_STATUS.CREATED,
           inspectionType: data.inspectionType || '',
           objective: data.objective || '',
           scope: data.scope || '',
@@ -70,6 +72,17 @@ export const useInspectionStore = defineStore('inspection', {
       }
     },
 
+    async updateInspectionStatus(inspectedProviderId, newStatus) {
+      try {
+        const list = this.getForInspectedProvider(inspectedProviderId);
+        if (list.length === 0) return;
+        const inspId = list[0].id;
+        await this.updateInspection({ id: inspId, status: newStatus }, inspectedProviderId);
+      } catch (error) {
+        throw new Error('updateInspectionStatus: ' + error.message);
+      }
+    },
+
     async getInspections(inspectedProviderId) {
       this.loading = true;
       try {
@@ -86,6 +99,7 @@ export const useInspectionStore = defineStore('inspection', {
           id: entity.id,
           siteVisitId: entity.siteVisitId,
           inspectedProviderId: entity.inspectedProviderId,
+          status: entity.status || INSPECTION_STATUS.CREATED,
           inspectionType: entity.inspectionType || '',
           objective: entity.objective || '',
           scope: entity.scope || '',

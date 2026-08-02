@@ -7,6 +7,11 @@
       :endDate="siteVisitData.endDate"
       :providerName="providerName"
     />
+    <div class="status-row" v-if="inspectionData.id">
+      <label>Status:</label>
+      <span :class="statusBadgeClass" v-if="inspectionData.status">{{ inspectionData.status }}</span>
+      <span class="status-badge status-none" v-else>N/A</span>
+    </div>
     <div class="input-group">
       <div class="grid-cell2 grid-item">
         <label for="inspectionType">Inspection Type:</label>
@@ -21,15 +26,15 @@
         <textarea id="scope" v-model="inspectionData.scope" :disabled="appState != 'editing'" placeholder="Inspection scope"/>
       </div>
       <div class="input-buttons">
-        <button id="editBtn" @click="startEdit" v-if="appState == 'viewing' && inspectionData.id" :disabled="false"><img :src="editImg" alt="Edit" class="icon-btn" /></button>
+        <button id="editBtn" @click="startEdit" v-if="appState == 'viewing' && inspectionData.id && canEditBasicValues(inspectionData.status)" :disabled="false"><img :src="editImg" alt="Edit" class="icon-btn" /></button>
         <button id="saveBtn" @click="saveInspection" :disabled="(appState != 'editing')"><img :src="saveImg" alt="Save" class="icon-btn" /></button>
         <button id="cancelBtn" @click="cancelEdit" :disabled="appState != 'editing'"><img :src="cancelImg" alt="Cancel" class="icon-btn" /></button>
       </div>
     </div>
     <div class="detail-group">
       <div class="detail-buttons">
-        <button id="services" class="push-button" @click="toggleServices()">Services</button>
-        <button id="schedules" class="push-button" @click="toggleSchedules()">Schedules</button>
+        <button id="services" class="push-button" @click="toggleServices()" :disabled="!inspectionData.id || !canAssignServices(inspectionData.status)">Services</button>
+        <button id="schedules" class="push-button" @click="toggleSchedules()" :disabled="!inspectionData.id || !canAssignServices(inspectionData.status)">Schedules</button>
       </div>
       <div id="services" class="service-group" v-show="servicesState">
         <table class="service-table">
@@ -90,7 +95,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue';
+import { ref, computed, onMounted } from 'vue';
 import { useRoute } from 'vue-router';
 import BaseManager from '@/components/base/BaseManager.vue';
 import SiteVisitHeader from '@/components/inspection/SiteVisitHeader.vue';
@@ -101,7 +106,7 @@ import { useInspectedSpecialtyStore } from '@/stores/inspectedSpecialtyStore';
 import { useLocationStore } from '@/stores/locationStore';
 import { useToast } from 'vue-toastification';
 import { apiEntityCRUD } from '@/services/apiServices';
-import { INSPECTION_STATUS } from '@/utils/siteVisitStatus';
+import { INSPECTION_STATUS, canAssignServices, canEditBasicValues } from '@/utils/siteVisitStatus';
 import saveImg from '@/assets/images/icons/save.png';
 import cancelImg from '@/assets/images/icons/cancel.png';
 import editImg from '@/assets/images/icons/edit.png';
@@ -356,10 +361,8 @@ const cancelEdit = () => {
 };
 
 const checkAndTransitionToDefined = async () => {
-  if (!inspectedProviderId || !siteVisitId) return;
-
-  let siteVisit = siteVisitStore.siteVisits.find((sv) => sv.id === siteVisitId);
-  if (!siteVisit || siteVisit.status !== INSPECTION_STATUS.CREATED) return;
+  if (!inspectedProviderId || !inspectionData.value.id) return;
+  if (inspectionData.value.status !== INSPECTION_STATUS.CREATED) return;
 
   let hasServices = false;
   try {
@@ -381,14 +384,26 @@ const checkAndTransitionToDefined = async () => {
 
   if (hasServices && hasSchedules) {
     try {
-      await siteVisitStore.updateSiteVisitStatus(siteVisitId, INSPECTION_STATUS.DEFINED);
-      await siteVisitStore.refreshSiteVisits();
-      toast.success('Site visit status updated to Defined');
+      await inspectionStore.updateInspectionStatus(inspectedProviderId, INSPECTION_STATUS.DEFINED);
+      inspectionData.value.status = INSPECTION_STATUS.DEFINED;
+      toast.success('Inspection status updated to Defined');
     } catch (error) {
       toast.warning('Could not update status to Defined: ' + error.message);
     }
   }
 };
+
+const statusBadgeClass = computed(() => {
+  const s = inspectionData.value.status;
+  if (!s) return 'status-badge status-none';
+  const map = {
+    Created: 'status-badge status-created', Defined: 'status-badge status-defined',
+    Assigned: 'status-badge status-assigned', Planned: 'status-badge status-planned',
+    Uploaded: 'status-badge status-uploaded', Reported: 'status-badge status-reported',
+    Complete: 'status-badge status-complete', Inactive: 'status-badge status-inactive',
+  };
+  return map[s] || 'status-badge';
+});
 
 const formatDateTime = (dateTimeStr) => {
   if (!dateTimeStr) return '';
@@ -450,4 +465,17 @@ const toBackendDateTime = (dateTimeStr) => {
 .specialties-table td { border: 0; padding: 0; }
 @media (max-width: 1024px) { .detail-group { width: 100%; } }
 @media (max-width: 768px) { .input-group { grid-template-columns: 1fr; } }
+
+.status-row { margin-bottom: 0.75rem; display: flex; align-items: center; gap: 0.5rem; }
+.status-row label { font-weight: 600; color: var(--primary-color); }
+.status-badge { padding: 0.25rem 0.75rem; border-radius: 12px; font-size: 0.85rem; font-weight: 600; display: inline-block; }
+.status-none { background-color: #e0e0e0; color: #757575; }
+.status-created { background-color: #e3f2fd; color: #1565c0; }
+.status-defined { background-color: #e8eaf6; color: #283593; }
+.status-assigned { background-color: #fff3e0; color: #e65100; }
+.status-planned { background-color: #e8f5e9; color: #2e7d32; }
+.status-uploaded { background-color: #f3e5f5; color: #7b1fa2; }
+.status-reported { background-color: #e0f2f1; color: #00695c; }
+.status-complete { background-color: #e8f5e9; color: #1b5e20; }
+.status-inactive { background-color: #f5f5f5; color: #9e9e9e; }
 </style>

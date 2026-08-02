@@ -124,7 +124,7 @@ const assigned = ref({}); // key -> Set of inspector ids
 
 const assignableInspections = computed(() => {
   return (siteVisitStore.siteVisits || []).filter(
-    (i) => canAssignInspectors(i.status) && isActive(i.status)
+    (i) => isActive(i.status)
   );
 });
 
@@ -264,13 +264,14 @@ const saveAssignments = async () => {
 
       toast.success('Inspector assignments saved successfully.');
 
-      if (currentInspection.value.status === INSPECTION_STATUS.DEFINED) {
-        await siteVisitStore.updateSiteVisitStatus(currentInspection.value.id, INSPECTION_STATUS.ASSIGNED);
-        currentInspection.value.status = INSPECTION_STATUS.ASSIGNED;
+      const inspections = inspectionStore.getForInspectedProvider(currentProviderId.value);
+      const inspStatus = inspections.length > 0 ? inspections[0].status : null;
+
+      if (inspStatus === INSPECTION_STATUS.DEFINED) {
+        await inspectionStore.updateInspectionStatus(currentProviderId.value, INSPECTION_STATUS.ASSIGNED);
         toast.success('Inspection status updated to Assigned');
-      } else if (shouldRevertToAssignedOnReassign(currentInspection.value.status)) {
-        await siteVisitStore.updateSiteVisitStatus(currentInspection.value.id, INSPECTION_STATUS.ASSIGNED);
-        currentInspection.value.status = INSPECTION_STATUS.ASSIGNED;
+      } else if (inspStatus && shouldRevertToAssignedOnReassign(inspStatus)) {
+        await inspectionStore.updateInspectionStatus(currentProviderId.value, INSPECTION_STATUS.ASSIGNED);
         toast.success('Inspection status reverted to Assigned');
       }
     } catch (error) {
