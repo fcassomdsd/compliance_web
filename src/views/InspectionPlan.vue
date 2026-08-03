@@ -19,12 +19,10 @@
         </select>
       </div>
       <div class="input-buttons">
-        <button id="generateBtn" @click="generatePlan" :disabled="!canGenerate || loading">
-          Generate Plan
-        </button>
+        <BaseButton id="generateBtn" variant="primary" :disabled="!canGenerate || loading" :loading="loading" @click="generatePlan">Generate Plan</BaseButton>
       </div>
     </div>
-    <div v-if="loading" class="loader"></div>
+    <LoadingSpinner :visible="loading" />
 
     <div class="data-table">
       <table class="data-table">
@@ -50,9 +48,7 @@
             <td>{{ inspection.startDate }}</td>
             <td class="actions-cell">
               <div>
-                <button :id="`select-${inspection.id}`" @click="selectInspection(inspection)">
-                  <img :src="viewImg" alt="Select" class="icon-btn"/>
-                </button>
+                <BaseButton :id="`select-${inspection.id}`" variant="ghost" size="sm" :icon="viewImg" alt="Select" @click="selectInspection(inspection)" />
               </div>
             </td>
           </tr>
@@ -65,6 +61,8 @@
 <script setup>
 import { computed, ref, onMounted } from 'vue';
 import BaseManager from '@/components/base/BaseManager.vue';
+import BaseButton from '@/components/base/BaseButton.vue';
+import LoadingSpinner from '@/components/base/LoadingSpinner.vue';
 import { useSiteVisitStore } from '@/stores/siteVisitStore';
 import { useInspectedProviderStore } from '@/stores/inspectedProviderStore';
 import { useAuthStore } from '@/stores/authStore';
@@ -131,18 +129,22 @@ const generatePlan = async () => {
 <style scoped>
 .input-group {
   display: grid;
-  grid-template-areas: "grid-cell1 grid-cell2" "input-buttons input-buttons";
+  grid-template-areas: "grid-cell1 grid-cell2" "grid-cell3 grid-cell3" "input-buttons input-buttons";
   gap: 1rem;
   grid-template-columns: 1fr 1fr;
 }
+.grid-cell1 { grid-area: grid-cell1; }
+.grid-cell2 { grid-area: grid-cell2; }
+.grid-cell3 { grid-area: grid-cell3; }
+.input-buttons { grid-area: input-buttons; justify-self: center; display: flex; gap: var(--space-2); }
 .warning-text {
   color: var(--warning-color, #e65100);
-  font-size: 0.9rem;
+  font-size: var(--text-sm);
   margin-top: 0.5rem;
 }
 .authority-info {
   margin-top: 0.75rem;
-  border: 1px solid #d8e3ef;
+  border: 1px solid var(--color-gray-300);
   border-radius: 8px;
   padding: 0.75rem;
   background: #f7fbff;
@@ -159,5 +161,9 @@ const generatePlan = async () => {
 }
 .selected-row {
   background-color: var(--highlight-color, #e3f2fd);
+}
+
+@media (max-width: 768px) {
+  .input-group { grid-template-columns: 1fr; grid-template-areas: "grid-cell1" "grid-cell2" "grid-cell3" "input-buttons"; }
 }
 </style>

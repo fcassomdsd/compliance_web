@@ -24,12 +24,10 @@
         <input id="reportDate" type="date" v-model="reportDate" :disabled="!selectedInspection || !selectedProviderId" />
       </div>
       <div class="input-buttons">
-        <button id="generateBtn" @click="generateReport" :disabled="!canGenerate || loading">
-          Generate Report
-        </button>
+        <BaseButton id="generateBtn" variant="primary" :disabled="!canGenerate || loading" :loading="loading" @click="generateReport">Generate Report</BaseButton>
       </div>
     </div>
-    <div v-if="loading" class="loader"></div>
+    <LoadingSpinner :visible="loading" />
 
     <div class="data-table">
       <table class="data-table">
@@ -55,9 +53,7 @@
             <td>{{ inspection.startDate }}</td>
             <td class="actions-cell">
               <div>
-                <button :id="`select-${inspection.id}`" @click="selectInspection(inspection)">
-                  <img :src="viewImg" alt="Select" class="icon-btn"/>
-                </button>
+                <BaseButton :id="`select-${inspection.id}`" variant="ghost" size="sm" :icon="viewImg" alt="Select" @click="selectInspection(inspection)" />
               </div>
             </td>
           </tr>
@@ -70,6 +66,8 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue';
 import BaseManager from '@/components/base/BaseManager.vue';
+import BaseButton from '@/components/base/BaseButton.vue';
+import LoadingSpinner from '@/components/base/LoadingSpinner.vue';
 import { useSiteVisitStore } from '@/stores/siteVisitStore';
 import { useInspectedProviderStore } from '@/stores/inspectedProviderStore';
 import { useAuthStore } from '@/stores/authStore';
@@ -156,7 +154,16 @@ const generateReport = async () => {
   gap: 1rem;
   grid-template-columns: 1fr 1fr;
 }
+.grid-cell1 { grid-area: grid-cell1; }
+.grid-cell2 { grid-area: grid-cell2; }
+.grid-cell3 { grid-area: grid-cell3; }
+.grid-cell4 { grid-area: grid-cell4; }
+.input-buttons { grid-area: input-buttons; justify-self: center; display: flex; gap: var(--space-2); }
 .selected-row {
   background-color: var(--highlight-color, #e3f2fd);
+}
+
+@media (max-width: 768px) {
+  .input-group { grid-template-columns: 1fr; grid-template-areas: "grid-cell1" "grid-cell2" "grid-cell3" "grid-cell4" "input-buttons"; }
 }
 </style>

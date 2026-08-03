@@ -47,7 +47,7 @@ defineProps({
 }
 
 .modal-container {
-  background: white;
+  background: var(--color-white);
   border-radius: 12px;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
   width: 380px;
@@ -56,19 +56,19 @@ defineProps({
 }
 
 .modal-title {
-  font-size: 1.25rem;
+  font-size: var(--text-xl);
   font-weight: 600;
   margin-bottom: 12px;
 }
 
 .modal-explanation {
-  font-size: 0.9rem;
+  font-size: var(--text-sm);
   color: #555;
   margin-bottom: 12px;
 }
 
 .modal-confirmation {
-  font-size: 1.1rem;
+  font-size: var(--text-lg);
   color: #733;
   margin-bottom: 20px;
 }
@@ -82,12 +82,12 @@ defineProps({
 button {
   background-color: #1e88e5;
   border: none;
-  color: white;
+  color: var(--color-white);
   padding: 10px 16px;
   margin-right: 8px;
   border-radius: 4px;
   cursor: pointer;
-  font-size: 14px;
+  font-size: var(--text-sm);
 }
 
 .btn-cancel {
@@ -96,16 +96,16 @@ button {
 
 }
 .btn-cancel:hover {
-  background: #1565c0;
+  background: var(--color-info-700);
 }
 
 .btn-confirm {
   border-radius: 8px;
-  background: #d32f2f;
+  background: var(--color-error-500);
   transition: background 0.2s;
 }
 .btn-confirm:hover {
-  background: #b71c1c;
+  background: var(--color-error-700);
 }
 
 </style>

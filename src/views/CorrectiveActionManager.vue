@@ -1,44 +1,5 @@
 <template>
   <BaseManager title="Corrective Actions">
-    <div class="split-grid">
-      <section class="card">
-        <h3>Submit CAP</h3>
-        <div class="form-grid">
-          <label for="findingId">Finding ID</label>
-          <input id="findingId" v-model="capForm.findingId" type="text" />
-
-          <label for="capId">CAP ID</label>
-          <input id="capId" v-model="capForm.capId" type="text" />
-
-          <label for="proposedAction">Proposed Action</label>
-          <textarea id="proposedAction" v-model="capForm.proposedAction" rows="3" />
-
-          <label for="responsibleEntity">Responsible Entity</label>
-          <input id="responsibleEntity" v-model="capForm.responsibleEntity" type="text" />
-
-          <label for="dueDate">Due Date</label>
-          <input id="dueDate" v-model="capForm.dueDate" type="date" />
-        </div>
-        <button @click="submitCap" :disabled="capStore.loading">Submit CAP</button>
-      </section>
-
-      <section class="card">
-        <h3>Review CAP</h3>
-        <div class="form-grid">
-          <label for="reviewCapId">CAP ID</label>
-          <input id="reviewCapId" v-model="reviewForm.capId" type="text" />
-
-          <label for="acceptanceStatus">Acceptance Status</label>
-          <select id="acceptanceStatus" v-model="reviewForm.acceptanceStatus">
-            <option value="Accepted">Accepted</option>
-            <option value="Rejected">Rejected</option>
-            <option value="Returned for Revision">Returned for Revision</option>
-          </select>
-        </div>
-        <button @click="reviewCap" :disabled="capStore.loading">Apply Review</button>
-      </section>
-    </div>
-
     <section class="card">
       <h3>CAP Listing</h3>
       <ScopePicker
@@ -78,13 +39,13 @@
             <td>{{ cap.acceptanceStatus }}</td>
             <td>{{ cap.responsibleEntity }}</td>
             <td>{{ cap.dueDate || '-' }}</td>
-            <td><button @click="viewCap(cap.capId)">View</button></td>
+            <td><BaseButton variant="ghost" size="sm" @click="viewCap(cap.capId)">View</BaseButton></td>
           </tr>
         </tbody>
       </table>
     </section>
 
-    <section v-if="capStore.selectedCap" class="card">
+    <section v-if="capStore.selectedCap" class="card detail-panel">
       <h3>CAP Detail: {{ capStore.selectedCap.capId }}</h3>
       <p><strong>Proposed action:</strong> {{ capStore.selectedCap.proposedAction || '-' }}</p>
       <p><strong>Responsible entity:</strong> {{ capStore.selectedCap.responsibleEntity || '-' }}</p>
@@ -92,6 +53,48 @@
       <p><strong>Due date:</strong> {{ capStore.selectedCap.dueDate || '-' }}</p>
       <p><strong>Follow-up reports:</strong> {{ capStore.selectedCap.followUpReports?.length || 0 }}</p>
     </section>
+
+    <div class="detail-buttons">
+      <BaseButton variant="secondary" size="sm" :class="{ 'push-button-active': showSubmit }" @click="showSubmit = !showSubmit">Submit CAP</BaseButton>
+      <BaseButton variant="secondary" size="sm" :class="{ 'push-button-active': showReview }" @click="showReview = !showReview">Review CAP</BaseButton>
+    </div>
+
+    <div v-if="showSubmit" class="card">
+      <h3>Submit CAP</h3>
+      <div class="form-grid">
+        <label for="findingId">Finding ID</label>
+        <input id="findingId" v-model="capForm.findingId" type="text" />
+
+        <label for="capId">CAP ID</label>
+        <input id="capId" v-model="capForm.capId" type="text" />
+
+        <label for="proposedAction">Proposed Action</label>
+        <textarea id="proposedAction" v-model="capForm.proposedAction" rows="3" />
+
+        <label for="responsibleEntity">Responsible Entity</label>
+        <input id="responsibleEntity" v-model="capForm.responsibleEntity" type="text" />
+
+        <label for="dueDate">Due Date</label>
+        <input id="dueDate" v-model="capForm.dueDate" type="date" />
+      </div>
+      <BaseButton variant="primary" @click="submitCap" :disabled="capStore.loading">Submit CAP</BaseButton>
+    </div>
+
+    <div v-if="showReview" class="card">
+      <h3>Review CAP</h3>
+      <div class="form-grid">
+        <label for="reviewCapId">CAP ID</label>
+        <input id="reviewCapId" v-model="reviewForm.capId" type="text" />
+
+        <label for="acceptanceStatus">Acceptance Status</label>
+        <select id="acceptanceStatus" v-model="reviewForm.acceptanceStatus">
+          <option value="Accepted">Accepted</option>
+          <option value="Rejected">Rejected</option>
+          <option value="Returned for Revision">Returned for Revision</option>
+        </select>
+      </div>
+      <BaseButton variant="primary" @click="reviewCap" :disabled="capStore.loading">Apply Review</BaseButton>
+    </div>
 
     <p v-if="capStore.error" class="error-message">{{ capStore.error }}</p>
     <p v-if="message" class="success-message">{{ message }}</p>
@@ -102,6 +105,7 @@
 import { reactive, ref, onMounted } from 'vue';
 import { useRoute } from 'vue-router';
 import BaseManager from '@/components/base/BaseManager.vue';
+import BaseButton from '@/components/base/BaseButton.vue';
 import ScopePicker from '@/components/common/ScopePicker.vue';
 import { useCapStore } from '@/stores/capStore';
 import { useAuthStore } from '@/stores/authStore';
@@ -111,6 +115,8 @@ const capStore = useCapStore();
 const authStore = useAuthStore();
 
 const message = ref('');
+const showSubmit = ref(false);
+const showReview = ref(false);
 
 const capForm = reactive({
   findingId: '',
@@ -246,36 +252,67 @@ onMounted(async () => {
 .split-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
-  gap: 1rem;
+  gap: var(--space-4);
 }
 
 .card {
   border: 1px solid var(--border-color);
-  border-radius: 10px;
-  padding: 1rem;
-  background: #fff;
+  border-radius: var(--radius-lg);
+  padding: var(--space-4);
+  background: var(--color-white);
+  margin-bottom: var(--space-4);
 }
 
 .form-grid {
   display: grid;
   grid-template-columns: 1fr;
-  gap: 0.45rem;
-  margin-bottom: 0.8rem;
+  gap: var(--space-2);
+  margin-bottom: var(--space-3);
 }
 
 .form-grid input,
 .form-grid select,
 .form-grid textarea {
-  padding: 0.45rem 0.6rem;
+  padding: var(--space-3) var(--space-4);
   border: 1px solid var(--border-color);
-  border-radius: 6px;
+  border-radius: var(--radius-md);
+  font-family: inherit;
+  font-size: var(--text-base);
+  color: var(--color-gray-900);
+}
+
+.form-grid textarea {
+  resize: vertical;
+  min-height: 80px;
+}
+
+.form-grid label {
+  font-weight: 600;
+  font-size: var(--text-sm);
+  color: var(--color-primary-700);
 }
 
 .error-message {
-  color: #bf3030;
+  color: var(--color-error-700);
 }
 
 .success-message {
-  color: #1f6e43;
+  color: var(--color-success-700);
+}
+
+.detail-buttons {
+  display: flex;
+  gap: var(--space-4);
+  margin-bottom: var(--space-4);
+}
+
+.push-button-active {
+  background-color: var(--color-primary-700);
+  color: var(--color-white);
+  border-color: var(--color-primary-700);
+}
+
+.detail-panel {
+  border-color: var(--color-primary-500);
 }
 </style>

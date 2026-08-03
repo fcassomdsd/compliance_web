@@ -1,9 +1,7 @@
 <template>
   <div>
-    <div class="header">
-      <img src="../../assets/images/logos/compliance-logo.png" alt="Compliance Logo"/> <span>
-        <h2>{{ title }} Management</h2>
-      </span>
+    <div class="page-header">
+      <h2>{{ title }}</h2>
     </div>
     <div class="controls-container">
       <slot></slot>
@@ -21,59 +19,48 @@ defineProps({
 </script>
 
 <style scoped>
-/* Scoped styles are intentionally minimal here, relying heavily on style.css for consistency */
-
-.header {
-  display: flex;
-  align-items: center;
-  gap: 1.5rem;
-  padding-bottom: 1.5rem;
+.page-header {
+  padding-bottom: var(--space-4);
   border-bottom: 1px solid var(--border-color);
-  margin-bottom: 2rem;
+  margin-bottom: var(--space-6);
 }
 
-.header img {
-  height: 80px;
-  object-fit: contain;
-  border-radius: 8px;
-  box-shadow: 0 4px 12px var(--shadow-color);
-}
-
-.header h2 {
-  color: var(--primary-color);
+.page-header h2 {
+  color: var(--color-primary-700);
   font-weight: 600;
   margin: 0;
+  font-size: var(--text-xl);
 }
 
 .controls-container {
   display: flex;
   flex-direction: column;
-  gap: 1.5rem;
-  margin-bottom: 2rem;
+  gap: var(--space-6);
+  margin-bottom: var(--space-8);
 }
 
 .data-table {
   width: 100%;
   border-collapse: separate;
   border-spacing: 0;
-  margin-top: 1rem;
-  background-color: #ffffff;
-  border-radius: 12px;
+  margin-top: var(--space-4);
+  background-color: var(--color-white);
+  border-radius: var(--radius-lg);
   overflow: hidden;
-  box-shadow: 0 4px 12px var(--shadow-color);
+  box-shadow: var(--shadow-md);
 }
 
 .data-table th, .data-table td {
   border: 1px solid var(--border-color);
-  padding: 1rem;
+  padding: var(--space-4);
   vertical-align: top;
   border-left: none;
   border-right: none;
 }
 
 .data-table thead {
-  background-color: var(--primary-color);
-  color: var(--text-light);
+  background-color: var(--color-primary-700);
+  color: var(--color-white);
 }
 
 .data-table th {
@@ -84,19 +71,19 @@ defineProps({
 .input-group {
   display: flex;
   align-items: center;
-  gap: 1rem;
+  gap: var(--space-4);
 }
 
 .input-group label {
   font-weight: 500;
-  color: var(--primary-color);
+  color: var(--color-primary-700);
   min-width: 120px;
 }
 
 .input-group input[type="text"] {
-  padding: 0.75rem 1rem;
+  padding: var(--space-3) var(--space-4);
   border: 1px solid var(--border-color);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   min-width: 250px;
 }
 

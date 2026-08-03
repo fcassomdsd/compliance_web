@@ -9,32 +9,31 @@
     />
     <div class="status-row" v-if="inspectionData.id">
       <label>Status:</label>
-      <span :class="statusBadgeClass" v-if="inspectionData.status">{{ inspectionData.status }}</span>
-      <span class="status-badge status-none" v-else>N/A</span>
+      <StatusBadge :status="inspectionData.status" />
     </div>
     <div class="input-group">
-      <div class="grid-cell2 grid-item">
+      <div class="grid-cell1 grid-item">
         <label for="inspectionType">Inspection Type:</label>
         <input id="inspectionType" type="text" v-model="inspectionData.inspectionType" :disabled="appState != 'editing'" placeholder="e.g. Ramp Inspection" />
       </div>
-      <div class="grid-cell3 grid-item text-area">
+      <div class="grid-cell2 grid-item text-area">
         <label for="objective">Objective:</label>
         <textarea id="objective" v-model="inspectionData.objective" :disabled="appState != 'editing'" placeholder="Inspection objective"/>
       </div>
-      <div class="grid-cell4 grid-item text-area">
+      <div class="grid-cell3 grid-item text-area">
         <label for="scope">Scope:</label>
         <textarea id="scope" v-model="inspectionData.scope" :disabled="appState != 'editing'" placeholder="Inspection scope"/>
       </div>
       <div class="input-buttons">
-        <button id="editBtn" @click="startEdit" v-if="appState == 'viewing' && inspectionData.id && canEditBasicValues(inspectionData.status)" :disabled="false"><img :src="editImg" alt="Edit" class="icon-btn" /></button>
-        <button id="saveBtn" @click="saveInspection" :disabled="(appState != 'editing')"><img :src="saveImg" alt="Save" class="icon-btn" /></button>
-        <button id="cancelBtn" @click="cancelEdit" :disabled="appState != 'editing'"><img :src="cancelImg" alt="Cancel" class="icon-btn" /></button>
+        <BaseButton id="editBtn" variant="ghost" size="sm" :icon="editImg" alt="Edit" v-if="appState == 'viewing' && inspectionData.id && canEditBasicValues(inspectionData.status)" @click="startEdit" />
+        <BaseButton id="saveBtn" variant="ghost" size="sm" :icon="saveImg" alt="Save" :disabled="(appState != 'editing')" @click="saveInspection" />
+        <BaseButton id="cancelBtn" variant="ghost" size="sm" :icon="cancelImg" alt="Cancel" :disabled="appState != 'editing'" @click="cancelEdit" />
       </div>
     </div>
     <div class="detail-group">
       <div class="detail-buttons">
-        <button id="services" class="push-button" @click="toggleServices()" :disabled="!inspectionData.id || !canAssignServices(inspectionData.status)">Services</button>
-        <button id="schedules" class="push-button" @click="toggleSchedules()" :disabled="!inspectionData.id || !canAssignServices(inspectionData.status)">Schedules</button>
+        <BaseButton id="services" variant="secondary" size="sm" :disabled="!inspectionData.id || !canAssignServices(inspectionData.status)" @click="toggleServices()">Services</BaseButton>
+        <BaseButton id="schedules" variant="secondary" size="sm" :disabled="!inspectionData.id || !canAssignServices(inspectionData.status)" @click="toggleSchedules()">Schedules</BaseButton>
       </div>
       <div id="services" class="service-group" v-show="servicesState">
         <table class="service-table">
@@ -66,10 +65,8 @@
             <div><label for="schedule-place">Place:</label><input id="schedule-place" type="text" v-model="currentSchedule.place" placeholder="Event location"/></div>
           </div>
           <div class="schedule-buttons">
-            <button @click="addOrUpdateSchedule" :disabled="!currentSchedule.name || !currentSchedule.startDateTime || !currentSchedule.endDateTime">
-              {{ editingScheduleIndex !== null ? 'Update' : 'Add' }}
-            </button>
-            <button @click="cancelScheduleEdit" v-if="editingScheduleIndex !== null">Cancel</button>
+            <BaseButton variant="primary" size="sm" :disabled="!currentSchedule.name || !currentSchedule.startDateTime || !currentSchedule.endDateTime" @click="addOrUpdateSchedule">{{ editingScheduleIndex !== null ? 'Update' : 'Add' }}</BaseButton>
+            <BaseButton v-if="editingScheduleIndex !== null" variant="ghost" size="sm" @click="cancelScheduleEdit">Cancel</BaseButton>
           </div>
         </div>
         <table class="schedule-table" v-if="schedules.length > 0">
@@ -81,14 +78,14 @@
               <td>{{ formatDateTime(schedule.endDateTime) }}</td>
               <td>{{ schedule.place || '' }}</td>
               <td>
-                <button @click="editSchedule(index)">Edit</button>
-                <button @click="deleteSchedule(index)">Delete</button>
+                <BaseButton variant="ghost" size="sm" @click="editSchedule(index)">Edit</BaseButton>
+                <BaseButton variant="ghost" size="sm" @click="deleteSchedule(index)">Delete</BaseButton>
               </td>
             </tr>
           </tbody>
         </table>
         <p v-else>No schedules defined yet.</p>
-        <div class="schedule-actions"><button @click="saveSchedules" :disabled="!schedulesChanged">Save All</button></div>
+        <div class="schedule-actions"><BaseButton variant="primary" size="sm" :disabled="!schedulesChanged" @click="saveSchedules">Save All</BaseButton></div>
       </div>
     </div>
   </BaseManager>
@@ -99,6 +96,8 @@ import { ref, computed, onMounted } from 'vue';
 import { useRoute } from 'vue-router';
 import BaseManager from '@/components/base/BaseManager.vue';
 import SiteVisitHeader from '@/components/inspection/SiteVisitHeader.vue';
+import BaseButton from '@/components/base/BaseButton.vue';
+import StatusBadge from '@/components/base/StatusBadge.vue';
 import { useInspectionStore } from '@/stores/inspectionStore';
 import { useSiteVisitStore } from '@/stores/siteVisitStore';
 import { useInspectedProviderStore } from '@/stores/inspectedProviderStore';
@@ -410,18 +409,6 @@ const checkAndTransitionToDefined = async () => {
   }
 };
 
-const statusBadgeClass = computed(() => {
-  const s = inspectionData.value.status;
-  if (!s) return 'status-badge status-none';
-  const map = {
-    Created: 'status-badge status-created', Defined: 'status-badge status-defined',
-    Assigned: 'status-badge status-assigned', Planned: 'status-badge status-planned',
-    Uploaded: 'status-badge status-uploaded', Reported: 'status-badge status-reported',
-    Complete: 'status-badge status-complete', Inactive: 'status-badge status-inactive',
-  };
-  return map[s] || 'status-badge';
-});
-
 const formatDateTime = (dateTimeStr) => {
   if (!dateTimeStr) return '';
   return new Date(dateTimeStr).toLocaleString('en-US');
@@ -454,29 +441,27 @@ const toBackendDateTime = (dateTimeStr) => {
 <style scoped>
 .input-group {
   display: grid;
-  grid-template-areas: "grid-cell1 grid-cell2" "grid-cell3 grid-cell4" "input-buttons input-buttons";
+  grid-template-areas: "grid-cell1 grid-cell1" "grid-cell2 grid-cell3" "input-buttons input-buttons";
   gap: 1rem;
   grid-template-columns: 1fr 1fr;
 }
 .input-group textarea { min-height: 60px; resize: vertical; border: 1px solid; border-radius: 4px; padding: 0.5rem; }
 .text-area { display: flex; align-items: center; }
-.push-button:focus { outline: 2px solid var(--secondary-color); }
 .grid-cell1 { grid-area: grid-cell1; }
 .grid-cell2 { grid-area: grid-cell2; }
 .grid-cell3 { grid-area: grid-cell3; }
-.grid-cell4 { grid-area: grid-cell4; }
-.input-buttons { grid-area: input-buttons; justify-self: center; }
+.input-buttons { grid-area: input-buttons; justify-self: center; display: flex; gap: var(--space-2); }
 .icon-btn { width: 2rem; height: 2rem; }
 .detail-group { width: 50%; }
 .detail-buttons { display: flex; gap: 1rem; margin-bottom: 1rem; }
 .service-group { display: flex; gap: 2rem; }
 .schedule-group { display: flex; flex-direction: column; gap: 1rem; }
 .schedule-form { border: 1px solid var(--border-color); padding: 1rem; border-radius: 4px; }
-.schedule-fields { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 1rem; margin-bottom: 1rem; }
+.schedule-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1rem; }
 .schedule-buttons { display: flex; gap: 0.5rem; }
 .schedule-table { width: 100%; border-collapse: collapse; border: 1px solid var(--border-color); }
 .schedule-table th, .schedule-table td { padding: 0.5rem; text-align: left; border: 1px solid var(--border-color); }
-.schedule-table th { background-color: var(--primary-color); color: white; }
+.schedule-table th { background-color: var(--primary-color); color: var(--color-white); }
 .schedule-actions { display: flex; justify-content: flex-end; margin-top: 1rem; }
 .service-table { width: 100%; border-collapse: collapse; border: 1px solid var(--border-color); }
 .specialties-table td { border: 0; padding: 0; }
@@ -484,15 +469,5 @@ const toBackendDateTime = (dateTimeStr) => {
 @media (max-width: 768px) { .input-group { grid-template-columns: 1fr; } }
 
 .status-row { margin-bottom: 0.75rem; display: flex; align-items: center; gap: 0.5rem; }
-.status-row label { font-weight: 600; color: var(--primary-color); }
-.status-badge { padding: 0.25rem 0.75rem; border-radius: 12px; font-size: 0.85rem; font-weight: 600; display: inline-block; }
-.status-none { background-color: #e0e0e0; color: #757575; }
-.status-created { background-color: #e3f2fd; color: #1565c0; }
-.status-defined { background-color: #e8eaf6; color: #283593; }
-.status-assigned { background-color: #fff3e0; color: #e65100; }
-.status-planned { background-color: #e8f5e9; color: #2e7d32; }
-.status-uploaded { background-color: #f3e5f5; color: #7b1fa2; }
-.status-reported { background-color: #e0f2f1; color: #00695c; }
-.status-complete { background-color: #e8f5e9; color: #1b5e20; }
-.status-inactive { background-color: #f5f5f5; color: #9e9e9e; }
+.status-row label { font-weight: 600; color: var(--color-primary-700); }
 </style>

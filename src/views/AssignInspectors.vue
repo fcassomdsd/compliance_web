@@ -10,8 +10,8 @@
         <input id="locationName" type="text" :value="currentInspection?.locationName || ''" disabled />
       </div>
       <div class="input-buttons">
-        <button id="saveBtn" @click="saveAssignments" :disabled="!currentInspection || currentProviderId === 'NONE'"><img :src="saveImg" alt="Save" class="icon-btn"/></button>
-        <button id="cancelBtn" @click="cancelAssignments" :disabled="!currentInspection"><img :src="cancelImg" alt="Cancel" class="icon-btn"/></button>
+        <BaseButton id="saveBtn" variant="ghost" size="sm" :icon="saveImg" alt="Save" :disabled="!currentInspection || currentProviderId === 'NONE'" @click="saveAssignments" />
+        <BaseButton id="cancelBtn" variant="ghost" size="sm" :icon="cancelImg" alt="Cancel" :disabled="!currentInspection" @click="cancelAssignments" />
       </div>
     </div>
 
@@ -80,7 +80,7 @@
             <td>{{ inspection?.startDate }}</td>
             <td class="actions-cell">
               <div>
-                <button :id="`select-${inspection.id}`" @click="selectInspection(inspection)"><img :src="viewImg" :disabled="inspectorStore.inspectors.length==0" alt="Select" class="icon-btn"/></button>
+                <BaseButton :id="`select-${inspection.id}`" variant="ghost" size="sm" :icon="viewImg" alt="Select" :disabled="inspectorStore.inspectors.length==0" @click="selectInspection(inspection)" />
               </div>
             </td>
           </tr>
@@ -93,6 +93,7 @@
 <script setup>
 import { onMounted, ref, computed } from 'vue';
 import BaseManager from '@/components/base/BaseManager.vue';
+import BaseButton from '@/components/base/BaseButton.vue';
 import { useSiteVisitStore } from '@/stores/siteVisitStore';
 import { useInspectionStore } from '@/stores/inspectionStore';
 import { useInspectorStore } from '@/stores/inspectorStore';
@@ -293,6 +294,9 @@ const cancelAssignments = () => {
   gap: 1rem;
   grid-template-columns : 1fr 1fr;
 }
+.grid-cell1 { grid-area: grid-cell1; }
+.grid-cell2 { grid-area: grid-cell2; }
+.input-buttons { grid-area: input-buttons; justify-self: center; display: flex; gap: var(--space-2); }
 .inspectors-list {
   display: flex;
   flex-wrap: wrap;
@@ -315,5 +319,9 @@ const cancelAssignments = () => {
   padding: 0.4rem 0.6rem;
   border: 1px solid var(--border-color);
   border-radius: 6px;
+}
+
+@media (max-width: 768px) {
+  .input-group { grid-template-columns: 1fr; grid-template-areas: "grid-cell1" "grid-cell2" "input-buttons"; }
 }
 </style>

@@ -260,7 +260,7 @@ function resetScope() {
 .scope-note {
   margin: 0.35rem 0 0;
   color: #5d6b75;
-  font-size: 0.95rem;
+  font-size: var(--text-sm);
 }
 
 .scope-grid {
