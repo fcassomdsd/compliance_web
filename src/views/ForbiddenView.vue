@@ -48,7 +48,7 @@ p {
   display: inline-block;
   text-decoration: none;
   background-color: var(--secondary-color);
-  color: white;
+  color: var(--color-white);
   padding: 0.75rem 1rem;
   border-radius: 8px;
 }
