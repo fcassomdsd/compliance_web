@@ -25,8 +25,7 @@
       </div>      
       <div class="grid-cell7 grid-item">
         <label for="status">Status:</label>
-        <span id="status" :class="statusBadgeClass" v-if="newSiteVisit.status"> {{ newSiteVisit.status }} </span>
-        <span id="status" class="status-badge status-none" v-else> N/A </span>
+        <StatusBadge :status="newSiteVisit.status" />
       </div>      
       <div class="grid-cell8 grid-item">
         <label for="mainInspector">Main Inspector:</label>
@@ -47,12 +46,12 @@
         </select>
       </div>      
       <div class="input-buttons">
-        <button id="addBtn" @click="startAdd" :disabled="appState != 'viewing'"><img :src="addImg" alt="Add" class="icon-btn" /></button>
-        <button id="editBtn" @click="appState = 'editing'" :disabled="newSiteVisit.id == null || appState != 'viewing' || !canEditBasicValues(newSiteVisit.status)"><img :src="editImg" alt="Edit" class="icon-btn" /></button>
-        <button id="saveBtn" @click="saveEdit(newSiteVisit)" :disabled="(appState != 'editing' || !newSiteVisit.valid())"><img :src="saveImg" alt="Save" class="icon-btn" /></button>
-        <button id="cancelBtn" @click="cancelEdit()" :disabled="appState != 'editing'"><img :src="cancelImg" alt="Cancel" class="icon-btn" /></button>
-        <button v-if="newSiteVisit.id && newSiteVisit.status === INSPECTION_STATUS.INACTIVE && canManageStatus" id="reactivateBtn" class="push-button" @click="reactivateSiteVisit()">Reactivate</button>
-        <button v-if="newSiteVisit.id && canInactivate(newSiteVisit.status) && canManageStatus" id="inactivateBtn" class="push-button push-button-warning" @click="inactivateSiteVisit()">Inactivate</button>
+        <BaseButton id="addBtn" variant="ghost" size="sm" :icon="addImg" alt="Add" :disabled="appState != 'viewing'" @click="startAdd" />
+        <BaseButton id="editBtn" variant="ghost" size="sm" :icon="editImg" alt="Edit" :disabled="newSiteVisit.id == null || appState != 'viewing' || !canEditBasicValues(newSiteVisit.status)" @click="appState = 'editing'" />
+        <BaseButton id="saveBtn" variant="ghost" size="sm" :icon="saveImg" alt="Save" :disabled="(appState != 'editing' || !newSiteVisit.valid())" @click="saveEdit(newSiteVisit)" />
+        <BaseButton id="cancelBtn" variant="ghost" size="sm" :icon="cancelImg" alt="Cancel" :disabled="appState != 'editing'" @click="cancelEdit()" />
+        <BaseButton v-if="newSiteVisit.id && newSiteVisit.status === INSPECTION_STATUS.INACTIVE && canManageStatus" id="reactivateBtn" variant="primary" size="sm" @click="reactivateSiteVisit()">Reactivate</BaseButton>
+        <BaseButton v-if="newSiteVisit.id && canInactivate(newSiteVisit.status) && canManageStatus" id="inactivateBtn" variant="danger" size="sm" @click="inactivateSiteVisit()">Inactivate</BaseButton>
       </div>
     </div>
     <div class="provider-group" v-if="newSiteVisit.id && newSiteVisit.id !== 'new'">
@@ -60,14 +59,12 @@
         <span class="provider-label">Providers to inspect:</span>
       </div>
       <div class="provider-list-header">
-        <button id="addProviderBtn" @click="showProviderDropdown = !showProviderDropdown"
-                :disabled="appState === 'editing' || !canAssignServices(newSiteVisit.status)"
-                class="push-button">+ Add Provider</button>
+        <BaseButton id="addProviderBtn" variant="primary" size="sm" :disabled="appState === 'editing' || !canAssignServices(newSiteVisit.status)" @click="showProviderDropdown = !showProviderDropdown">+ Add Provider</BaseButton>
         <span v-if="providerInspections.length === 0 && !loadingProviders" class="provider-hint">Click to select providers for this site visit.</span>
       </div>
-      <div v-if="loadingProviders" class="provider-loading">Loading providers...</div>
+      <div v-if="loadingProviders" class="provider-loading"><LoadingSpinner :visible="true" size="sm" text="Loading providers..." /></div>
       <div v-if="showProviderDropdown" class="provider-dropdown">
-        <div v-if="loadingAvailableProviders" class="provider-empty">Loading...</div>
+        <div v-if="loadingAvailableProviders" class="provider-empty"><LoadingSpinner :visible="true" size="sm" text="Loading..." /></div>
         <div v-else-if="availableProviders.length === 0" class="provider-empty">No service providers found for this location. Ensure location services are configured in AtroCore.</div>
         <div v-for="provider in availableProviders" :key="provider.id" class="provider-option"
              @click="addProviderInspection(provider.id, provider.name); showProviderDropdown = false">
@@ -80,8 +77,7 @@
              @click="selectedProviderId = pi.id">
           <div class="provider-card-header">
             <strong>{{ pi.serviceProviderName || pi.name || pi.serviceProviderId }}</strong>
-            <button class="provider-remove" @click.stop="removeProviderInspection(pi.id)"
-                    :disabled="appState === 'editing'">Remove</button>
+            <BaseButton variant="ghost" size="sm" :disabled="appState === 'editing'" @click.stop="removeProviderInspection(pi.id)">Remove</BaseButton>
           </div>
           <router-link
             v-if="selectedProviderId === pi.id"
@@ -117,28 +113,26 @@
            <td :id="`startDate-${siteVisit.id}`" >
              {{ siteVisit?.startDate }}
            </td>
-           <td class="actions-cell">
-             <div>
-               <button
-                 :id="`view-${siteVisit.id}`"
-                 @click="viewElement(siteVisit)"
-                 :disabled="appState !== 'viewing'">
-                 <img :src="viewImg" alt="View" class="icon-btn"/>
-               </button>
-               <button :id="`delete-${siteVisit.id}`" @click="removeSiteVisit(siteVisit)" :disabled="appState !== 'viewing'"><img :src="deleteImg" alt="Delete" class="icon-btn" /></button>
-             </div>
+            <td class="actions-cell">
+              <div>
+                <BaseButton :id="`view-${siteVisit.id}`" variant="ghost" size="sm" :icon="viewImg" alt="View" :disabled="appState !== 'viewing'" @click="viewElement(siteVisit)" />
+                <BaseButton :id="`delete-${siteVisit.id}`" variant="ghost" size="sm" :icon="deleteImg" alt="Delete" :disabled="appState !== 'viewing'" @click="removeSiteVisit(siteVisit)" />
+              </div>
           </td> 
         </tr>
       </tbody>
     </table>
     </div>
-    <div v-if="(store.loading || locationStore.loading)" class="loader"></div>
+    <LoadingSpinner :visible="(store.loading || locationStore.loading)" />
   </BaseManager>
 </template>
 
 <script setup>
 import { ref, computed } from 'vue';
 import BaseManager from '@/components/base/BaseManager.vue';
+import BaseButton from '@/components/base/BaseButton.vue';
+import StatusBadge from '@/components/base/StatusBadge.vue';
+import LoadingSpinner from '@/components/base/LoadingSpinner.vue';
 import { useSiteVisitStore } from '@/stores/siteVisitStore';
 import { useLocationStore } from '@/stores/locationStore';
 import { useInspectorStore } from '@/stores/inspectorStore';
@@ -182,21 +176,6 @@ const canManageStatus = computed(() => {
   return authStore.hasRole('admin') || authStore.hasRole('planner');
 });
 
-const statusBadgeClass = computed(() => {
-  const status = newSiteVisit.value.status;
-  if (!status) return 'status-badge status-none';
-  const classMap = {
-    [INSPECTION_STATUS.CREATED]: 'status-badge status-created',
-    [INSPECTION_STATUS.DEFINED]: 'status-badge status-defined',
-    [INSPECTION_STATUS.ASSIGNED]: 'status-badge status-assigned',
-    [INSPECTION_STATUS.PLANNED]: 'status-badge status-planned',
-    [INSPECTION_STATUS.UPLOADED]: 'status-badge status-uploaded',
-    [INSPECTION_STATUS.REPORTED]: 'status-badge status-reported',
-    [INSPECTION_STATUS.COMPLETE]: 'status-badge status-complete',
-    [INSPECTION_STATUS.INACTIVE]: 'status-badge status-inactive',
-  };
-  return classMap[status] || 'status-badge';
-});
 const DEFAULT_SITEVISIT = {
   id : null,
   code : '',
@@ -434,7 +413,6 @@ const reactivateSiteVisit = async () => {
   grid-template-areas:
     "grid-cell1 grid-cell2"
     "grid-cell3 grid-cell4"
-    "grid-cell5 grid-cell6"
     "grid-cell8 grid-cell9"
     "grid-cell7 grid-cell7"  
     "input-buttons input-buttons";
@@ -491,14 +469,6 @@ input:focus {
   grid-area: grid-cell4;
 }
 
-.grid-cell5 {
-  grid-area: grid-cell5;
-}
-
-.grid-cell6 {
-  grid-area: grid-cell6;
-}
-
 .grid-cell7 {
   grid-area: grid-cell7;
 }
@@ -512,21 +482,9 @@ input:focus {
 
 .input-buttons {
   grid-area: input-buttons;
-  justify-self : center;
-}
-
-.input-buttons button{
-  margin-left : 0.5rem;
-}
-
-.icon-btn {
-  width: 2rem;
-  height: 2rem;
-}
-
-.data-table .icon-btn {
-  width: 1.5rem;
-  height: 1.5rem;
+  justify-self: center;
+  display: flex;
+  gap: var(--space-2);
 }
 
 .data-table button {
@@ -562,71 +520,6 @@ input:focus {
   text-align : center;
 }
 
-.push-button-warning {
-  background-color: var(--warning-color, #e65100);
-  color: white;
-}
-
-.push-button-warning:hover {
-  background-color: #bf360c;
-  box-shadow: 0 4px 8px rgba(230, 81, 0, 0.3);
-}
-
-.status-badge {
-  padding: 0.25rem 0.75rem;
-  border-radius: 12px;
-  font-size: 0.85rem;
-  font-weight: 600;
-  display: inline-block;
-  text-align: center;
-  min-width: 80px;
-}
-
-.status-none {
-  background-color: #e0e0e0;
-  color: #757575;
-}
-
-.status-created {
-  background-color: #e3f2fd;
-  color: #1565c0;
-}
-
-.status-defined {
-  background-color: #e8eaf6;
-  color: #283593;
-}
-
-.status-assigned {
-  background-color: #fff3e0;
-  color: #e65100;
-}
-
-.status-planned {
-  background-color: #e8f5e9;
-  color: #2e7d32;
-}
-
-.status-uploaded {
-  background-color: #f3e5f5;
-  color: #7b1fa2;
-}
-
-.status-reported {
-  background-color: #e0f2f1;
-  color: #00695c;
-}
-
-.status-complete {
-  background-color: #e8f5e9;
-  color: #1b5e20;
-}
-
-.status-inactive {
-  background-color: #f5f5f5;
-  color: #9e9e9e;
-}
-
 .inactive-row {
   opacity: 0.5;
 }
@@ -651,15 +544,13 @@ input:focus {
       "grid-cell2"
       "grid-cell3"
       "grid-cell4"
-      "grid-cell5"
-      "grid-cell6"
       "grid-cell7"
       "grid-cell8"
       "grid-cell9"
       "input-buttons"; 
     }
   .data-table {
-    font-size: 0.875rem; 
+    font-size: var(--text-sm); 
   }
 }
 
@@ -689,14 +580,14 @@ input:focus {
 }
 
 .provider-hint {
-  color: #9e9e9e;
+  color: var(--color-gray-500);
   font-style: italic;
-  font-size: 0.85rem;
+  font-size: var(--text-sm);
 }
 
 .provider-loading {
-  color: #757575;
-  font-size: 0.85rem;
+  color: var(--color-gray-700);
+  font-size: var(--text-sm);
   padding: 0.5rem 0;
 }
 
@@ -706,7 +597,7 @@ input:focus {
   max-height: 200px;
   overflow-y: auto;
   margin-bottom: 0.75rem;
-  background: white;
+  background: var(--color-white);
 }
 
 .provider-option {
@@ -715,14 +606,14 @@ input:focus {
 }
 
 .provider-option:hover {
-  background-color: #e3f2fd;
+  background-color: var(--color-primary-100);
 }
 
 .provider-empty {
   padding: 0.5rem 1rem;
-  color: #9e9e9e;
+  color: var(--color-gray-500);
   font-style: italic;
-  font-size: 0.85rem;
+  font-size: var(--text-sm);
 }
 
 .provider-list {
@@ -745,7 +636,7 @@ input:focus {
 
 .provider-card-selected {
   border-color: var(--secondary-color);
-  background: #e3f2fd;
+  background: var(--color-primary-100);
 }
 
 .provider-card-header {
@@ -754,25 +645,14 @@ input:focus {
   align-items: center;
 }
 
-.provider-remove {
-  background: none;
-  border: 1px solid #e0e0e0;
-  border-radius: 4px;
-  color: #757575;
-  font-size: 0.8rem;
-  cursor: pointer;
-  padding: 0.15rem 0.5rem;
-}
-
-.provider-remove:hover {
-  color: #e53935;
-  border-color: #e53935;
+.provider-action-link:hover {
+  text-decoration: underline;
 }
 
 .provider-action-link {
   display: inline-block;
   margin-top: 0.35rem;
-  font-size: 0.85rem;
+  font-size: var(--text-sm);
   color: var(--secondary-color);
   text-decoration: none;
 }

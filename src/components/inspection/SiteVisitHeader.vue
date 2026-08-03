@@ -48,12 +48,12 @@ defineProps({
   width: 90px;
   font-weight: 600;
   color: var(--primary-color);
-  font-size: 0.9rem;
+  font-size: var(--text-sm);
   flex-shrink: 0;
 }
 
 .header-value {
-  font-size: 0.9rem;
+  font-size: var(--text-sm);
   color: var(--text-dark);
 }
 </style>

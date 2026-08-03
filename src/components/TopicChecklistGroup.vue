@@ -244,7 +244,7 @@ const moveQuestion = (questionId, direction) => {
 
 <style scoped>
 .topic-group {
-  background-color: #ffffff;
+  background-color: var(--color-white);
   border: 1px solid var(--border-color);
   border-radius: 8px;
   margin-bottom: 1.5rem;
@@ -263,7 +263,7 @@ const moveQuestion = (questionId, direction) => {
 
 .topic-header h3 {
   color: var(--primary-color);
-  font-size: 1.1rem;
+  font-size: var(--text-lg);
   font-weight: 600;
   margin: 0;
   flex: 1;
@@ -278,9 +278,9 @@ const moveQuestion = (questionId, direction) => {
   padding: 0.5rem 1rem;
   border: 1px solid var(--secondary-color);
   border-radius: 6px;
-  background-color: #ffffff;
+  background-color: var(--color-white);
   color: var(--secondary-color);
-  font-size: 0.85rem;
+  font-size: var(--text-sm);
   font-weight: 500;
   cursor: pointer;
   transition: all 0.2s ease;
@@ -296,8 +296,8 @@ const moveQuestion = (questionId, direction) => {
 }
 
 .select-all-btn {
-  border-color: #4caf50;
-  color: #4caf50;
+  border-color: var(--color-success-500);
+  color: var(--color-success-500);
 }
 
 .select-all-btn:hover {
@@ -305,8 +305,8 @@ const moveQuestion = (questionId, direction) => {
 }
 
 .deselect-all-btn {
-  border-color: #ff9800;
-  color: #ff9800;
+  border-color: var(--color-warning-500);
+  color: var(--color-warning-500);
 }
 
 .deselect-all-btn:hover {
@@ -365,12 +365,12 @@ const moveQuestion = (questionId, direction) => {
 .question-code {
   font-weight: 600;
   color: var(--primary-color);
-  font-size: 0.9rem;
+  font-size: var(--text-sm);
 }
 
 .question-text {
   color: var(--text-dark);
-  font-size: 0.95rem;
+  font-size: var(--text-sm);
   line-height: 1.4;
 }
 
@@ -379,38 +379,38 @@ const moveQuestion = (questionId, direction) => {
   width: fit-content;
   padding: 0.2rem 0.55rem;
   border-radius: 999px;
-  font-size: 0.75rem;
+  font-size: var(--text-xs);
   font-weight: 700;
   letter-spacing: 0.01em;
 }
 
 .risk-level-low {
-  color: #1b5e20;
-  background-color: #e8f5e9;
+  color: var(--color-success-700);
+  background-color: var(--color-success-100);
 }
 
 .risk-level-medium {
-  color: #e65100;
-  background-color: #fff3e0;
+  color: var(--color-warning-700);
+  background-color: var(--color-warning-100);
 }
 
 .risk-level-high {
-  color: #b71c1c;
-  background-color: #ffebee;
+  color: var(--color-error-700);
+  background-color: var(--color-error-100);
 }
 
 .risk-level-critical {
-  color: #ffffff;
-  background-color: #b71c1c;
+  color: var(--color-white);
+  background-color: var(--color-error-700);
 }
 
 .question-details {
   margin-top: 0.5rem;
   padding: 0.75rem;
-  background-color: #ffffff;
+  background-color: var(--color-white);
   border-left: 3px solid var(--secondary-color);
   border-radius: 4px;
-  font-size: 0.85rem;
+  font-size: var(--text-sm);
 }
 
 .question-order-controls {
@@ -422,9 +422,9 @@ const moveQuestion = (questionId, direction) => {
 
 .order-btn {
   border: 1px solid var(--border-color);
-  background: #ffffff;
+  background: var(--color-white);
   color: var(--primary-color);
-  font-size: 0.75rem;
+  font-size: var(--text-xs);
   line-height: 1;
   padding: 0.25rem 0.4rem;
   border-radius: 4px;
@@ -466,9 +466,9 @@ const moveQuestion = (questionId, direction) => {
   margin-top: 0.25rem;
   border: 1px solid var(--border-color);
   border-radius: 4px;
-  background-color: #ffffff;
+  background-color: var(--color-white);
   color: var(--primary-color);
-  font-size: 1rem;
+  font-size: var(--text-base);
   font-weight: bold;
   cursor: pointer;
   transition: all 0.2s ease;
