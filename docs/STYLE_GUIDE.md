@@ -4,15 +4,18 @@ This document defines the design tokens, component conventions, and layout patte
 
 ## Table of Contents
 
-1. [Design Tokens](#1-design-tokens)
-2. [Component Library](#2-component-library)
-3. [Layout Conventions](#3-layout-conventions)
-4. [Button System](#4-button-system)
-5. [Status Badges](#5-status-badges)
-6. [Loading States](#6-loading-states)
-7. [Responsive Breakpoints](#7-responsive-breakpoints)
-8. [Color Semantics](#8-color-semantics)
-9. [Quick Reference](#9-quick-reference)
+ 1. [Design Tokens](#1-design-tokens)
+ 2. [Component Library](#2-component-library)
+ 3. [Layout Conventions](#3-layout-conventions)
+ 4. [Button System](#4-button-system)
+ 5. [Status Badges](#5-status-badges)
+ 6. [Loading States](#6-loading-states)
+ 7. [Responsive Breakpoints](#7-responsive-breakpoints)
+ 8. [Color Semantics](#8-color-semantics)
+ 9. [Quick Reference](#9-quick-reference)
+10. [View-Specific Patterns](#10-view-specific-patterns)
+11. [Date Smart Defaults](#11-date-smart-defaults)
+12. [Inspection Status Lifecycle](#12-inspection-status-lifecycle)
 
 ---
 
@@ -327,6 +330,93 @@ Every `.input-group` using CSS Grid must have an `@media (max-width: 768px)` tha
 - Don't use raw `rem` values that could be design tokens
 - Don't create more than one `.input-group` per view for form fields
 
+---
+
+## 10. View-Specific Patterns
+
+### SiteVisitManager
+
+The site visit form manages basic metadata only: code, location, dates, main/secondary inspectors, and status. Services, schedules, objective, and scope are managed per-provider in `InspectionManager.vue`.
+
+- **No Services/Schedules buttons** — these belong to per-provider inspections
+- **Inactivate/Reactivate buttons** appear in the input-buttons row alongside Save/Cancel
+- **Provider cards** show added providers with a "Manage Inspection" link to the per-provider view
+- **Provider selection** is gated on `canAssignServices(status)`: only available when status is `Created` or `Defined`
+
+### InspectionManager (per-provider)
+
+This is the operational view for a single provider within a site visit. It shows:
+
+- **SiteVisitHeader**: site visit code, location, dates, provider name (read from stores)
+- **Editable fields**: inspection type, objective, scope (gated on per-inspection status)
+- **Read-only fields**: description, conclusion (populated after report generation)
+- **Services panel**: filtered by provider via `locationStore.getLocationServices(locationId, providerId)`
+- **Schedules panel**: 2×2 grid layout (Name/Place, Start Date/Time, End Date/Time). Auto-generated opening/closing meetings.
+- **Status badge**: per-inspection status with same color coding
+- **Schedule defaults**: start date defaults to site visit start date 10:00 on focus
+
+### Inspection Plan
+
+Select a site visit → select a provider → optionally select a service area → generate.
+
+- Uses provider filtering (not service area) to preserve per-provider confidentiality
+- Generate button disabled until a site visit and provider are selected
+- Plan regenerable at `Assigned` and `Planned` status
+
+### Inspection Report
+
+Select a site visit → select a provider → fill report date, description, conclusion → generate.
+
+- **Objective, Scope, Inspection Type**: read-only, pre-filled from per-provider Inspection
+- **Description, Conclusion**: editable textareas per-provider, saved to Inspection on generate
+- **Report Date**: defaults to today
+- **Provider dropdown**: uses `serviceProviderId` from `InspectedProvider` records
+
+### Checklist Manager
+
+Single horizontal filter row with 3 columns: Site Visit | Provider | Specialty. Select All / Clear All buttons appear below when a specialty is selected. Questions appear below without requiring scrolling.
+
+### Findings / Corrective Actions / Follow-ups
+
+- All use `BaseButton` for actions (View, Submit, Review, Create)
+- Cards use design tokens for borders, padding, backgrounds
+- **Corrective Actions**: listing at top; Submit/Review sections toggled by buttons
+- **Follow-ups**: listing at top; Register form toggled by button
+- **Findings**: detail panel above table for immediate visibility
+
+---
+
+## 11. Date Smart Defaults
+
+| Context | Field | Default |
+|---|---|---|
+| Site Visit | Start Date | Today + 20 days (set on `startAdd()`) |
+| Site Visit | End Date | Start Date + 1 day (set on `@blur` of start date, if end is empty) |
+| Schedule (New) | Start Date/Time | Site visit start date at 10:00 (set on `@focus`) |
+| Schedule (New) | End Date/Time | Same as start (set on `@blur` of start, if end is empty) |
+| Inspection Report | Report Date | Today's date (set on `onMounted()`) |
+
+Implementation: `@focus` and `@blur` event handlers on the respective input fields. Defaults only apply when the field is empty.
+
+---
+
+## 12. Inspection Status Lifecycle
+
+Each per-provider `Inspection` has its own independent status. The site visit status is no longer used for operational gating.
+
+| Status | Set by | Next available actions |
+|---|---|---|
+| `Created` | Auto-set on inspection creation | Edit basics, assign services, assign schedules |
+| `Defined` | `InspectionManager` (after services + schedules exist) | Assign inspectors |
+| `Assigned` | `AssignInspectors` (after inspector assignments saved) | Process checklists, generate plan |
+| `Planned` | Node-RED (after plan generation) | Upload checklists, regenerate plan |
+| `Uploaded` | Node-RED (after canonical import) | Generate report |
+| `Reported` | Node-RED (after report generation) | Regenerate report |
+| `Complete` | External system only | Read-only |
+| `Inactive` | `SiteVisitManager` (manual inactivation, pre-Uploaded only) | Read-only |
+
+**Status transitions are per-inspection, not per site visit.** One inspection can be at `Planned` while another is at `Created` — they progress independently. This prevents a slow inspection from blocking a fast one.
+
 ### File Organization
 
 ```
@@ -343,4 +433,4 @@ src/
 
 ---
 
-*Last updated: July 2026. Maintained by the compliance_web development team.*
+*Last updated: August 2026. Maintained by the compliance_web development team.*

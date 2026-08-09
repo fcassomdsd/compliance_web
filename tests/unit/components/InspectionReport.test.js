@@ -16,6 +16,13 @@ vi.mock('@/stores/inspectedProviderStore', () => ({
     ]),
   })),
 }));
+vi.mock('@/stores/inspectionStore', () => ({
+  useInspectionStore: vi.fn(() => ({
+    getInspections: vi.fn().mockResolvedValue(undefined),
+    getForInspectedProvider: vi.fn(() => [{ id: 'INSP1', objective: '', scope: '', inspectionType: '', description: '', conclusion: '' }]),
+    updateInspection: vi.fn().mockResolvedValue(undefined),
+  })),
+}));
 vi.mock('@/stores/authStore');
 vi.mock('@/services/apiServices');
 vi.mock('vue-toastification', () => ({ useToast: vi.fn() }));
