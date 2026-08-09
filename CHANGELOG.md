@@ -2,6 +2,57 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.4.0] - 2026-08-02
+
+### Added
+- **Site Visit + Per-Provider Inspection architecture**: SiteVisit as top-level container (`siteVisitStore.js`), per-provider `Inspection` entity (`inspectionStore.js`) with auto-generated opening/closing meeting schedules.
+- **SiteVisitManager.vue**: Basic site visit data (code, location, dates, inspectors, status). Provider management with cards and +Add Provider dropdown. Services and schedules moved to per-provider `InspectionManager.vue`.
+- **InspectionManager.vue**: Per-provider operations (inspection type, objective, scope, services, schedules, inspector assignments). Read-only description/conclusion fields populated after report generation.
+- **Status badge per inspection**: Each per-provider Inspection has independent status (Created→Defined→Assigned→Planned→Uploaded→Reported→Complete→Inactive). Site visit status no longer used for operational gating.
+- **InspectionReport.vue**: Description and Conclusion fields (editable, saved to Inspection on generate). Objective/Scope/Type displayed read-only from per-provider Inspection.
+- **Smart date defaults**: Site visit start = today+20 days. End date = start+1 on blur. Schedule start = site visit start date 10:00. Report date = today.
+- **Responsive hamburger navigation**: 8-link nav bar collapses to hamburger menu at ≤1024px.
+- **STYLE_GUIDE.md**: Contributor reference with design tokens, component API, layout conventions, view patterns, and date defaults.
+
+### Changed
+- **Inspection → SiteVisit rename**: `Inspection` entity renamed to `SiteVisit` across all stores, views, and Node-RED flows. Objective and scope moved to per-provider `Inspection`.
+- **Status gates per inspection**: `AssignInspectors`, `InspectionPlan`, `ChecklistManager`, `InspectionReport` filter by per-inspection status (`inspectionStore`) instead of site visit status.
+- **Inspection Plan uses provider filter**: Service area selector replaced with provider selector. Plans generated per-provider for confidentiality.
+- **ChecklistManager compact filters**: Three stacked dropdowns replaced with single-row 3-column grid. Saves ~250px vertical space.
+- **Schedule form 2×2 layout**: 4-column layout (Name/Start/End/Place) replaced with 2×2 grid to prevent overflow.
+- **Login page rebranded**: Added logo, CSS variables, input focus ring, branded title.
+- **Delete → soft-delete**: Delete button on active site visits inactivates instead of hard-deleting. Inactivation cascades to all inspections. Blocked if any inspection at Uploaded+.
+
+### UI Facelift (Design System)
+- **Design token system**: 107 CSS custom properties in `style.css` — brand colors, neutrals, semantic colors (success/warning/error/info), spacing scale, border-radius scale, typography scale, shadows, transitions.
+- **BaseButton.vue**: Unified button component with 6 variants, 3 sizes, icon/loading support. All 12 views migrated from raw buttons. Removed ~80 lines of duplicate CSS.
+- **StatusBadge.vue**: Reusable status badge with color coding. Eliminated ~110 lines of duplicated CSS across SiteVisitManager and InspectionManager.
+- **LoadingSpinner.vue**: Spinner component (sm/md/lg) with optional text. Replaced 5 inline loading indicators.
+- **Inter font loaded** via Google Fonts.
+- **Loader spinner fixed**: Border/border-top colors corrected for visible animation.
+- **All hardcoded hex colors replaced** with CSS variables across 13 files.
+- **Font-size standardization**: All `px`/raw `rem` values replaced with design tokens (`--text-xs` through `--text-2xl`).
+
+### Layout Fixes
+- **Button centering standardized**: All view action buttons now use `justify-self: center`.
+- **Orphan grid cells removed**: SiteVisitManager (grid-cell5/6 removed), InspectionManager (grid-cell1 renumbered).
+- **Missing grid-area CSS added**: AssignInspectors, InspectionPlan, InspectionReport now have proper `grid-area` assignments.
+- **Responsive breakpoints added** to all grid views (single-column at 768px).
+- **Findings/CorrectiveActions/Follow-ups** modernized with BaseButton, design tokens, card layouts. CorrectiveActions Submit/Review sections toggleable by button.
+
+### Checklist Upsert Optimization
+- **Diff-based upsert**: `inspectionQuestionStore.upsertChecklist()` compares existing vs selected questions. Only deletes removed questions, creates new ones, updates changed sequences. Typical save: ~5 API calls instead of ~50.
+
+### Fixed
+- Fixed orphan `grid-cell5`/`grid-cell6` in SiteVisitManager causing empty row gap.
+- Fixed orphan `grid-cell1` in InspectionManager leaving left column empty on row 1.
+- Fixed missing `grid-area` CSS in AssignInspectors, InspectionPlan, InspectionReport (dead `grid-template-areas`).
+- Fixed InspectionManager grid-cell numbering after removing orphan cell.
+- Fixed schedule form overflow (4 columns → 2×2 grid).
+- Fixed `toInputDateTime` not handling space-separated backend datetime format.
+- Fixed `DEFAULT_INSPECTION` references not renamed to `DEFAULT_SITEVISIT` in SiteVisitManager.
+- Fixed `providerName` and `checklistSummaryTable` commented out in report webscript return object.
+
 ## [0.3.0] - 2026-07-30
 
 ### Added

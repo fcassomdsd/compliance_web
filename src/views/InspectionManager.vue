@@ -20,11 +20,19 @@
         <label for="objective">Objective:</label>
         <textarea id="objective" v-model="inspectionData.objective" :disabled="appState != 'editing'" placeholder="Inspection objective"/>
       </div>
-      <div class="grid-cell3 grid-item text-area">
-        <label for="scope">Scope:</label>
-        <textarea id="scope" v-model="inspectionData.scope" :disabled="appState != 'editing'" placeholder="Inspection scope"/>
-      </div>
-      <div class="input-buttons">
+       <div class="grid-cell3 grid-item text-area">
+         <label for="scope">Scope:</label>
+         <textarea id="scope" v-model="inspectionData.scope" :disabled="appState != 'editing'" placeholder="Inspection scope"/>
+       </div>
+       <div class="grid-cell4 grid-item text-area" v-if="inspectionData.id">
+         <label for="desc">Description:</label>
+         <textarea id="desc" v-model="inspectionData.description" disabled placeholder="Set during report generation"/>
+       </div>
+       <div class="grid-cell5 grid-item text-area" v-if="inspectionData.id">
+         <label for="conc">Conclusion:</label>
+         <textarea id="conc" v-model="inspectionData.conclusion" disabled placeholder="Set during report generation"/>
+       </div>
+       <div class="input-buttons">
         <BaseButton id="editBtn" variant="ghost" size="sm" :icon="editImg" alt="Edit" v-if="appState == 'viewing' && inspectionData.id && canEditBasicValues(inspectionData.status)" @click="startEdit" />
         <BaseButton id="saveBtn" variant="ghost" size="sm" :icon="saveImg" alt="Save" :disabled="(appState != 'editing')" @click="saveInspection" />
         <BaseButton id="cancelBtn" variant="ghost" size="sm" :icon="cancelImg" alt="Cancel" :disabled="appState != 'editing'" @click="cancelEdit" />
@@ -441,7 +449,7 @@ const toBackendDateTime = (dateTimeStr) => {
 <style scoped>
 .input-group {
   display: grid;
-  grid-template-areas: "grid-cell1 grid-cell1" "grid-cell2 grid-cell3" "input-buttons input-buttons";
+  grid-template-areas: "grid-cell1 grid-cell1" "grid-cell2 grid-cell3" "grid-cell4 grid-cell4" "grid-cell5 grid-cell5" "input-buttons input-buttons";
   gap: 1rem;
   grid-template-columns: 1fr 1fr;
 }
@@ -450,6 +458,8 @@ const toBackendDateTime = (dateTimeStr) => {
 .grid-cell1 { grid-area: grid-cell1; }
 .grid-cell2 { grid-area: grid-cell2; }
 .grid-cell3 { grid-area: grid-cell3; }
+.grid-cell4 { grid-area: grid-cell4; }
+.grid-cell5 { grid-area: grid-cell5; }
 .input-buttons { grid-area: input-buttons; justify-self: center; display: flex; gap: var(--space-2); }
 .icon-btn { width: 2rem; height: 2rem; }
 .detail-group { width: 50%; }
