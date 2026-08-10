@@ -7,7 +7,8 @@
       :loading="followUpStore.loading"
       :show-provider-id="true"
       :show-status="true"
-      :show-overdue-only="false"
+      :show-cap-overdue-only="false"
+      :show-solution-overdue-only="false"
       :show-domain="true"
       :show-inspection-id="true"
       :presets="[]"
@@ -146,7 +147,8 @@ async function loadFollowUps() {
   followUpStore.setFilter('domain', scope.domain);
   followUpStore.setFilter('status', scope.findingStatus);
   followUpStore.setFilter('statusMode', 'effective');
-  followUpStore.setFilter('overdueOnly', false);
+  followUpStore.setFilter('capOverdueOnly', false);
+  followUpStore.setFilter('solutionOverdueOnly', false);
   followUpStore.setFilter('skipCount', 0);
   followUpStore.setFilter('maxItems', 50);
   followUpStore.setFilter('followUpType', scope.followUpType);

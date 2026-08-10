@@ -15,7 +15,8 @@ export const useFindingStore = defineStore('finding', {
       providerId: '',
       specialtyCode: '',
       domain: '',
-      overdueOnly: false,
+      capOverdueOnly: false,
+      solutionOverdueOnly: false,
     },
   }),
 
@@ -26,7 +27,8 @@ export const useFindingStore = defineStore('finding', {
       try {
         const params = {
           ...this.filters,
-          overdueOnly: this.filters.overdueOnly ? 'true' : 'false',
+          capOverdueOnly: this.filters.capOverdueOnly ? 'true' : 'false',
+          solutionOverdueOnly: this.filters.solutionOverdueOnly ? 'true' : 'false',
         };
         const { data } = await apiFindings(params);
         this.findings = Array.isArray(data?.list) ? data.list : [];

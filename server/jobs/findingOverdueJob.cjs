@@ -72,12 +72,16 @@ async function runFindingOverdueSync({ alfrescoClient, username, password, logge
         drift += 1;
       }
 
-      if (status.effectiveStatus === FINDING_STATUS.OVERDUE && status.storedStatus !== FINDING_STATUS.OVERDUE) {
+      const isNewlyOverdue =
+        (status.effectiveStatus === FINDING_STATUS.SOLUTION_OVERDUE || status.effectiveStatus === FINDING_STATUS.CAP_OVERDUE) &&
+        status.storedStatus !== status.effectiveStatus;
+
+      if (isNewlyOverdue) {
         await alfrescoClient.updateNodeProperties({
           ticket,
           nodeId: finding.nodeId,
           properties: {
-            'vso:findingStatus': FINDING_STATUS.OVERDUE,
+            'vso:findingStatus': status.effectiveStatus,
             'vso:lastStatusChange': nowIsoDate(now()),
           },
         });

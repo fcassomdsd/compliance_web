@@ -11,6 +11,7 @@ function mapFindingNode(node) {
     description: nodeProperty(node, 'vso:description'),
     findingStatus: nodeProperty(node, 'vso:findingStatus'),
     submissionDeadline: nodeProperty(node, 'vso:submissionDeadline'),
+    resolutionDeadline: nodeProperty(node, 'vso:resolutionDeadline'),
     findingClosureDate: nodeProperty(node, 'vso:findingClosureDate'),
     openedDate: nodeProperty(node, 'vso:openedDate'),
     lastStatusChange: nodeProperty(node, 'vso:lastStatusChange'),

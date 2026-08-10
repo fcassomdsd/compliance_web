@@ -295,11 +295,11 @@ describe('apiServices', () => {
 
   describe('compliance API endpoints', () => {
     it('calls findings listing endpoint with filters', async () => {
-      const result = await apiFindings({ status: 'Open', overdueOnly: 'true' });
+      const result = await apiFindings({ status: 'Open', capOverdueOnly: 'true', solutionOverdueOnly: 'false' });
       expect(result.data).toEqual({
         method: 'get',
         url: '/api/findings',
-        params: { status: 'Open', overdueOnly: 'true' },
+        params: { status: 'Open', capOverdueOnly: 'true', solutionOverdueOnly: 'false' },
         withCredentials: true,
       });
     });

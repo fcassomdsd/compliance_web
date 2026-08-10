@@ -87,7 +87,7 @@ function createCapsRouter({ auth, alfrescoClient, now = () => new Date() }) {
         });
         const statusMeta = computeEffectiveFindingStatus({ finding, followUpReports, now: now() });
         if (!canSubmitCap(statusMeta.effectiveStatus)) {
-          return res.status(409).json(buildError('CAP_NOT_ALLOWED', 'CAP can only be submitted for Open or Overdue findings'));
+          return res.status(409).json(buildError('CAP_NOT_ALLOWED', 'CAP can only be submitted for Open or CAP Overdue findings'));
         }
 
         const capId = req.body?.capId;
