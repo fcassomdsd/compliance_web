@@ -14,16 +14,18 @@ describe('findingStore', () => {
     store = useFindingStore();
   });
 
-  it('fetchFindings maps overdueOnly to string and stores list', async () => {
+  it('fetchFindings maps capOverdueOnly/solutionOverdueOnly to strings and stores list', async () => {
     store.filters.status = 'Open';
-    store.filters.overdueOnly = true;
+    store.filters.capOverdueOnly = true;
+    store.filters.solutionOverdueOnly = false;
     vi.mocked(apiFindings).mockResolvedValue({ data: { list: [{ findingId: 'F-1' }] } });
 
     await store.fetchFindings();
 
     expect(apiFindings).toHaveBeenCalledWith(expect.objectContaining({
       status: 'Open',
-      overdueOnly: 'true',
+      capOverdueOnly: 'true',
+      solutionOverdueOnly: 'false',
     }));
     expect(store.findings).toEqual([{ findingId: 'F-1' }]);
     expect(store.error).toBeNull();

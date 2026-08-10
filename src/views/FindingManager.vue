@@ -12,7 +12,8 @@
       :show-inspection-id="true"
       :show-domain="true"
       :show-status="true"
-      :show-overdue-only="true"
+      :show-cap-overdue-only="true"
+      :show-solution-overdue-only="true"
       @search="loadFindings"
       @reset="loadFindings"
     />
@@ -38,7 +39,7 @@
         <col style="width: 12%;">
         <col style="width: 10%;">
         <col style="width: 12%;">
-        <col style="width: 12%;">
+        <col style="width: 10%;">
         <col style="width: 10%;">
         <col style="width: 10%;">
       </colgroup>
@@ -47,7 +48,8 @@
           <th>Finding ID</th>
           <th>Level</th>
           <th>Status</th>
-          <th>Deadline</th>
+          <th>CAP Deadline</th>
+          <th>Resolution Deadline</th>
           <th>Actions</th>
         </tr>
       </thead>
@@ -58,8 +60,10 @@
           <td>
             {{ finding.effectiveStatus }}
             <span v-if="finding.statusDivergence" class="divergence-badge">Calculated</span>
+            <span v-if="finding.capOverdue && finding.effectiveStatus !== 'CAP Overdue'" class="cap-overdue-badge">CAP also overdue</span>
           </td>
           <td>{{ finding.submissionDeadline || '-' }}</td>
+          <td>{{ finding.resolutionDeadline || '-' }}</td>
           <td>
             <BaseButton variant="ghost" size="sm" @click="viewDetail(finding.findingId)">View</BaseButton>
             <BaseButton variant="ghost" size="sm" @click="goToFollowUps(finding.findingId)">Follow-ups</BaseButton>
@@ -86,7 +90,8 @@ const findingPresets = [
   { value: 'open-findings', label: 'Open findings' },
   { value: 'closed-findings', label: 'Closed findings' },
   { value: 'all-findings', label: 'All findings' },
-  { value: 'overdue-findings', label: 'Overdue findings' },
+  { value: 'solution-overdue-findings', label: 'Solution overdue findings' },
+  { value: 'cap-overdue-findings', label: 'CAP overdue findings' },
 ];
 
 let scope = reactive({
@@ -98,7 +103,8 @@ let scope = reactive({
   locationId: '',
   specialtyCode: '',
   domain: '',
-  overdueOnly: false,
+  capOverdueOnly: false,
+  solutionOverdueOnly: false,
 });
 
 function normalizeFindingScope(currentScope) {
@@ -107,19 +113,28 @@ function normalizeFindingScope(currentScope) {
   switch (resolved.preset) {
     case 'open-findings':
       resolved.status = 'Open';
-      resolved.overdueOnly = false;
+      resolved.capOverdueOnly = false;
+      resolved.solutionOverdueOnly = false;
       break;
     case 'closed-findings':
       resolved.status = 'Closed';
-      resolved.overdueOnly = false;
+      resolved.capOverdueOnly = false;
+      resolved.solutionOverdueOnly = false;
       break;
     case 'all-findings':
       resolved.status = '';
-      resolved.overdueOnly = false;
+      resolved.capOverdueOnly = false;
+      resolved.solutionOverdueOnly = false;
       break;
-    case 'overdue-findings':
+    case 'solution-overdue-findings':
       resolved.status = '';
-      resolved.overdueOnly = true;
+      resolved.capOverdueOnly = false;
+      resolved.solutionOverdueOnly = true;
+      break;
+    case 'cap-overdue-findings':
+      resolved.status = '';
+      resolved.capOverdueOnly = true;
+      resolved.solutionOverdueOnly = false;
       break;
     default:
       break;
@@ -138,7 +153,8 @@ async function loadFindings() {
   findingStore.setFilter('locationId', resolvedScope.locationId);
   findingStore.setFilter('specialtyCode', resolvedScope.specialtyCode);
   findingStore.setFilter('domain', resolvedScope.domain);
-  findingStore.setFilter('overdueOnly', resolvedScope.overdueOnly);
+  findingStore.setFilter('capOverdueOnly', resolvedScope.capOverdueOnly);
+  findingStore.setFilter('solutionOverdueOnly', resolvedScope.solutionOverdueOnly);
   await findingStore.fetchFindings();
 }
 
@@ -165,6 +181,15 @@ onMounted(async () => {
 
 <style scoped>
 .divergence-badge {
+  margin-left: var(--space-2);
+  background: var(--color-warning-100);
+  color: var(--color-warning-700);
+  padding: 0.12rem 0.35rem;
+  border-radius: var(--radius-sm);
+  font-size: var(--text-xs);
+}
+
+.cap-overdue-badge {
   margin-left: var(--space-2);
   background: var(--color-warning-100);
   color: var(--color-warning-700);

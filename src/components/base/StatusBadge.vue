@@ -23,6 +23,10 @@ const badgeClass = computed(() => {
     'Reported': 'status-reported',
     'Complete': 'status-complete',
     'Inactive': 'status-inactive',
+    'Solution Overdue': 'status-solution-overdue',
+    'CAP Overdue': 'status-cap-overdue',
+    // Legacy stored value, kept for backward compatibility with older records.
+    'Overdue': 'status-solution-overdue',
   };
   return map[props.status] || 'status-none';
 });
@@ -82,5 +86,15 @@ const badgeClass = computed(() => {
 .status-inactive {
   background-color: var(--color-gray-100);
   color: var(--color-gray-500);
+}
+
+.status-solution-overdue {
+  background-color: var(--color-error-100);
+  color: var(--color-error-700);
+}
+
+.status-cap-overdue {
+  background-color: var(--color-warning-100);
+  color: var(--color-warning-700);
 }
 </style>

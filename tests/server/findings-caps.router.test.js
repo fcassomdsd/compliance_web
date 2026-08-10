@@ -190,7 +190,24 @@ async function buildApp({ roles = ['cap_entry'], now = new Date('2026-04-03T10:0
 }
 
 describe('Findings and CAP API', () => {
-  it('returns effective Overdue status as calculated value for expired deadline', async () => {
+  it('returns stored status unchanged when neither deadline has expired', async () => {
+    const { app, fixture } = await buildApp({ roles: ['inspector'] });
+    fixture.findingNode.properties['vso:submissionDeadline'] = '2026-05-01';
+    fixture.findingNode.properties['vso:resolutionDeadline'] = '2026-06-01';
+
+    const response = await request(app)
+      .get('/api/findings')
+      .set('Cookie', 'compliance_session_id=session-1');
+
+    expect(response.status).toBe(200);
+    expect(response.body.list[0].storedStatus).toBe('Open');
+    expect(response.body.list[0].effectiveStatus).toBe('Open');
+    expect(response.body.list[0].capOverdue).toBe(false);
+    expect(response.body.list[0].solutionOverdueEvidence).toBe('none');
+    expect(response.body.list[0].statusDivergence).toBe(false);
+  });
+
+  it('returns effective CAP Overdue status when only submissionDeadline has expired', async () => {
     const { app } = await buildApp({ roles: ['inspector'] });
 
     const response = await request(app)
@@ -200,8 +217,56 @@ describe('Findings and CAP API', () => {
     expect(response.status).toBe(200);
     expect(response.body.list).toHaveLength(1);
     expect(response.body.list[0].storedStatus).toBe('Open');
-    expect(response.body.list[0].effectiveStatus).toBe('Overdue');
-    expect(response.body.list[0].overdueEvidence).toBe('assumed');
+    expect(response.body.list[0].effectiveStatus).toBe('CAP Overdue');
+    expect(response.body.list[0].capOverdue).toBe(true);
+    expect(response.body.list[0].solutionOverdueEvidence).toBe('none');
+    expect(response.body.list[0].statusDivergence).toBe(true);
+  });
+
+  it('returns effective Solution Overdue status when resolutionDeadline has expired, taking precedence over CAP overdue', async () => {
+    const { app, fixture } = await buildApp({ roles: ['inspector'] });
+    fixture.findingNode.properties['vso:resolutionDeadline'] = '2026-04-02';
+
+    const response = await request(app)
+      .get('/api/findings')
+      .set('Cookie', 'compliance_session_id=session-1');
+
+    expect(response.status).toBe(200);
+    expect(response.body.list).toHaveLength(1);
+    expect(response.body.list[0].storedStatus).toBe('Open');
+    expect(response.body.list[0].effectiveStatus).toBe('Solution Overdue');
+    expect(response.body.list[0].solutionOverdueEvidence).toBe('assumed');
+    expect(response.body.list[0].capOverdue).toBe(true);
+    expect(response.body.list[0].statusDivergence).toBe(true);
+  });
+
+  it('does not flag CAP Overdue once a CAP has been submitted, even if submissionDeadline has passed', async () => {
+    const { app, fixture } = await buildApp({ roles: ['inspector'] });
+    fixture.findingNode.properties['vso:findingStatus'] = 'CAP Submitted';
+
+    const response = await request(app)
+      .get('/api/findings')
+      .set('Cookie', 'compliance_session_id=session-1');
+
+    expect(response.status).toBe(200);
+    expect(response.body.list[0].storedStatus).toBe('CAP Submitted');
+    expect(response.body.list[0].effectiveStatus).toBe('CAP Submitted');
+    expect(response.body.list[0].capOverdue).toBe(false);
+  });
+
+  it('returns effective Solution Overdue status when a CAP has already been accepted but resolutionDeadline has expired', async () => {
+    const { app, fixture } = await buildApp({ roles: ['inspector'] });
+    fixture.findingNode.properties['vso:findingStatus'] = 'CAP Accepted';
+    fixture.findingNode.properties['vso:resolutionDeadline'] = '2026-04-02';
+
+    const response = await request(app)
+      .get('/api/findings')
+      .set('Cookie', 'compliance_session_id=session-1');
+
+    expect(response.status).toBe(200);
+    expect(response.body.list[0].storedStatus).toBe('CAP Accepted');
+    expect(response.body.list[0].effectiveStatus).toBe('Solution Overdue');
+    expect(response.body.list[0].capOverdue).toBe(false);
     expect(response.body.list[0].statusDivergence).toBe(true);
   });
 

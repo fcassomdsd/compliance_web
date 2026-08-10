@@ -88,7 +88,7 @@ async function mapWithConcurrency(items, concurrency, mapper) {
   return result;
 }
 
-function applyFindingScopeForFollowUps({ findingRows, status, statusMode, overdueOnly }) {
+function applyFindingScopeForFollowUps({ findingRows, status, statusMode, capOverdueOnly, solutionOverdueOnly }) {
   const normalizedStatusMode = statusMode === 'stored' ? 'stored' : 'effective';
 
   return findingRows.filter((row) => {
@@ -99,7 +99,11 @@ function applyFindingScopeForFollowUps({ findingRows, status, statusMode, overdu
       }
     }
 
-    if (String(overdueOnly || '').toLowerCase() === 'true' && row.statusMeta.effectiveStatus !== FINDING_STATUS.OVERDUE) {
+    if (String(capOverdueOnly || '').toLowerCase() === 'true' && !row.statusMeta.capOverdue) {
+      return false;
+    }
+
+    if (String(solutionOverdueOnly || '').toLowerCase() === 'true' && row.statusMeta.effectiveStatus !== FINDING_STATUS.SOLUTION_OVERDUE) {
       return false;
     }
 
@@ -163,13 +167,17 @@ function findingIdFromFollowUpId(followUpId) {
   return `${parsed.compactInspectionId}-${parsed.specialtyCode}-${String(parsed.findingSequence).padStart(2, '0')}`;
 }
 
-function applyFindingFilters({ findings, status, overdueOnly }) {
+function applyFindingFilters({ findings, status, capOverdueOnly, solutionOverdueOnly }) {
   return findings.filter((finding) => {
     if (status && finding.effectiveStatus !== status && finding.storedStatus !== status) {
       return false;
     }
 
-    if (String(overdueOnly || '').toLowerCase() === 'true' && finding.effectiveStatus !== 'Overdue') {
+    if (String(capOverdueOnly || '').toLowerCase() === 'true' && !finding.capOverdue) {
+      return false;
+    }
+
+    if (String(solutionOverdueOnly || '').toLowerCase() === 'true' && finding.effectiveStatus !== FINDING_STATUS.SOLUTION_OVERDUE) {
       return false;
     }
 
@@ -225,7 +233,8 @@ function createFindingsRouter({ auth, alfrescoClient, now = () => new Date() }) 
         const filtered = applyFindingFilters({
           findings,
           status: req.query?.status,
-          overdueOnly: req.query?.overdueOnly,
+          capOverdueOnly: req.query?.capOverdueOnly,
+          solutionOverdueOnly: req.query?.solutionOverdueOnly,
         });
 
         return res.status(200).json({
@@ -296,7 +305,8 @@ function createFindingsRouter({ auth, alfrescoClient, now = () => new Date() }) 
           findingRows,
           status: req.query?.status,
           statusMode: req.query?.statusMode,
-          overdueOnly: req.query?.overdueOnly,
+          capOverdueOnly: req.query?.capOverdueOnly,
+          solutionOverdueOnly: req.query?.solutionOverdueOnly,
         });
 
         const requestedType = String(req.query?.followUpType || '').trim().toUpperCase();

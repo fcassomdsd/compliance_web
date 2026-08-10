@@ -41,7 +41,7 @@ describe('FindingManager.vue', () => {
           findingId: 'F-1',
           findingLevel: 'High',
           storedStatus: 'Open',
-          effectiveStatus: 'Overdue',
+          effectiveStatus: 'Solution Overdue',
           statusDivergence: true,
           submissionDeadline: '2026-03-01',
         },
@@ -77,7 +77,7 @@ describe('FindingManager.vue', () => {
     wrapper.vm.scope.locationId = 'LOC-1';
     wrapper.vm.scope.specialtyCode = 'AYVIS';
     wrapper.vm.scope.domain = 'OPS';
-    wrapper.vm.scope.overdueOnly = true;
+    wrapper.vm.scope.capOverdueOnly = true;
 
     await wrapper.vm.loadFindings();
 
@@ -88,7 +88,8 @@ describe('FindingManager.vue', () => {
     expect(mockFindingStore.setFilter).toHaveBeenCalledWith('locationId', 'LOC-1');
     expect(mockFindingStore.setFilter).toHaveBeenCalledWith('specialtyCode', 'AYVIS');
     expect(mockFindingStore.setFilter).toHaveBeenCalledWith('domain', 'OPS');
-    expect(mockFindingStore.setFilter).toHaveBeenCalledWith('overdueOnly', false);
+    expect(mockFindingStore.setFilter).toHaveBeenCalledWith('capOverdueOnly', false);
+    expect(mockFindingStore.setFilter).toHaveBeenCalledWith('solutionOverdueOnly', false);
     expect(mockFindingStore.fetchFindings).toHaveBeenCalledTimes(2);
   });
 

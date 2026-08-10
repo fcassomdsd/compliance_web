@@ -89,7 +89,8 @@ describe('FollowUpManager.vue', () => {
     expect(mockFollowUpStore.setFilter).toHaveBeenCalledWith('domain', 'OPS');
     expect(mockFollowUpStore.setFilter).toHaveBeenCalledWith('status', 'Open');
     expect(mockFollowUpStore.setFilter).toHaveBeenCalledWith('statusMode', 'effective');
-    expect(mockFollowUpStore.setFilter).toHaveBeenCalledWith('overdueOnly', false);
+    expect(mockFollowUpStore.setFilter).toHaveBeenCalledWith('capOverdueOnly', false);
+    expect(mockFollowUpStore.setFilter).toHaveBeenCalledWith('solutionOverdueOnly', false);
     expect(mockFollowUpStore.setFilter).toHaveBeenCalledWith('skipCount', 0);
     expect(mockFollowUpStore.setFilter).toHaveBeenCalledWith('maxItems', 50);
     expect(mockFollowUpStore.setFilter).toHaveBeenCalledWith('followUpType', 'CAP Verification');

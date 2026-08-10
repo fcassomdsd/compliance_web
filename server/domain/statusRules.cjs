@@ -5,7 +5,13 @@ const FINDING_STATUS = Object.freeze({
   IN_PROGRESS: 'In Progress',
   PENDING_CLOSURE_REVIEW: 'Pending Closure Review',
   CLOSED: 'Closed',
+  // Legacy value kept only for backward-compatible comparisons against
+  // previously-persisted data. No longer assigned by computeEffectiveFindingStatus().
   OVERDUE: 'Overdue',
+  // CAP submission deadline missed while the finding has no CAP yet.
+  CAP_OVERDUE: 'CAP Overdue',
+  // Resolution deadline missed (finding not actually resolved/closed).
+  SOLUTION_OVERDUE: 'Solution Overdue',
 });
 
 const CAP_ACCEPTANCE_STATUS = Object.freeze({
@@ -114,31 +120,57 @@ function determineOverdueEvidence({ now, dueDate, followUpReports = [], isClosed
   return 'none';
 }
 
+function determineCapOverdue({ storedStatus, submissionDeadline, isClosed, now }) {
+  if (isClosed || storedStatus !== FINDING_STATUS.OPEN) {
+    return false;
+  }
+
+  const due = parseIsoDate(submissionDeadline);
+  if (!due) {
+    return false;
+  }
+
+  return now > due;
+}
+
 function computeEffectiveFindingStatus({ finding, followUpReports = [], now = new Date() }) {
   const storedStatus = finding.findingStatus;
   const closedByStatus = storedStatus === FINDING_STATUS.CLOSED;
   const closedByFollowUp = isClosedByFollowUp(followUpReports);
   const closed = closedByStatus || closedByFollowUp;
 
-  const overdueEvidence = determineOverdueEvidence({
+  const solutionOverdueEvidence = determineOverdueEvidence({
     now,
-    dueDate: finding.submissionDeadline,
+    dueDate: finding.resolutionDeadline,
     followUpReports,
     isClosed: closed,
   });
 
-  const effectiveStatus = overdueEvidence === 'none' ? storedStatus : FINDING_STATUS.OVERDUE;
+  const capOverdue = determineCapOverdue({
+    storedStatus,
+    submissionDeadline: finding.submissionDeadline,
+    isClosed: closed,
+    now,
+  });
+
+  const effectiveStatus =
+    solutionOverdueEvidence !== 'none'
+      ? FINDING_STATUS.SOLUTION_OVERDUE
+      : capOverdue
+        ? FINDING_STATUS.CAP_OVERDUE
+        : storedStatus;
 
   return {
     storedStatus,
     effectiveStatus,
-    overdueEvidence,
+    solutionOverdueEvidence,
+    capOverdue,
     statusDivergence: storedStatus !== effectiveStatus,
   };
 }
 
 function canSubmitCap(findingStatus) {
-  return findingStatus === FINDING_STATUS.OPEN || findingStatus === FINDING_STATUS.OVERDUE;
+  return findingStatus === FINDING_STATUS.OPEN || findingStatus === FINDING_STATUS.CAP_OVERDUE;
 }
 
 function isValidCapAcceptanceStatus(status) {
