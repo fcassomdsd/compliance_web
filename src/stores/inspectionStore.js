@@ -104,6 +104,8 @@ export const useInspectionStore = defineStore('inspection', {
           objective: entity.objective || '',
           scope: entity.scope || '',
           code: entity.code || '',
+          description: entity.description || '',
+          conclusion: entity.conclusion || '',
         }));
       } catch {
         this.inspections[inspectedProviderId] = [];

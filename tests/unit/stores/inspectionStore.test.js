@@ -17,6 +17,7 @@ describe('Inspection Store (per-provider)', () => {
   const mockInspection = {
     id: 'INSP1', siteVisitId: 'SV1', inspectedProviderId: 'P1',
     inspectionType: 'Ramp Inspection', objective: 'Test objective', scope: 'Test scope',
+    description: 'Previously saved description', conclusion: 'Previously saved conclusion',
   };
 
   beforeEach(() => {
@@ -69,6 +70,13 @@ describe('Inspection Store (per-provider)', () => {
       const list = store.getForInspectedProvider('IP1');
       expect(list.length).toBe(1);
       expect(list[0].inspectionType).toBe('Ramp Inspection');
+    });
+
+    it('includes previously saved description and conclusion so regenerating a report can prefill them', async () => {
+      await store.getInspections('IP1');
+      const list = store.getForInspectedProvider('IP1');
+      expect(list[0].description).toBe('Previously saved description');
+      expect(list[0].conclusion).toBe('Previously saved conclusion');
     });
   });
 
