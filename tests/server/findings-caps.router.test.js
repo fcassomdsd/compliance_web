@@ -7,14 +7,26 @@ const { createApp } = require('../../server/app.cjs');
 const { InMemorySessionRepository } = require('../setup/mocks/InMemorySessionRepository.cjs');
 
 function buildFixture() {
+  const inspectionNode = {
+    id: 'inspection-node-1',
+    nodeType: 'vso:inspection',
+    isFolder: true,
+    properties: {
+      'vso:inspectionId': 'MDPP-001',
+    },
+  };
+
   const findingNode = {
     id: 'finding-node-1',
+    parentId: 'inspection-node-1',
+    nodeType: 'vso:finding',
     properties: {
       'vso:findingId': 'MDPP001-AYVIS-01',
       'vso:findingStatus': 'Open',
       'vso:submissionDeadline': '2026-04-01',
       'vso:inspectionId': 'MDPP-001',
       'vso:locationId': 'LOC-01',
+      'vso:locationCode': 'MDPP',
       'vso:locationName': 'Main Airport',
       'vso:specialtyCode': 'AYVIS',
       'vso:specialtyId': 'spec-ayvis',
@@ -29,6 +41,7 @@ function buildFixture() {
   const capNode = {
     id: 'cap-node-1',
     parentId: 'finding-node-1',
+    nodeType: 'vso:correctiveAction',
     properties: {
       'vso:capId': 'CA-MDPP001AYVIS-01-01',
       'vso:proposedAction': 'Action A',
@@ -37,15 +50,24 @@ function buildFixture() {
       'vso:acceptanceStatus': 'Pending Review',
       'vso:inspectionId': 'MDPP-001',
       'vso:locationId': 'LOC-01',
+      'vso:locationCode': 'MDPP',
+      'vso:locationName': 'Main Airport',
+      'vso:specialtyCode': 'AYVIS',
+      'vso:specialtyId': 'spec-ayvis',
+      'vso:specialtyName': 'Aviation Safety',
       'vso:providerId': 'PR-01',
+      'vso:providerName': 'Provider 1',
     },
   };
 
   return {
+    inspectionNode,
     findingNode,
     capNode,
     followUpNodes: [],
     followUpCapLinks: new Map(),
+    capSectionChildren: new Map(),
+    lastCreatedChildNodeArgs: null,
   };
 }
 
@@ -80,7 +102,7 @@ async function buildApp({ roles = ['cap_entry'], now = new Date('2026-04-03T10:0
       return findingId === 'MDPP001-AYVIS-01' ? fixture.findingNode : null;
     },
     searchCapByBusinessId: async ({ capId }) => {
-      return capId === 'CA-MDPP001AYVIS-01-01' ? fixture.capNode : null;
+      return capId === fixture.capNode.properties['vso:capId'] ? fixture.capNode : null;
     },
     listChildrenByType: async ({ parentNodeId, nodeType }) => {
       if (nodeType === 'vso:correctiveAction' && parentNodeId === fixture.findingNode.id) {
@@ -89,19 +111,32 @@ async function buildApp({ roles = ['cap_entry'], now = new Date('2026-04-03T10:0
       if (nodeType === 'vso:followUpReport' && parentNodeId === fixture.findingNode.id) {
         return fixture.followUpNodes;
       }
-      return [];
+      const key = `${parentNodeId}:${nodeType}`;
+      return fixture.capSectionChildren.get(key) || [];
     },
-    createChildNode: async ({ parentNodeId, nodeType, properties }) => {
-      const next = {
-        id: nodeType === 'vso:followUpReport' ? 'follow-up-node-created' : 'cap-node-created',
-        parentId: parentNodeId,
+    createChildNode: async ({ parentNodeId, nodeType, properties, aspectNames, associationType, name }) => {
+      fixture.lastCreatedChildNodeArgs = {
+        parentNodeId,
+        nodeType,
         properties,
+        aspectNames,
+        associationType,
+        name,
       };
       if (nodeType === 'vso:followUpReport') {
+        const next = { id: 'follow-up-node-created', parentId: parentNodeId, nodeType, name, properties };
         fixture.followUpNodes = [...fixture.followUpNodes, next];
-      } else {
-        fixture.capNode = next;
+        return next;
       }
+      if (nodeType === 'vso:correctiveAction') {
+        const next = { id: 'cap-node-created', parentId: parentNodeId, nodeType, name, properties };
+        fixture.capNode = next;
+        return next;
+      }
+      const key = `${parentNodeId}:${nodeType}`;
+      const existing = fixture.capSectionChildren.get(key) || [];
+      const next = { id: `${nodeType}-${existing.length + 1}`, parentId: parentNodeId, nodeType, name, properties };
+      fixture.capSectionChildren.set(key, [...existing, next]);
       return next;
     },
     createTargetAssociation: async ({ sourceNodeId, targetNodeId, assocType }) => {
@@ -153,9 +188,29 @@ async function buildApp({ roles = ['cap_entry'], now = new Date('2026-04-03T10:0
         return fixture.capNode;
       }
 
+      for (const [key, nodes] of fixture.capSectionChildren.entries()) {
+        const index = nodes.findIndex((node) => node.id === nodeId);
+        if (index !== -1) {
+          const updated = {
+            ...nodes[index],
+            properties: { ...nodes[index].properties, ...properties },
+          };
+          const nextNodes = [...nodes];
+          nextNodes[index] = updated;
+          fixture.capSectionChildren.set(key, nextNodes);
+          return updated;
+        }
+      }
+
       return null;
     },
+    putNodeContent: async ({ nodeId }) => {
+      return { id: nodeId };
+    },
     getNodeById: async ({ nodeId }) => {
+      if (nodeId === fixture.inspectionNode.id) {
+        return fixture.inspectionNode;
+      }
       if (nodeId === fixture.capNode.id) {
         return fixture.capNode;
       }
@@ -186,7 +241,7 @@ async function buildApp({ roles = ['cap_entry'], now = new Date('2026-04-03T10:0
     now: () => now,
   });
 
-  return { app, fixture };
+  return { app, fixture, alfrescoClient };
 }
 
 describe('Findings and CAP API', () => {
@@ -282,11 +337,335 @@ describe('Findings and CAP API', () => {
         responsibleEntity: 'Provider 1',
         dueDate: '2026-06-01',
         acceptanceStatus: 'Accepted',
+        rootCauseAnalysis: {
+          method: 'Fishbone',
+          mainCategory: 'Human Factors',
+          rootCause: 'Inadequate training',
+          contributingFactors: 'Lack of refresher courses',
+        },
+        riskAssessment: {
+          hazard: 'Runway incursion',
+          consequence: 'Collision',
+          probability: 'Occasional',
+          severity: 'Hazardous',
+          calculatedRiskLevel: 'High',
+          tolerabilityLevel: 'Unacceptable',
+          justification: 'Based on historical occurrence data',
+        },
+        correctiveActions: [
+          {
+            description: 'Retrain staff',
+            priority: 'High',
+            responsiblePerson: 'J. Doe',
+            deadline: '2026-06-30',
+          },
+        ],
+        residualRisk: {
+          probability: 'Rare',
+          severity: 'Minor',
+          riskLevel: 'Low',
+          justification: 'Controls implemented',
+        },
+        effectivenessVerification: {
+          method: 'Follow-up audit',
+          indicators: 'Zero recurrence in 6 months',
+          projectedVerificationDate: '2026-12-31',
+        },
       });
 
     expect(response.status).toBe(201);
     expect(response.body.cap.capId).toBe('CA-MDPP001AYVIS-01-02');
     expect(response.body.cap.acceptanceStatus).toBe('Pending review');
+    expect(response.body.cap.rootCauseAnalysis.method).toBe('Fishbone');
+    expect(response.body.cap.riskAssessment.identifiedHazard).toBe('Runway incursion');
+    expect(response.body.cap.correctiveActions).toHaveLength(1);
+    expect(response.body.cap.correctiveActions[0].sequenceNumber).toBe(1);
+    expect(response.body.cap.correctiveActions[0].itemStatus).toBe('Open');
+    expect(response.body.cap.residualRisk.riskLevel).toBe('Low');
+    expect(response.body.cap.effectivenessVerification.method).toBe('Follow-up audit');
+  });
+
+  function fullCapPayload(overrides = {}) {
+    return {
+      proposedAction: 'New corrective action',
+      responsibleEntity: 'Provider 1',
+      dueDate: '2026-06-01',
+      rootCauseAnalysis: {
+        method: 'Fishbone',
+        mainCategory: 'Human Factors',
+        rootCause: 'Inadequate training',
+        contributingFactors: 'Lack of refresher courses',
+      },
+      riskAssessment: {
+        hazard: 'Runway incursion',
+        consequence: 'Collision',
+        probability: 'Occasional',
+        severity: 'Hazardous',
+        calculatedRiskLevel: 'High',
+        tolerabilityLevel: 'Unacceptable',
+        justification: 'Based on historical occurrence data',
+      },
+      correctiveActions: [
+        {
+          description: 'Retrain staff',
+          priority: 'High',
+          responsiblePerson: 'J. Doe',
+          deadline: '2026-06-30',
+        },
+      ],
+      residualRisk: {
+        probability: 'Rare',
+        severity: 'Minor',
+        riskLevel: 'Low',
+        justification: 'Controls implemented',
+      },
+      effectivenessVerification: {
+        method: 'Follow-up audit',
+        indicators: 'Zero recurrence in 6 months',
+        projectedVerificationDate: '2026-12-31',
+      },
+      ...overrides,
+    };
+  }
+
+  it('rejects CAP creation when a required section is missing', async () => {
+    const { app } = await buildApp({ roles: ['cap_entry'] });
+
+    const payload = fullCapPayload();
+    delete payload.riskAssessment;
+
+    const response = await request(app)
+      .post('/api/findings/MDPP001-AYVIS-01/caps')
+      .set('Cookie', 'compliance_session_id=session-1')
+      .set('x-csrf-token', 'csrf-token-1')
+      .send(payload);
+
+    expect(response.status).toBe(400);
+    expect(response.body.error?.message || response.body.message).toMatch(/riskAssessment/);
+  });
+
+  it('updates a corrective action item status to In Progress without requiring a closure date', async () => {
+    const { app } = await buildApp({ roles: ['cap_entry'] });
+
+    await request(app)
+      .post('/api/findings/MDPP001-AYVIS-01/caps')
+      .set('Cookie', 'compliance_session_id=session-1')
+      .set('x-csrf-token', 'csrf-token-1')
+      .send(fullCapPayload());
+
+    const response = await request(app)
+      .patch('/api/caps/CA-MDPP001AYVIS-01-02/actions/1')
+      .set('Cookie', 'compliance_session_id=session-1')
+      .set('x-csrf-token', 'csrf-token-1')
+      .send({ itemStatus: 'In Progress' });
+
+    expect(response.status).toBe(200);
+    expect(response.body.actionItem.itemStatus).toBe('In Progress');
+  });
+
+  it('rejects closing a corrective action item without a closure date', async () => {
+    const { app } = await buildApp({ roles: ['cap_entry'] });
+
+    await request(app)
+      .post('/api/findings/MDPP001-AYVIS-01/caps')
+      .set('Cookie', 'compliance_session_id=session-1')
+      .set('x-csrf-token', 'csrf-token-1')
+      .send(fullCapPayload());
+
+    const response = await request(app)
+      .patch('/api/caps/CA-MDPP001AYVIS-01-02/actions/1')
+      .set('Cookie', 'compliance_session_id=session-1')
+      .set('x-csrf-token', 'csrf-token-1')
+      .send({ itemStatus: 'Closed' });
+
+    expect(response.status).toBe(400);
+  });
+
+  it('closes a corrective action item when a closure date is supplied', async () => {
+    const { app } = await buildApp({ roles: ['cap_entry'] });
+
+    await request(app)
+      .post('/api/findings/MDPP001-AYVIS-01/caps')
+      .set('Cookie', 'compliance_session_id=session-1')
+      .set('x-csrf-token', 'csrf-token-1')
+      .send(fullCapPayload());
+
+    const response = await request(app)
+      .patch('/api/caps/CA-MDPP001AYVIS-01-02/actions/1')
+      .set('Cookie', 'compliance_session_id=session-1')
+      .set('x-csrf-token', 'csrf-token-1')
+      .send({ itemStatus: 'Closed', closureDate: '2026-07-01', closureNotes: 'Verified complete' });
+
+    expect(response.status).toBe(200);
+    expect(response.body.actionItem.itemStatus).toBe('Closed');
+    expect(response.body.actionItem.closureDate).toBe('2026-07-01');
+    expect(response.body.actionItem.closureNotes).toBe('Verified complete');
+  });
+
+  it('uploads RCA evidence for a CAP', async () => {
+    const { app, fixture } = await buildApp({ roles: ['cap_entry'] });
+
+    await request(app)
+      .post('/api/findings/MDPP001-AYVIS-01/caps')
+      .set('Cookie', 'compliance_session_id=session-1')
+      .set('x-csrf-token', 'csrf-token-1')
+      .send(fullCapPayload());
+
+    const response = await request(app)
+      .post('/api/caps/CA-MDPP001AYVIS-01-02/rca/evidence')
+      .set('Cookie', 'compliance_session_id=session-1')
+      .set('x-csrf-token', 'csrf-token-1')
+      .attach('file', Buffer.from('%PDF-1.4 test'), { filename: 'evidence.pdf', contentType: 'application/pdf' });
+
+    expect(response.status).toBe(201);
+    expect(response.body.evidence.evidenceRole).toBe('RCA Evidence');
+    expect(fixture.lastCreatedChildNodeArgs.parentNodeId).toBe('inspection-node-1');
+    expect(fixture.lastCreatedChildNodeArgs.nodeType).toBe('vso:evidenceItem');
+    expect(fixture.lastCreatedChildNodeArgs.associationType).toBe('cm:contains');
+    expect(fixture.lastCreatedChildNodeArgs.aspectNames).toEqual([
+      'vso:evidenceIntegrity',
+      'vso:inspectionContext',
+      'vso:serviceContext',
+      'vso:usoapEvidenceContext',
+    ]);
+    expect(fixture.lastCreatedChildNodeArgs.properties['vso:inspectionId']).toBe('MDPP-001');
+    expect(fixture.lastCreatedChildNodeArgs.properties['vso:providerName']).toBe('Provider 1');
+    expect(fixture.lastCreatedChildNodeArgs.properties['vso:hashValue']).toMatch(/^[a-f0-9]{64}$/);
+  });
+
+  it('uploads Risk Assessment evidence for a CAP', async () => {
+    const { app, fixture } = await buildApp({ roles: ['cap_entry'] });
+
+    await request(app)
+      .post('/api/findings/MDPP001-AYVIS-01/caps')
+      .set('Cookie', 'compliance_session_id=session-1')
+      .set('x-csrf-token', 'csrf-token-1')
+      .send(fullCapPayload());
+
+    const response = await request(app)
+      .post('/api/caps/CA-MDPP001AYVIS-01-02/risk-assessment/evidence')
+      .set('Cookie', 'compliance_session_id=session-1')
+      .set('x-csrf-token', 'csrf-token-1')
+      .attach('file', Buffer.from('%PDF-1.4 test'), { filename: 'evidence.pdf', contentType: 'application/pdf' });
+
+    expect(response.status).toBe(201);
+    expect(response.body.evidence.evidenceRole).toBe('Risk Assessment Evidence');
+    expect(fixture.lastCreatedChildNodeArgs.parentNodeId).toBe('inspection-node-1');
+  });
+
+  it('preserves repository 422 errors during evidence upload', async () => {
+    const { app, alfrescoClient } = await buildApp({ roles: ['cap_entry'] });
+
+    await request(app)
+      .post('/api/findings/MDPP001-AYVIS-01/caps')
+      .set('Cookie', 'compliance_session_id=session-1')
+      .set('x-csrf-token', 'csrf-token-1')
+      .send(fullCapPayload());
+
+    alfrescoClient.createChildNode = async () => {
+      const error = new Error('Request failed with status code 422');
+      error.response = {
+        status: 422,
+        data: {
+          error: {
+            briefSummary: 'Mandatory aspect or association validation failed',
+          },
+        },
+      };
+      throw error;
+    };
+
+    const response = await request(app)
+      .post('/api/caps/CA-MDPP001AYVIS-01-02/rca/evidence')
+      .set('Cookie', 'compliance_session_id=session-1')
+      .set('x-csrf-token', 'csrf-token-1')
+      .attach('file', Buffer.from('%PDF-1.4 test'), { filename: 'evidence.pdf', contentType: 'application/pdf' });
+
+    expect(response.status).toBe(422);
+    expect(response.body.message).toContain('Mandatory aspect or association validation failed');
+  });
+
+  it('rejects evidence upload requests with no file attached', async () => {
+    const { app } = await buildApp({ roles: ['cap_entry'] });
+
+    await request(app)
+      .post('/api/findings/MDPP001-AYVIS-01/caps')
+      .set('Cookie', 'compliance_session_id=session-1')
+      .set('x-csrf-token', 'csrf-token-1')
+      .send(fullCapPayload());
+
+    const response = await request(app)
+      .post('/api/caps/CA-MDPP001AYVIS-01-02/rca/evidence')
+      .set('Cookie', 'compliance_session_id=session-1')
+      .set('x-csrf-token', 'csrf-token-1');
+
+    expect(response.status).toBe(400);
+  });
+
+  it('rejects evidence upload requests with an unsupported file type', async () => {
+    const { app } = await buildApp({ roles: ['cap_entry'] });
+
+    await request(app)
+      .post('/api/findings/MDPP001-AYVIS-01/caps')
+      .set('Cookie', 'compliance_session_id=session-1')
+      .set('x-csrf-token', 'csrf-token-1')
+      .send(fullCapPayload());
+
+    const response = await request(app)
+      .post('/api/caps/CA-MDPP001AYVIS-01-02/rca/evidence')
+      .set('Cookie', 'compliance_session_id=session-1')
+      .set('x-csrf-token', 'csrf-token-1')
+      .attach('file', Buffer.from('#!/bin/sh\necho hi'), { filename: 'script.sh', contentType: 'application/x-sh' });
+
+    expect(response.status).toBe(415);
+  });
+
+  it('accepts CAP creation without top-level proposedAction or responsibleEntity', async () => {
+    const { app } = await buildApp({ roles: ['cap_entry'] });
+
+    const response = await request(app)
+      .post('/api/findings/MDPP001-AYVIS-01/caps')
+      .set('Cookie', 'compliance_session_id=session-1')
+      .set('x-csrf-token', 'csrf-token-1')
+      .send({
+        dueDate: '2026-06-01',
+        rootCauseAnalysis: {
+          method: 'Fishbone',
+          mainCategory: 'Human Factors',
+          rootCause: 'Inadequate training',
+          contributingFactors: 'Lack of refresher courses',
+        },
+        riskAssessment: {
+          hazard: 'Runway incursion',
+          consequence: 'Collision',
+          probability: 'Occasional',
+          severity: 'Hazardous',
+          calculatedRiskLevel: 'High',
+          tolerabilityLevel: 'Unacceptable',
+          justification: 'Based on historical occurrence data',
+        },
+        correctiveActions: [
+          {
+            description: 'Retrain staff',
+            priority: 'High',
+            responsiblePerson: 'J. Doe',
+            deadline: '2026-06-30',
+          },
+        ],
+        residualRisk: {
+          probability: 'Rare',
+          severity: 'Minor',
+          riskLevel: 'Low',
+          justification: 'Controls implemented',
+        },
+        effectivenessVerification: {
+          method: 'Follow-up audit',
+          indicators: 'Zero recurrence in 6 months',
+          projectedVerificationDate: '2026-12-31',
+        },
+      });
+
+    expect(response.status).toBe(201);
   });
 
   it('allows inspector review and updates CAP acceptance status', async () => {
