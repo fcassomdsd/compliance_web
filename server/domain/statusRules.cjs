@@ -21,6 +21,16 @@ const CAP_ACCEPTANCE_STATUS = Object.freeze({
   RETURNED_FOR_REVISION: 'Returned',
 });
 
+const ACTION_ITEM_STATUS = Object.freeze({
+  OPEN: 'Open',
+  IN_PROGRESS: 'In Progress',
+  CLOSED: 'Closed',
+});
+
+function isValidActionItemStatus(status) {
+  return Object.values(ACTION_ITEM_STATUS).includes(status);
+}
+
 const INSPECTION_STATUS = Object.freeze({
   CREATED: 'Created',
   DEFINED: 'Defined',
@@ -180,6 +190,8 @@ function isValidCapAcceptanceStatus(status) {
 module.exports = {
   FINDING_STATUS,
   CAP_ACCEPTANCE_STATUS,
+  ACTION_ITEM_STATUS,
+  isValidActionItemStatus,
   INSPECTION_STATUS,
   INSPECTION_STATUS_ORDER,
   canInspectionTransitionTo,

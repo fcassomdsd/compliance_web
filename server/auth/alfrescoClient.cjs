@@ -140,7 +140,7 @@ class AlfrescoClient {
     return response?.data?.list?.entries?.map((entry) => entry.entry) || [];
   }
 
-  async createChildNode({ ticket, parentNodeId, nodeType, name, properties = {}, associationType = 'cm:contains' }) {
+  async createChildNode({ ticket, parentNodeId, nodeType, name, properties = {}, aspectNames = [], associationType = 'cm:contains' }) {
     if (!ticket || !parentNodeId || !nodeType || !name) {
       throw new Error('ticket, parentNodeId, nodeType and name are required');
     }
@@ -154,11 +154,34 @@ class AlfrescoClient {
       data: {
         name,
         nodeType,
+        ...(Array.isArray(aspectNames) && aspectNames.length > 0 ? { aspectNames } : {}),
         association: {
           assocType: associationType,
         },
         properties,
       },
+    });
+
+    return response?.data?.entry || null;
+  }
+
+  async putNodeContent({ ticket, nodeId, buffer, mimeType }) {
+    if (!ticket || !nodeId || !buffer) {
+      throw new Error('ticket, nodeId and buffer are required');
+    }
+
+    const response = await this.request({
+      method: 'put',
+      url: `${this.baseUrl}/alfresco/api/-default-/public/alfresco/versions/1/nodes/${encodeURIComponent(nodeId)}/content`,
+      params: {
+        alf_ticket: ticket,
+      },
+      headers: {
+        'Content-Type': mimeType || 'application/octet-stream',
+      },
+      data: buffer,
+      maxBodyLength: Infinity,
+      maxContentLength: Infinity,
     });
 
     return response?.data?.entry || null;

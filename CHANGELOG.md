@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### Added
+- **Rich Corrective Action Plan (CAP) registration**: CAP submission now captures 5 required sections — Root Cause Analysis (method, main category, root cause, contributing factors, evidence upload), Risk Assessment (hazard, consequence, probability, severity, calculated risk level, tolerability level, justification, evidence upload), Corrective Actions (repeatable list with sequence number, description, priority, responsible person, deadline), Expected Residual Risk (probability, severity, risk level, justification), and Effectiveness Verification (method, indicators, projected verification date).
+- **Individually trackable corrective action items**: each action item has its own status (Open/In Progress/Closed) and closure date/notes, updatable via a new `PATCH /api/caps/:capId/actions/:sequenceNumber` endpoint independent of overall CAP acceptance status.
+- **Evidence upload for CAPs**: new `POST /api/caps/:capId/rca/evidence` and `POST /api/caps/:capId/risk-assessment/evidence` endpoints accept multipart file uploads (via `multer`, memory storage), enforcing an evidence MIME-type allowlist and a 15 MB size limit, and link the uploaded `vso:evidenceItem` node to its section via the `vso:relatedEvidence` association.
+- **`CorrectiveActionManager.vue`** redesigned with a 5-section Submit CAP form (add/remove corrective actions with auto sequence numbers) and a CAP detail view showing all sections plus per-action-item status/closure controls and evidence upload.
+- **`capStore.js`**: new `updateActionItem` and `uploadCapEvidence` actions.
+- **`apiServices.js`**: new `apiUpdateCapActionItem` and `apiUploadCapEvidence` functions.
+
 ## [0.4.0] - 2026-08-02
 
 ### Added

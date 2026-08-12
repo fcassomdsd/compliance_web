@@ -47,6 +47,101 @@ function mapCorrectiveActionNode(node) {
   };
 }
 
+function mapEvidenceItemNode(node) {
+  return {
+    nodeId: node?.id || null,
+    evidenceId: nodeProperty(node, 'vso:evidenceId'),
+    evidenceType: nodeProperty(node, 'vso:evidenceType'),
+    source: nodeProperty(node, 'vso:source'),
+    collectionDate: nodeProperty(node, 'vso:collectionDate'),
+    evidenceRole: nodeProperty(node, 'vso:evidenceRole'),
+    name: node?.name || null,
+  };
+}
+
+function mapRootCauseAnalysisNode(node) {
+  if (!node) return null;
+  return {
+    nodeId: node?.id || null,
+    method: nodeProperty(node, 'vso:rcaMethod'),
+    otherMethodDescription: nodeProperty(node, 'vso:rcaOtherMethodDescription'),
+    mainCategory: nodeProperty(node, 'vso:rcaMainCategory'),
+    rootCause: nodeProperty(node, 'vso:rootCause'),
+    contributingFactors: nodeProperty(node, 'vso:contributingFactors'),
+  };
+}
+
+function mapRiskAssessmentNode(node) {
+  if (!node) return null;
+  return {
+    nodeId: node?.id || null,
+    identifiedHazard: nodeProperty(node, 'vso:identifiedHazard'),
+    potentialConsequence: nodeProperty(node, 'vso:potentialConsequence'),
+    probability: nodeProperty(node, 'vso:raProbability'),
+    severity: nodeProperty(node, 'vso:raSeverity'),
+    calculatedRiskLevel: nodeProperty(node, 'vso:calculatedRiskLevel'),
+    tolerabilityLevel: nodeProperty(node, 'vso:tolerabilityLevel'),
+    justification: nodeProperty(node, 'vso:raJustification'),
+  };
+}
+
+function mapCorrectiveActionItemNode(node) {
+  return {
+    nodeId: node?.id || null,
+    sequenceNumber: nodeProperty(node, 'vso:sequenceNumber'),
+    description: nodeProperty(node, 'vso:actionDescription'),
+    priority: nodeProperty(node, 'vso:actionPriority'),
+    responsiblePerson: nodeProperty(node, 'vso:actionResponsiblePerson'),
+    deadline: nodeProperty(node, 'vso:actionDeadline'),
+    itemStatus: nodeProperty(node, 'vso:actionItemStatus', 'Open'),
+    closureDate: nodeProperty(node, 'vso:actionClosureDate'),
+    closureNotes: nodeProperty(node, 'vso:actionClosureNotes'),
+  };
+}
+
+function mapResidualRiskNode(node) {
+  if (!node) return null;
+  return {
+    nodeId: node?.id || null,
+    probability: nodeProperty(node, 'vso:residualProbability'),
+    severity: nodeProperty(node, 'vso:residualSeverity'),
+    riskLevel: nodeProperty(node, 'vso:residualRiskLevel'),
+    justification: nodeProperty(node, 'vso:residualJustification'),
+  };
+}
+
+function mapEffectivenessVerificationNode(node) {
+  if (!node) return null;
+  return {
+    nodeId: node?.id || null,
+    method: nodeProperty(node, 'vso:verificationMethod'),
+    indicators: nodeProperty(node, 'vso:verificationIndicators'),
+    projectedVerificationDate: nodeProperty(node, 'vso:projectedVerificationDate'),
+  };
+}
+
+async function getCapChildSections({ alfrescoClient, ticket, capNodeId }) {
+  const [rcaNodes, raNodes, actionItemNodes, residualRiskNodes, effectivenessNodes] = await Promise.all([
+    alfrescoClient.listChildrenByType({ ticket, parentNodeId: capNodeId, nodeType: 'vso:rootCauseAnalysis' }),
+    alfrescoClient.listChildrenByType({ ticket, parentNodeId: capNodeId, nodeType: 'vso:riskAssessment' }),
+    alfrescoClient.listChildrenByType({ ticket, parentNodeId: capNodeId, nodeType: 'vso:correctiveActionItem' }),
+    alfrescoClient.listChildrenByType({ ticket, parentNodeId: capNodeId, nodeType: 'vso:residualRisk' }),
+    alfrescoClient.listChildrenByType({ ticket, parentNodeId: capNodeId, nodeType: 'vso:effectivenessVerification' }),
+  ]);
+
+  const correctiveActions = actionItemNodes
+    .map(mapCorrectiveActionItemNode)
+    .sort((a, b) => (Number(a.sequenceNumber) || 0) - (Number(b.sequenceNumber) || 0));
+
+  return {
+    rootCauseAnalysis: mapRootCauseAnalysisNode(rcaNodes[0]),
+    riskAssessment: mapRiskAssessmentNode(raNodes[0]),
+    correctiveActions,
+    residualRisk: mapResidualRiskNode(residualRiskNodes[0]),
+    effectivenessVerification: mapEffectivenessVerificationNode(effectivenessNodes[0]),
+  };
+}
+
 function mapFollowUpReportNode(node) {
   return {
     nodeId: node?.id || null,
@@ -74,6 +169,13 @@ module.exports = {
   mapFindingNode,
   mapCorrectiveActionNode,
   mapFollowUpReportNode,
+  mapEvidenceItemNode,
+  mapRootCauseAnalysisNode,
+  mapRiskAssessmentNode,
+  mapCorrectiveActionItemNode,
+  mapResidualRiskNode,
+  mapEffectivenessVerificationNode,
+  getCapChildSections,
   getFollowUpReportsForFinding,
 };
 
