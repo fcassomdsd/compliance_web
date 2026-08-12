@@ -439,6 +439,62 @@ export async function apiReviewCap(capId, acceptanceStatus, csrfToken) {
   }
 }
 
+export async function apiUpdateCapActionItem(capId, sequenceNumber, patch, csrfToken) {
+  try {
+    if (!capId || typeof capId !== 'string') {
+      throw new Error('capId is required');
+    }
+    if (!sequenceNumber) {
+      throw new Error('sequenceNumber is required');
+    }
+
+    const result = await axios({
+      method: 'patch',
+      url: `${complianceApiServer}/caps/${encodeURIComponent(capId)}/actions/${encodeURIComponent(sequenceNumber)}`,
+      data: patch,
+      headers: buildCsrfHeader(csrfToken),
+      withCredentials: true,
+    });
+    return { data: result.data, status: result.status };
+  } catch (error) {
+    const backendMessage = error?.response?.data?.message || error?.response?.data?.error;
+    const status = error?.response?.status;
+    const detail = backendMessage || error.message;
+    throw new Error(`apiUpdateCapActionItem: ${status ? `[${status}] ` : ''}${detail}`);
+  }
+}
+
+export async function apiUploadCapEvidence(capId, section, file, csrfToken) {
+  try {
+    if (!capId || typeof capId !== 'string') {
+      throw new Error('capId is required');
+    }
+    if (section !== 'rca' && section !== 'risk-assessment') {
+      throw new Error('section must be "rca" or "risk-assessment"');
+    }
+    if (!file) {
+      throw new Error('file is required');
+    }
+
+    const formData = new FormData();
+    formData.append('file', file);
+
+    const result = await axios({
+      method: 'post',
+      url: `${complianceApiServer}/caps/${encodeURIComponent(capId)}/${section}/evidence`,
+      data: formData,
+      headers: buildCsrfHeader(csrfToken),
+      withCredentials: true,
+    });
+    return { data: result.data, status: result.status };
+  } catch (error) {
+    const backendMessage = error?.response?.data?.message || error?.response?.data?.error;
+    const status = error?.response?.status;
+    const detail = backendMessage || error.message;
+    throw new Error(`apiUploadCapEvidence: ${status ? `[${status}] ` : ''}${detail}`);
+  }
+}
+
 export async function apiCreateFollowUpReport(findingId, payload, csrfToken) {
   try {
     if (!findingId || typeof findingId !== 'string') {
