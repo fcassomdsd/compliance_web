@@ -68,8 +68,17 @@ describe('inspectorStore', () => {
     ]);
   });
 
-  it('loadInspectorSpecialties throws on empty list and resets loading', async () => {
+  it('loadInspectorSpecialties handles empty list gracefully and resets loading', async () => {
     vi.mocked(apiServices.apiEntityCRUD).mockResolvedValue({ data: { list: [] }, status: 200 });
+
+    const store = useInspectorStore();
+    await store.loadInspectorSpecialties();
+    expect(store.inspectorSpecialties).toEqual({});
+    expect(store.loading).toBe(false);
+  });
+
+  it('loadInspectorSpecialties throws on missing list and resets loading', async () => {
+    vi.mocked(apiServices.apiEntityCRUD).mockResolvedValue({ data: { total: 0 }, status: 200 });
 
     const store = useInspectorStore();
     await expect(store.loadInspectorSpecialties()).rejects.toThrow();

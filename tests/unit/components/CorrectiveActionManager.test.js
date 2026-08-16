@@ -40,9 +40,11 @@ describe('CorrectiveActionManager.vue', () => {
       error: null,
       setFilter: vi.fn(),
       fetchCaps: vi.fn().mockResolvedValue(undefined),
-      submitCap: vi.fn().mockResolvedValue({ ok: true }),
+      submitCap: vi.fn().mockResolvedValue({ cap: { capId: 'CAP-10' } }),
       reviewCap: vi.fn().mockResolvedValue({ ok: true }),
       fetchCapDetail: vi.fn().mockResolvedValue(undefined),
+      updateActionItem: vi.fn().mockResolvedValue(undefined),
+      uploadCapEvidence: vi.fn().mockResolvedValue(undefined),
     };
     mockAuthStore = { csrfToken: 'csrf-token' };
 
@@ -84,9 +86,6 @@ describe('CorrectiveActionManager.vue', () => {
     await wrapper.vm.$nextTick();
 
     wrapper.vm.capForm.findingId = 'F-1';
-    wrapper.vm.capForm.capId = 'CAP-10';
-    wrapper.vm.capForm.proposedAction = 'Do action';
-    wrapper.vm.capForm.responsibleEntity = 'Org B';
     wrapper.vm.capForm.dueDate = '2026-12-31';
 
     await wrapper.vm.submitCap();
@@ -94,15 +93,41 @@ describe('CorrectiveActionManager.vue', () => {
     expect(mockCapStore.submitCap).toHaveBeenCalledWith({
       findingId: 'F-1',
       payload: {
-        capId: 'CAP-10',
-        proposedAction: 'Do action',
-        responsibleEntity: 'Org B',
         dueDate: '2026-12-31',
+        rootCauseAnalysis: {
+          method: '5 Whys',
+          otherMethodDescription: '',
+          mainCategory: '',
+          rootCause: '',
+          contributingFactors: '',
+        },
+        riskAssessment: {
+          hazard: '',
+          consequence: '',
+          probability: '',
+          severity: '',
+          calculatedRiskLevel: '',
+          tolerabilityLevel: '',
+          justification: '',
+        },
+        correctiveActions: [
+          { description: '', priority: 'Medium', responsiblePerson: '', deadline: '' },
+        ],
+        residualRisk: {
+          probability: '',
+          severity: '',
+          riskLevel: '',
+          justification: '',
+        },
+        effectivenessVerification: {
+          method: '',
+          indicators: '',
+          projectedVerificationDate: '',
+        },
       },
       csrfToken: 'csrf-token',
     });
     expect(wrapper.vm.message).toContain('submitted successfully');
-    expect(wrapper.vm.capForm.capId).toBe('');
     expect(mockCapStore.fetchCaps).toHaveBeenCalledTimes(2);
   });
 

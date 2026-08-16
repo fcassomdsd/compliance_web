@@ -1,4 +1,4 @@
-const { mapFindingNode, mapFollowUpReportNode } = require('../domain/alfrescoMappers.cjs');
+const { mapFindingNode, mapFollowUpReportNode, getFollowUpReportsForFinding } = require('../domain/alfrescoMappers.cjs');
 const { computeEffectiveFindingStatus, FINDING_STATUS } = require('../domain/statusRules.cjs');
 
 function untilNextRunMs(hourLocal = 1, now = new Date()) {
@@ -14,14 +14,15 @@ function nowIsoDate(now = new Date()) {
   return now.toISOString().slice(0, 10);
 }
 
-async function getFollowUpReportsForFinding({ alfrescoClient, ticket, findingNodeId }) {
+async function getFollowUpReportsForFindingAndCaps({ alfrescoClient, ticket, findingNodeId }) {
+  const all = await getFollowUpReportsForFinding({ alfrescoClient, ticket, findingNodeId });
+
   const capNodes = await alfrescoClient.listChildrenByType({
     ticket,
     parentNodeId: findingNodeId,
     nodeType: 'vso:correctiveAction',
   });
 
-  const all = [];
   for (const capNode of capNodes) {
     const followUps = await alfrescoClient.listChildrenByType({
       ticket,
@@ -55,7 +56,7 @@ async function runFindingOverdueSync({ alfrescoClient, username, password, logge
 
     for (const findingNode of findings) {
       const finding = mapFindingNode(findingNode);
-      const followUps = await getFollowUpReportsForFinding({
+      const followUps = await getFollowUpReportsForFindingAndCaps({
         alfrescoClient,
         ticket,
         findingNodeId: findingNode.id,
@@ -71,12 +72,16 @@ async function runFindingOverdueSync({ alfrescoClient, username, password, logge
         drift += 1;
       }
 
-      if (status.effectiveStatus === FINDING_STATUS.OVERDUE && status.storedStatus !== FINDING_STATUS.OVERDUE) {
+      const isNewlyOverdue =
+        (status.effectiveStatus === FINDING_STATUS.SOLUTION_OVERDUE || status.effectiveStatus === FINDING_STATUS.CAP_OVERDUE) &&
+        status.storedStatus !== status.effectiveStatus;
+
+      if (isNewlyOverdue) {
         await alfrescoClient.updateNodeProperties({
           ticket,
           nodeId: finding.nodeId,
           properties: {
-            'vso:findingStatus': FINDING_STATUS.OVERDUE,
+            'vso:findingStatus': status.effectiveStatus,
             'vso:lastStatusChange': nowIsoDate(now()),
           },
         });

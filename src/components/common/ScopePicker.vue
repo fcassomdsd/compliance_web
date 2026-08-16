@@ -58,9 +58,14 @@
         </select>
       </label>
 
-      <label v-if="showOverdueOnly" for="scopeOverdueOnly">
-        Overdue only
-        <input id="scopeOverdueOnly" v-model="localScope.overdueOnly" type="checkbox" />
+      <label v-if="showCapOverdueOnly" for="scopeCapOverdueOnly">
+        CAP overdue only
+        <input id="scopeCapOverdueOnly" v-model="localScope.capOverdueOnly" type="checkbox" />
+      </label>
+
+      <label v-if="showSolutionOverdueOnly" for="scopeSolutionOverdueOnly">
+        Solution overdue only
+        <input id="scopeSolutionOverdueOnly" v-model="localScope.solutionOverdueOnly" type="checkbox" />
       </label>
 
       <label v-if="showFollowUpType" for="scopeFollowUpType">
@@ -101,7 +106,8 @@ const findingStatuses = [
   'In Progress',
   'Pending Closure Review',
   'Closed',
-  'Overdue',
+  'CAP Overdue',
+  'Solution Overdue',
 ];
 
 const followUpTypes = [
@@ -121,7 +127,8 @@ function createScopeState() {
     inspectionId: '',
     domain: '',
     findingStatus: '',
-    overdueOnly: false,
+    capOverdueOnly: false,
+    solutionOverdueOnly: false,
     followUpType: '',
     acceptanceStatus: '',
   };
@@ -180,7 +187,11 @@ const props = defineProps({
     type: Boolean,
     default: true,
   },
-  showOverdueOnly: {
+  showCapOverdueOnly: {
+    type: Boolean,
+    default: true,
+  },
+  showSolutionOverdueOnly: {
     type: Boolean,
     default: true,
   },
@@ -221,19 +232,19 @@ watch(
 watch(
   localScope,
   (value) => {
-    emit('update:modelValue', { ...value });
+    emit('update:modelValue', { ...value, status: value.findingStatus });
   },
   { deep: true }
 );
 
 function emitSearch() {
-  emit('search', { ...localScope });
+  emit('search', { ...localScope, status: localScope.findingStatus });
 }
 
 function resetScope() {
   Object.assign(localScope, createScopeState());
-  emit('update:modelValue', { ...localScope });
-  emit('reset', { ...localScope });
+  emit('update:modelValue', { ...localScope, status: localScope.findingStatus });
+  emit('reset', { ...localScope, status: localScope.findingStatus });
 }
 </script>
 
@@ -260,7 +271,7 @@ function resetScope() {
 .scope-note {
   margin: 0.35rem 0 0;
   color: #5d6b75;
-  font-size: 0.95rem;
+  font-size: var(--text-sm);
 }
 
 .scope-grid {

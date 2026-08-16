@@ -45,6 +45,7 @@ function parseFollowUpId(value) {
   };
 }
 
+/*
 function toDateCode(dateValue) {
   const date = dateValue instanceof Date ? dateValue : new Date(dateValue);
   if (Number.isNaN(date.getTime())) {
@@ -56,6 +57,7 @@ function toDateCode(dateValue) {
   const day = String(date.getUTCDate()).padStart(2, '0');
   return `${year}${month}${day}`;
 }
+*/
 
 function buildInspectionId({ icaoCode, sequence }) {
   const normalizedIcao = String(icaoCode || '').trim().toUpperCase();

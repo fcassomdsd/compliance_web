@@ -5,7 +5,13 @@ const FINDING_STATUS = Object.freeze({
   IN_PROGRESS: 'In Progress',
   PENDING_CLOSURE_REVIEW: 'Pending Closure Review',
   CLOSED: 'Closed',
+  // Legacy value kept only for backward-compatible comparisons against
+  // previously-persisted data. No longer assigned by computeEffectiveFindingStatus().
   OVERDUE: 'Overdue',
+  // CAP submission deadline missed while the finding has no CAP yet.
+  CAP_OVERDUE: 'CAP Overdue',
+  // Resolution deadline missed (finding not actually resolved/closed).
+  SOLUTION_OVERDUE: 'Solution Overdue',
 });
 
 const CAP_ACCEPTANCE_STATUS = Object.freeze({
@@ -14,6 +20,69 @@ const CAP_ACCEPTANCE_STATUS = Object.freeze({
   REJECTED: 'Rejected',
   RETURNED_FOR_REVISION: 'Returned',
 });
+
+const ACTION_ITEM_STATUS = Object.freeze({
+  OPEN: 'Open',
+  IN_PROGRESS: 'In Progress',
+  CLOSED: 'Closed',
+});
+
+function isValidActionItemStatus(status) {
+  return Object.values(ACTION_ITEM_STATUS).includes(status);
+}
+
+const INSPECTION_STATUS = Object.freeze({
+  CREATED: 'Created',
+  DEFINED: 'Defined',
+  ASSIGNED: 'Assigned',
+  PLANNED: 'Planned',
+  UPLOADED: 'Uploaded',
+  REPORTED: 'Reported',
+  COMPLETE: 'Complete',
+  INACTIVE: 'Inactive',
+});
+
+const INSPECTION_STATUS_ORDER = [
+  INSPECTION_STATUS.CREATED,
+  INSPECTION_STATUS.DEFINED,
+  INSPECTION_STATUS.ASSIGNED,
+  INSPECTION_STATUS.PLANNED,
+  INSPECTION_STATUS.UPLOADED,
+  INSPECTION_STATUS.REPORTED,
+  INSPECTION_STATUS.COMPLETE,
+];
+
+function getInspectionStatusIndex(status) {
+  return INSPECTION_STATUS_ORDER.indexOf(status);
+}
+
+function canInspectionTransitionTo(currentStatus, targetStatus) {
+  if (!currentStatus || !targetStatus) {
+    return false;
+  }
+  const currentIdx = getInspectionStatusIndex(currentStatus);
+  const targetIdx = getInspectionStatusIndex(targetStatus);
+  if (currentIdx === -1 || targetIdx === -1) {
+    return false;
+  }
+  return targetIdx === currentIdx + 1;
+}
+
+function canInactivateInspection(status) {
+  if (status === INSPECTION_STATUS.INACTIVE) {
+    return false;
+  }
+  const idx = getInspectionStatusIndex(status);
+  return idx >= 0 && idx < getInspectionStatusIndex(INSPECTION_STATUS.UPLOADED);
+}
+
+function isInspectionReadOnly(status) {
+  return status === INSPECTION_STATUS.COMPLETE || status === INSPECTION_STATUS.INACTIVE;
+}
+
+function isInspectionActive(status) {
+  return status !== null && status !== INSPECTION_STATUS.INACTIVE;
+}
 
 function parseIsoDate(value) {
   if (!value || typeof value !== 'string') {
@@ -61,31 +130,57 @@ function determineOverdueEvidence({ now, dueDate, followUpReports = [], isClosed
   return 'none';
 }
 
+function determineCapOverdue({ storedStatus, submissionDeadline, isClosed, now }) {
+  if (isClosed || storedStatus !== FINDING_STATUS.OPEN) {
+    return false;
+  }
+
+  const due = parseIsoDate(submissionDeadline);
+  if (!due) {
+    return false;
+  }
+
+  return now > due;
+}
+
 function computeEffectiveFindingStatus({ finding, followUpReports = [], now = new Date() }) {
   const storedStatus = finding.findingStatus;
   const closedByStatus = storedStatus === FINDING_STATUS.CLOSED;
   const closedByFollowUp = isClosedByFollowUp(followUpReports);
   const closed = closedByStatus || closedByFollowUp;
 
-  const overdueEvidence = determineOverdueEvidence({
+  const solutionOverdueEvidence = determineOverdueEvidence({
     now,
-    dueDate: finding.submissionDeadline,
+    dueDate: finding.resolutionDeadline,
     followUpReports,
     isClosed: closed,
   });
 
-  const effectiveStatus = overdueEvidence === 'none' ? storedStatus : FINDING_STATUS.OVERDUE;
+  const capOverdue = determineCapOverdue({
+    storedStatus,
+    submissionDeadline: finding.submissionDeadline,
+    isClosed: closed,
+    now,
+  });
+
+  const effectiveStatus =
+    solutionOverdueEvidence !== 'none'
+      ? FINDING_STATUS.SOLUTION_OVERDUE
+      : capOverdue
+        ? FINDING_STATUS.CAP_OVERDUE
+        : storedStatus;
 
   return {
     storedStatus,
     effectiveStatus,
-    overdueEvidence,
+    solutionOverdueEvidence,
+    capOverdue,
     statusDivergence: storedStatus !== effectiveStatus,
   };
 }
 
 function canSubmitCap(findingStatus) {
-  return findingStatus === FINDING_STATUS.OPEN || findingStatus === FINDING_STATUS.OVERDUE;
+  return findingStatus === FINDING_STATUS.OPEN || findingStatus === FINDING_STATUS.CAP_OVERDUE;
 }
 
 function isValidCapAcceptanceStatus(status) {
@@ -95,6 +190,14 @@ function isValidCapAcceptanceStatus(status) {
 module.exports = {
   FINDING_STATUS,
   CAP_ACCEPTANCE_STATUS,
+  ACTION_ITEM_STATUS,
+  isValidActionItemStatus,
+  INSPECTION_STATUS,
+  INSPECTION_STATUS_ORDER,
+  canInspectionTransitionTo,
+  canInactivateInspection,
+  isInspectionReadOnly,
+  isInspectionActive,
   parseIsoDate,
   isClosedByFollowUp,
   computeEffectiveFindingStatus,

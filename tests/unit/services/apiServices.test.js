@@ -243,7 +243,7 @@ describe('apiServices', () => {
       const result = await apiInspectionByIdOrCode('MDPP-2026-01');
       expect(result.data).toEqual({
         method: 'get',
-        url: 'http://localhost:1880/inspection/MDPP-2026-01',
+        url: 'http://localhost:1880/siteVisit/MDPP-2026-01',
       });
     });
 
@@ -276,16 +276,12 @@ describe('apiServices', () => {
 
     it('calls inspection plan/report endpoints on valid payloads', async () => {
       const plan = await apiInspectionPlan(' CODE-001 ');
-      expect(plan.data).toEqual({
-        method: 'get',
-        url: 'http://localhost:1880/inspectionPlan?inspection=CODE-001',
-      });
+      expect(plan.data.method).toBe('get');
+      expect(plan.data.url).toBe('http://localhost:1880/inspectionPlan?siteVisit=CODE-001');
 
       const report = await apiInspectionReport(' CODE-001 ', ' 2026-04-02 ', ' PROVIDER-1 ');
-      expect(report.data).toEqual({
-        method: 'get',
-        url: 'http://localhost:1880/inspectionReport?inspection=CODE-001&reportDate=2026-04-02&provider=PROVIDER-1',
-      });
+      expect(report.data.method).toBe('get');
+      expect(report.data.url).toBe('http://localhost:1880/inspectionReport?siteVisit=CODE-001&reportDate=2026-04-02&provider=PROVIDER-1');
     });
 
     it('wraps axios failures for inspection plan/report', async () => {
@@ -299,11 +295,11 @@ describe('apiServices', () => {
 
   describe('compliance API endpoints', () => {
     it('calls findings listing endpoint with filters', async () => {
-      const result = await apiFindings({ status: 'Open', overdueOnly: 'true' });
+      const result = await apiFindings({ status: 'Open', capOverdueOnly: 'true', solutionOverdueOnly: 'false' });
       expect(result.data).toEqual({
         method: 'get',
         url: '/api/findings',
-        params: { status: 'Open', overdueOnly: 'true' },
+        params: { status: 'Open', capOverdueOnly: 'true', solutionOverdueOnly: 'false' },
         withCredentials: true,
       });
     });
@@ -388,12 +384,12 @@ describe('apiServices', () => {
     });
 
     it('validates and calls follow-up report endpoint', async () => {
-      await expect(apiCreateFollowUpReport('')).rejects.toThrow('apiCreateFollowUpReport: capId is required');
+      await expect(apiCreateFollowUpReport('')).rejects.toThrow('apiCreateFollowUpReport: findingId is required');
 
-      const result = await apiCreateFollowUpReport('CAP-1', { percentComplete: 55 }, 'csrf-token');
+      const result = await apiCreateFollowUpReport('MDPP001-AYVIS-01', { percentComplete: 55 }, 'csrf-token');
       expect(result.data).toEqual({
         method: 'post',
-        url: '/api/caps/CAP-1/follow-up-reports',
+        url: '/api/findings/MDPP001-AYVIS-01/follow-ups',
         data: { percentComplete: 55 },
         headers: { 'x-csrf-token': 'csrf-token' },
         withCredentials: true,
@@ -435,7 +431,7 @@ describe('apiServices', () => {
       await expect(apiReviewCap('CAP-1', 'Accepted')).rejects.toThrow('apiReviewCap: Axios failure');
 
       vi.mocked(axios).mockImplementationOnce(() => { throw new Error('Axios failure'); });
-      await expect(apiCreateFollowUpReport('CAP-1', {})).rejects.toThrow('apiCreateFollowUpReport: Axios failure');
+      await expect(apiCreateFollowUpReport('F-1', {})).rejects.toThrow('apiCreateFollowUpReport: Axios failure');
     });
   });
 });

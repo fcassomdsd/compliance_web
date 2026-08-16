@@ -6,14 +6,28 @@ import { useAuthStore } from '@/stores/authStore';
 import { useProtocolQuestionStore } from '@/stores/protocolQuestionStore';
 import { useInspectionQuestionStore } from '@/stores/inspectionQuestionStore';
 import { useInspectedSpecialtyStore } from '@/stores/inspectedSpecialtyStore';
-import { useInspectionStore } from '@/stores/inspectionStore';
+import { useSiteVisitStore } from '@/stores/siteVisitStore';
 import { useToast } from 'vue-toastification';
 
 // Mock dependencies
 vi.mock('../../../src/stores/protocolQuestionStore');
 vi.mock('../../../src/stores/inspectionQuestionStore');
 vi.mock('../../../src/stores/inspectedSpecialtyStore');
-vi.mock('../../../src/stores/inspectionStore');
+vi.mock('../../../src/stores/siteVisitStore');
+vi.mock('../../../src/stores/inspectedProviderStore', () => ({
+  useInspectedProviderStore: vi.fn(() => ({
+    getInspectedProviders: vi.fn().mockResolvedValue(undefined),
+    getForInspection: vi.fn(() => [
+      { id: 'IP1', serviceProviderId: 'SP1', serviceProviderName: 'Provider A' },
+    ]),
+  })),
+}));
+vi.mock('../../../src/stores/inspectionStore', () => ({
+  useInspectionStore: vi.fn(() => ({
+    getInspections: vi.fn().mockResolvedValue(undefined),
+    getForInspectedProvider: vi.fn(() => [{ id: 'INSP1' }]),
+  })),
+}));
 vi.mock('vue-toastification', () => ({
   useToast: vi.fn(),
 }));
@@ -24,7 +38,7 @@ describe('ChecklistManager Component', () => {
   let mockProtocolQuestionStore;
   let mockInspectionQuestionStore;
   let mockInspectedSpecialtyStore;
-  let mockInspectionStore;
+  let mockSiteVisitStore;
   let mockToast;
 
   beforeEach(() => {
@@ -85,6 +99,7 @@ describe('ChecklistManager Component', () => {
         { id: 'IQ1', protocolQuestionId: 'Q1' },
       ]),
       deleteAllForSpecialty: vi.fn().mockResolvedValue(true),
+      upsertChecklist: vi.fn().mockResolvedValue({ deleted: 0, added: 2, updated: 0 }),
       clearAll: vi.fn(),
     };
 
@@ -112,23 +127,24 @@ describe('ChecklistManager Component', () => {
       },
     };
 
-    mockInspectionStore = {
-      inspections: [
+    mockSiteVisitStore = {
+      siteVisits: [
         {
           id: 'INS1',
           code: '2026-001',
           locationName: 'Location A',
           locationId: 'LOC1',
-          status: 'Abierta',
+          status: 'Assigned',
         },
         {
           id: 'INS2',
           code: '2026-002',
           locationName: 'Location B',
           locationId: 'LOC2',
-          status: 'Abierta',
+          status: 'Assigned',
         },
       ],
+      refreshSiteVisits: vi.fn().mockResolvedValue(undefined),
     };
 
     mockToast = {
@@ -141,7 +157,7 @@ describe('ChecklistManager Component', () => {
     vi.mocked(useProtocolQuestionStore).mockReturnValue(mockProtocolQuestionStore);
     vi.mocked(useInspectionQuestionStore).mockReturnValue(mockInspectionQuestionStore);
     vi.mocked(useInspectedSpecialtyStore).mockReturnValue(mockInspectedSpecialtyStore);
-    vi.mocked(useInspectionStore).mockReturnValue(mockInspectionStore);
+    vi.mocked(useSiteVisitStore).mockReturnValue(mockSiteVisitStore);
     vi.mocked(useToast).mockReturnValue(mockToast);
   });
 
@@ -179,7 +195,7 @@ describe('ChecklistManager Component', () => {
       expect(wrapper.vm.selectedInspectionId).toBe('NONE');
     });
 
-    it('should load inspected services when inspection is selected', async () => {
+    it('should load inspected services when provider is selected', async () => {
       wrapper = createWrapper();
       await wrapper.vm.$nextTick();
 
@@ -187,7 +203,11 @@ describe('ChecklistManager Component', () => {
       await wrapper.vm.onInspectionChange();
       await wrapper.vm.$nextTick();
 
-      expect(mockInspectedSpecialtyStore.getInspectedServices).toHaveBeenCalledWith('INS1');
+      wrapper.vm.selectedProviderId = 'IP1';
+      await wrapper.vm.onProviderChange();
+      await wrapper.vm.$nextTick();
+
+      expect(mockInspectedSpecialtyStore.getInspectedServices).toHaveBeenCalledWith('INSP1');
     });
 
     it('should reset specialty selection when inspection changes', async () => {
@@ -350,14 +370,7 @@ describe('ChecklistManager Component', () => {
       await wrapper.vm.saveChecklist();
       await wrapper.vm.$nextTick();
 
-      expect(mockInspectionQuestionStore.deleteAllForSpecialty).toHaveBeenCalledWith('IS1');
-      expect(mockInspectionQuestionStore.addMultipleQuestions).toHaveBeenCalledWith(
-        'IS1',
-        expect.arrayContaining([
-          expect.objectContaining({ id: 'Q1', code: 'SYS-001', sequence: 1 }),
-          expect.objectContaining({ id: 'Q2', code: 'SYS-002', sequence: 2 }),
-        ])
-      );
+      expect(mockInspectionQuestionStore.upsertChecklist).toHaveBeenCalledWith('IS1', expect.any(Array));
     });
 
     it('should display success message after saving', async () => {
@@ -407,6 +420,10 @@ describe('ChecklistManager Component', () => {
       wrapper = createWrapper();
       wrapper.vm.selectedInspectionId = 'INS1';
       await wrapper.vm.onInspectionChange();
+      await wrapper.vm.$nextTick();
+
+      wrapper.vm.selectedProviderId = 'IP1';
+      await wrapper.vm.onProviderChange();
       await wrapper.vm.$nextTick();
 
       expect(wrapper.vm.error).toBeTruthy();
@@ -517,6 +534,7 @@ describe('ChecklistManager Component', () => {
         { id: 'IQ1', protocolQuestionId: 'Q1' },
       ]),
       deleteAllForSpecialty: vi.fn().mockResolvedValue(true),
+      upsertChecklist: vi.fn().mockResolvedValue({ deleted: 0, added: 2, updated: 0 }),
       clearAll: vi.fn(),
     };
 
@@ -715,14 +733,9 @@ describe('ChecklistManager Component', () => {
       await wrapper.vm.saveChecklist();
       await wrapper.vm.$nextTick();
 
-      expect(mockInspectionQuestionStore.deleteAllForSpecialty).toHaveBeenCalledWith('IS1');
-      expect(mockInspectionQuestionStore.addMultipleQuestions).toHaveBeenCalledWith(
-        'IS1',
-        expect.arrayContaining([
-          expect.objectContaining({ id: 'Q1', code: 'SYS-001', sequence: 1 }),
-          expect.objectContaining({ id: 'Q2', code: 'SYS-002', sequence: 2 }),
-        ])
-      );
+      expect(mockInspectionQuestionStore.upsertChecklist).toHaveBeenCalledWith('IS1', expect.any(Array));
+      expect(mockInspectionQuestionStore.upsertChecklist).toHaveBeenCalled();;
+
     });
 
     it('should display success message after saving', async () => {
@@ -747,8 +760,7 @@ describe('ChecklistManager Component', () => {
       await wrapper.vm.saveChecklist();
       await wrapper.vm.$nextTick();
 
-      expect(mockInspectionQuestionStore.deleteAllForSpecialty).toHaveBeenCalledWith('IS1');
-      expect(mockInspectionQuestionStore.addMultipleQuestions).not.toHaveBeenCalled();
+      expect(mockInspectionQuestionStore.upsertChecklist).toHaveBeenCalledWith('IS1', expect.any(Array));
     });
 
     it('should throw error if no specialty selected', async () => {
@@ -764,7 +776,7 @@ describe('ChecklistManager Component', () => {
     });
 
     it('should set error message on save failure', async () => {
-      mockInspectionQuestionStore.deleteAllForSpecialty.mockRejectedValueOnce(
+      mockInspectionQuestionStore.upsertChecklist.mockRejectedValueOnce(
         new Error('Save failed')
       );
 

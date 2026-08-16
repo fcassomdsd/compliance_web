@@ -271,6 +271,30 @@ describe('Inspection Question Store', () => {
     });
   });
 
+  describe('upsertChecklist', () => {
+    it('should add new questions and delete removed ones', async () => {
+      store.inspectionQuestionsBySpecialty['IS1'] = [
+        { id: 'IQ1', protocolQuestionId: 'Q1', inspectedSpecialtyId: 'IS1', sequence: 1, riskLevel: null },
+        { id: 'IQ2', protocolQuestionId: 'Q2', inspectedSpecialtyId: 'IS1', sequence: 2, riskLevel: null },
+        { id: 'IQ3', protocolQuestionId: 'Q3', inspectedSpecialtyId: 'IS1', sequence: 3, riskLevel: null },
+      ];
+      store.inspectionQuestions = {
+        'IQ1': { id: 'IQ1', protocolQuestionId: 'Q1' },
+        'IQ2': { id: 'IQ2', protocolQuestionId: 'Q2' },
+        'IQ3': { id: 'IQ3', protocolQuestionId: 'Q3' },
+      };
+
+      await store.upsertChecklist('IS1', [
+        { id: 'Q2', code: 'SYS-002', sequence: 1, riskLevel: null },
+        { id: 'Q4', code: 'SYS-004', sequence: 2, riskLevel: null },
+      ]);
+
+      expect(apiEntityCRUD).toHaveBeenCalledWith('delete', 'InspectionQuestion', 'IQ1');
+      expect(apiEntityCRUD).toHaveBeenCalledWith('delete', 'InspectionQuestion', 'IQ3');
+      expect(apiEntityCRUD).toHaveBeenCalledWith('add', 'InspectionQuestion', null, expect.objectContaining({ protocolQuestionId: 'Q4' }));
+    });
+  });
+
   describe('getSelectedProtocolQuestionIds', () => {
     it('should return array of selected protocol question IDs', () => {
       store.inspectionQuestionsBySpecialty['IS1'] = [

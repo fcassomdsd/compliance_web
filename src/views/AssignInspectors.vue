@@ -2,24 +2,30 @@
   <BaseManager title="Assign Inspectors">
     <div class="input-group">
       <div class="grid-cell1 grid-item">
-        <label for="selectedInspection">Selected Inspection:</label>
-        <input id="selectedInspection" type="text" :value="currentInspection?.code || 'None'" disabled />
+        <label for="selectedSiteVisit">Selected Site Visit:</label>
+        <input id="selectedSiteVisit" type="text" :value="currentInspection?.code || 'None'" disabled />
       </div>
       <div class="grid-cell2 grid-item">
         <label for="locationName">Location:</label>
         <input id="locationName" type="text" :value="currentInspection?.locationName || ''" disabled />
       </div>
       <div class="input-buttons">
-        <button id="saveBtn" @click="saveAssignments" :disabled="!currentInspection"><img :src="saveImg" alt="Save" class="icon-btn"/></button>
-        <button id="cancelBtn" @click="cancelAssignments" :disabled="!currentInspection"><img :src="cancelImg" alt="Cancel" class="icon-btn"/></button>
+        <BaseButton id="saveBtn" variant="ghost" size="sm" :icon="saveImg" alt="Save" :disabled="!currentInspection || currentProviderId === 'NONE'" @click="saveAssignments" />
+        <BaseButton id="cancelBtn" variant="ghost" size="sm" :icon="cancelImg" alt="Cancel" :disabled="!currentInspection" @click="cancelAssignments" />
       </div>
     </div>
 
     <div class="detail-group" v-if="currentInspection">
       <div class="detail-buttons">
         <span class="subtitle">Inspection Specialties</span>
+        <select v-model="currentProviderId" @change="onProviderChange" class="provider-select">
+          <option value="NONE">Select provider</option>
+          <option v-for="pi in providerInspections" :key="pi.id" :value="pi.id">
+            {{ pi.serviceProviderName || pi.name || pi.serviceProviderId }}
+          </option>
+        </select>
       </div>
-      <div class="service-group">
+      <div class="service-group" v-if="currentProviderId !== 'NONE'">
         <table class="service-table">
           <colgroup>
             <col style="width: 40%;">
@@ -68,13 +74,13 @@
           </tr>
         </thead>
         <tbody>
-          <tr v-for="inspection in inspectionStore.inspections" :key="inspection.id">
+          <tr v-for="inspection in assignableInspections" :key="inspection.id">
             <td>{{ inspection?.code }}</td>
             <td>{{ inspection?.locationName }}</td>
             <td>{{ inspection?.startDate }}</td>
             <td class="actions-cell">
               <div>
-                <button :id="`select-${inspection.id}`" @click="selectInspection(inspection)"><img :src="viewImg" :disabled="inspectorStore.inspectors.length==0" alt="Select" class="icon-btn"/></button>
+                <BaseButton :id="`select-${inspection.id}`" variant="ghost" size="sm" :icon="viewImg" alt="Select" :disabled="inspectorStore.inspectors.length==0" @click="selectInspection(inspection)" />
               </div>
             </td>
           </tr>
@@ -85,11 +91,14 @@
 </template>
 
 <script setup>
-import { onBeforeMount, ref } from 'vue';
+import { onMounted, ref, computed } from 'vue';
 import BaseManager from '@/components/base/BaseManager.vue';
+import BaseButton from '@/components/base/BaseButton.vue';
+import { useSiteVisitStore } from '@/stores/siteVisitStore';
 import { useInspectionStore } from '@/stores/inspectionStore';
 import { useInspectorStore } from '@/stores/inspectorStore';
 import { useInspectedSpecialtyStore } from '@/stores/inspectedSpecialtyStore';
+import { useInspectedProviderStore } from '@/stores/inspectedProviderStore';
 import { useAuthStore } from '@/stores/authStore';
 // specialtyStore not required here; inspectorStore provides inspector specialties
 import { useToast } from 'vue-toastification';
@@ -97,21 +106,32 @@ import saveImg from '@/assets/images/icons/save.png';
 import cancelImg from '@/assets/images/icons/cancel.png';
 import viewImg from '@/assets/images/icons/view.png';
 import { apiEntityLinks } from '@/services/apiServices';
+import { INSPECTION_STATUS, canAssignInspectors, isActive, shouldRevertToAssignedOnReassign } from '@/utils/siteVisitStatus';
 
+const siteVisitStore = useSiteVisitStore();
 const inspectionStore = useInspectionStore();
 const inspectorStore = useInspectorStore();
 const inspectedStore = useInspectedSpecialtyStore();
+const inspectedProviderStore = useInspectedProviderStore();
 const authStore = useAuthStore();
 const toast = useToast();
 
 const currentInspection = ref(null);
-const specialtiesList = ref([]); // { key: string, name: string, locationServiceId }
+const currentProviderId = ref('NONE');
+const providerInspections = ref([]);
+const specialtiesList = ref([]);
 const allowedInspectorList = ref({});
 const assigned = ref({}); // key -> Set of inspector ids
 
-onBeforeMount(async () => {
-  // load inspections
-  await inspectionStore.refreshInspections();
+const assignableInspections = computed(() => {
+  return (siteVisitStore.siteVisits || []).filter(
+    (i) => isActive(i.status)
+  );
+});
+
+onMounted(async () => {
+  // load site visits
+  await siteVisitStore.refreshSiteVisits();
 
   // load inspector data (list and specialties) so we can prefill assignments
   await inspectorStore.refreshInspectors();
@@ -161,11 +181,32 @@ const buildSpecialtiesList = () => {
 
 const selectInspection = async (inspection) => {
   currentInspection.value = inspection;
-  // load inspected services and specialties for this inspection
-  await inspectedStore.getInspectedSpecialties(inspection.id);
-  // make an array of inspected specialty ids and load assigned inspectors
-  const inspectedSpecialtyIds = Object.values(inspectedStore.inspectedSpecialties).map( spec => spec.id );
-  await inspectedStore.loadActingInspectors({'inspectedSpecialtyId' : inspectedSpecialtyIds});
+  currentProviderId.value = 'NONE';
+  providerInspections.value = [];
+  try {
+    await inspectedProviderStore.getInspectedProviders(inspection.id);
+    providerInspections.value = inspectedProviderStore.getForInspection(inspection.id);
+  } catch {
+    providerInspections.value = [];
+  }
+};
+
+const onProviderChange = async () => {
+  if (!currentInspection.value || currentProviderId.value === 'NONE') return;
+  try {
+    await inspectionStore.getInspections(currentProviderId.value);
+    const inspections = inspectionStore.getForInspectedProvider(currentProviderId.value);
+    if (inspections.length > 0) {
+      const insp = inspections[0];
+      await inspectedStore.getInspectedSpecialties(insp.id);
+    }
+  } catch {
+    // fall through
+  }
+  const inspectedSpecialtyIds = Object.values(inspectedStore.inspectedSpecialties).map(spec => spec.id);
+  if (inspectedSpecialtyIds.length > 0) {
+    await inspectedStore.loadActingInspectors({ 'inspectedSpecialtyId': inspectedSpecialtyIds });
+  }
   buildSpecialtiesList();
 };
 
@@ -214,15 +255,26 @@ const saveAssignments = async () => {
       
       // process additions
       for (const specKey of Object.keys(toAddAssignments)) {
-        inspectedStore.linkActingInspectors(toAddAssignments[specKey].inspectedSpecialtyId, toAddAssignments[specKey].inspectors);
+        await inspectedStore.linkActingInspectors(toAddAssignments[specKey].inspectedSpecialtyId, toAddAssignments[specKey].inspectors);
       }
 
       // process removals
       for (const specKey of Object.keys(toRemoveAssignments)) {
-        inspectedStore.unlinkActingInspectors(toRemoveAssignments[specKey].inspectedSpecialtyId, toRemoveAssignments[specKey].inspectors);
+        await inspectedStore.unlinkActingInspectors(toRemoveAssignments[specKey].inspectedSpecialtyId, toRemoveAssignments[specKey].inspectors);
       }
 
       toast.success('Inspector assignments saved successfully.');
+
+      const inspections = inspectionStore.getForInspectedProvider(currentProviderId.value);
+      const inspStatus = inspections.length > 0 ? inspections[0].status : null;
+
+      if (inspStatus === INSPECTION_STATUS.DEFINED) {
+        await inspectionStore.updateInspectionStatus(currentProviderId.value, INSPECTION_STATUS.ASSIGNED);
+        toast.success('Inspection status updated to Assigned');
+      } else if (inspStatus && shouldRevertToAssignedOnReassign(inspStatus)) {
+        await inspectionStore.updateInspectionStatus(currentProviderId.value, INSPECTION_STATUS.ASSIGNED);
+        toast.success('Inspection status reverted to Assigned');
+      }
     } catch (error) {
       toast.error('Could not save assignments: ' + error.message);
     }
@@ -242,6 +294,9 @@ const cancelAssignments = () => {
   gap: 1rem;
   grid-template-columns : 1fr 1fr;
 }
+.grid-cell1 { grid-area: grid-cell1; }
+.grid-cell2 { grid-area: grid-cell2; }
+.input-buttons { grid-area: input-buttons; justify-self: center; display: flex; gap: var(--space-2); }
 .inspectors-list {
   display: flex;
   flex-wrap: wrap;
@@ -258,5 +313,15 @@ const cancelAssignments = () => {
 .subtitle {
   font-weight: 600;
   color: var(--primary-color);
+}
+
+.provider-select {
+  padding: 0.4rem 0.6rem;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+}
+
+@media (max-width: 768px) {
+  .input-group { grid-template-columns: 1fr; grid-template-areas: "grid-cell1" "grid-cell2" "input-buttons"; }
 }
 </style>

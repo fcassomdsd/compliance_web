@@ -3,7 +3,7 @@
     <h1>Access denied</h1>
     <p>Your account does not have the required role for this page.</p>
     <div class="actions">
-      <RouterLink class="action-link" to="/inspection">Go to Inspection Manager</RouterLink>
+      <RouterLink class="action-link" to="/site-visit">Go to Site Visit Manager</RouterLink>
       <button type="button" @click="onLogout">Sign out</button>
     </div>
   </section>
@@ -48,7 +48,7 @@ p {
   display: inline-block;
   text-decoration: none;
   background-color: var(--secondary-color);
-  color: white;
+  color: var(--color-white);
   padding: 0.75rem 1rem;
   border-radius: 8px;
 }

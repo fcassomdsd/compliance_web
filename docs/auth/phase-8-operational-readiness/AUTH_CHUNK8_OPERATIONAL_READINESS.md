@@ -72,6 +72,7 @@ Recovery validation:
 
 ## 7. Residual Risks and Follow-up
 
-1. Rate limiter is in-memory; in multi-instance deployments move to shared store (Redis).
-2. Add real PostgreSQL load tests in staging using production-like data volume.
-3. Add alert thresholds for audit event spikes.
+1. Rate limiter is PostgreSQL-backed with in-memory fallback when the `auth_login_attempt` table is absent. Multi-instance deployments share rate-limit state through the database — no external Redis dependency needed.
+2. Auth audit events are persisted to the `auth_audit_event` table when available; falls back to console-only logging. Audit event spikes should trigger alert thresholds.
+3. Add real PostgreSQL load tests in staging using production-like data volume.
+4. AUTH_TICKET_ENCRYPTION_KEY is enforced at startup in production mode — the server refuses to start without it.

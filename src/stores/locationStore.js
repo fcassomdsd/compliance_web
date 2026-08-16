@@ -7,6 +7,7 @@ export const useLocationStore = defineStore('locationStore', {
     return {
       locations : [],
       services : {},
+      locationServiceProviders : {},
       locationServices : [],
       loading : false,
     }
@@ -42,10 +43,16 @@ export const useLocationStore = defineStore('locationStore', {
       }
     },
 
-    async getLocationServices(id) {
+    async getLocationServices(locationId, providerId = null) {
 
-      this.locationServices = this.services[id];
-     
+      this.locationServices = this.services[locationId] || [];
+
+      if (providerId) {
+        this.locationServices = this.locationServices.filter((svc) => {
+          return svc && this.locationServiceProviders[svc.id] === providerId;
+        });
+      }
+      
     },
 
     async loadLocationServices() {
@@ -57,7 +64,7 @@ export const useLocationStore = defineStore('locationStore', {
       try {
 
         const { data: subqueryResults } = await apiEntityCRUD("query", "LocationServiceSpecialty", null, {deleted : false});
-        if (!("list" in subqueryResults) || (subqueryResults.list.length == 0)) {
+        if (!("list" in subqueryResults) || !Array.isArray(subqueryResults.list)) {
           throw new Error('API query failed');
         }
 
@@ -73,11 +80,13 @@ export const useLocationStore = defineStore('locationStore', {
         }
         
         const { data: queryResults } = await apiEntityCRUD("query", "LocationService", null, { deleted : false} );
-        if (!("list" in queryResults) || (queryResults.list.length == 0)) {
+        if (!("list" in queryResults) || !Array.isArray(queryResults.list)) {
           throw new Error('API query failed');
         }
         
         for (const entity of queryResults.list ) {
+
+          this.locationServiceProviders[entity.id] = entity.serviceProviderId || null;
 
           if (!this.services[entity.locationId]) {
             this.services[entity.locationId] = [];

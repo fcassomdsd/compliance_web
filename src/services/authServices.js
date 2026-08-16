@@ -55,3 +55,22 @@ export async function authLogout(csrfToken = null) {
     throw new Error('authLogout: ' + error.message);
   }
 }
+
+export async function authTicket(csrfToken) {
+  try {
+    if (!csrfToken) {
+      throw new Error('csrfToken is required');
+    }
+
+    const result = await axios({
+      method: 'get',
+      url: `${authApiServer}/ticket`,
+      headers: { 'x-csrf-token': csrfToken },
+      withCredentials: true,
+    });
+
+    return { data: result.data, status: result.status };
+  } catch (error) {
+    throw new Error('authTicket: ' + error.message);
+  }
+}

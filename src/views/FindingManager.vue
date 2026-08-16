@@ -12,41 +12,13 @@
       :show-inspection-id="true"
       :show-domain="true"
       :show-status="true"
-      :show-overdue-only="true"
+      :show-cap-overdue-only="true"
+      :show-solution-overdue-only="true"
       @search="loadFindings"
       @reset="loadFindings"
     />
 
     <div v-if="findingStore.error" class="error-message">{{ findingStore.error }}</div>
-
-    <table class="data-table">
-      <thead>
-        <tr>
-          <th>Finding ID</th>
-          <th>Level</th>
-          <th>Stored Status</th>
-          <th>Effective Status</th>
-          <th>Deadline</th>
-          <th>Actions</th>
-        </tr>
-      </thead>
-      <tbody>
-        <tr v-for="finding in findingStore.findings" :key="finding.findingId">
-          <td>{{ finding.findingId }}</td>
-          <td>{{ finding.findingLevel }}</td>
-          <td>{{ finding.storedStatus }}</td>
-          <td>
-            {{ finding.effectiveStatus }}
-            <span v-if="finding.statusDivergence" class="divergence-badge">Calculated</span>
-          </td>
-          <td>{{ finding.submissionDeadline || '-' }}</td>
-          <td>
-            <button @click="viewDetail(finding.findingId)">View</button>
-            <button @click="goToFollowUps(finding.findingId)">Manage Follow-ups</button>
-          </td>
-        </tr>
-      </tbody>
-    </table>
 
     <div v-if="findingStore.selectedFinding" class="detail-panel">
       <h3>Finding Detail: {{ findingStore.selectedFinding.findingId }}</h3>
@@ -57,16 +29,56 @@
       <p v-if="findingStore.selectedFinding.statusDivergence" class="warning-text">
         Stored status differs from calculated status. Calculated status is shown in the listing.
       </p>
-      <button @click="goToCaps(findingStore.selectedFinding.findingId)">Open CAP Manager</button>
-      <button @click="goToFollowUps(findingStore.selectedFinding.findingId)">Open Follow-up Manager</button>
+      <BaseButton variant="primary" size="sm" @click="goToCaps(findingStore.selectedFinding.findingId)">Open CAP Manager</BaseButton>
+      <BaseButton variant="ghost" size="sm" @click="goToFollowUps(findingStore.selectedFinding.findingId)">Open Follow-up Manager</BaseButton>
     </div>
+
+    <table class="data-table">
+
+      <colgroup>
+        <col style="width: 12%;">
+        <col style="width: 10%;">
+        <col style="width: 12%;">
+        <col style="width: 10%;">
+        <col style="width: 10%;">
+        <col style="width: 10%;">
+      </colgroup>
+      <thead>
+        <tr>
+          <th>Finding ID</th>
+          <th>Level</th>
+          <th>Status</th>
+          <th>CAP Deadline</th>
+          <th>Resolution Deadline</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr v-for="finding in findingStore.findings" :key="finding.findingId">
+          <td>{{ finding.findingId }}</td>
+          <td>{{ finding.findingLevel }}</td>
+          <td>
+            {{ finding.effectiveStatus }}
+            <span v-if="finding.statusDivergence" class="divergence-badge">Calculated</span>
+            <span v-if="finding.capOverdue && finding.effectiveStatus !== 'CAP Overdue'" class="cap-overdue-badge">CAP also overdue</span>
+          </td>
+          <td>{{ finding.submissionDeadline || '-' }}</td>
+          <td>{{ finding.resolutionDeadline || '-' }}</td>
+          <td>
+            <BaseButton variant="ghost" size="sm" @click="viewDetail(finding.findingId)">View</BaseButton>
+            <BaseButton variant="ghost" size="sm" @click="goToFollowUps(finding.findingId)">Follow-ups</BaseButton>
+          </td>
+        </tr>
+      </tbody>
+    </table>
   </BaseManager>
 </template>
 
 <script setup>
-import { reactive, onBeforeMount } from 'vue';
+import { reactive, onMounted } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
 import BaseManager from '@/components/base/BaseManager.vue';
+import BaseButton from '@/components/base/BaseButton.vue';
 import ScopePicker from '@/components/common/ScopePicker.vue';
 import { useFindingStore } from '@/stores/findingStore';
 
@@ -78,7 +90,8 @@ const findingPresets = [
   { value: 'open-findings', label: 'Open findings' },
   { value: 'closed-findings', label: 'Closed findings' },
   { value: 'all-findings', label: 'All findings' },
-  { value: 'overdue-findings', label: 'Overdue findings' },
+  { value: 'solution-overdue-findings', label: 'Solution overdue findings' },
+  { value: 'cap-overdue-findings', label: 'CAP overdue findings' },
 ];
 
 let scope = reactive({
@@ -90,7 +103,8 @@ let scope = reactive({
   locationId: '',
   specialtyCode: '',
   domain: '',
-  overdueOnly: false,
+  capOverdueOnly: false,
+  solutionOverdueOnly: false,
 });
 
 function normalizeFindingScope(currentScope) {
@@ -99,19 +113,28 @@ function normalizeFindingScope(currentScope) {
   switch (resolved.preset) {
     case 'open-findings':
       resolved.status = 'Open';
-      resolved.overdueOnly = false;
+      resolved.capOverdueOnly = false;
+      resolved.solutionOverdueOnly = false;
       break;
     case 'closed-findings':
       resolved.status = 'Closed';
-      resolved.overdueOnly = false;
+      resolved.capOverdueOnly = false;
+      resolved.solutionOverdueOnly = false;
       break;
     case 'all-findings':
       resolved.status = '';
-      resolved.overdueOnly = false;
+      resolved.capOverdueOnly = false;
+      resolved.solutionOverdueOnly = false;
       break;
-    case 'overdue-findings':
+    case 'solution-overdue-findings':
       resolved.status = '';
-      resolved.overdueOnly = true;
+      resolved.capOverdueOnly = false;
+      resolved.solutionOverdueOnly = true;
+      break;
+    case 'cap-overdue-findings':
+      resolved.status = '';
+      resolved.capOverdueOnly = true;
+      resolved.solutionOverdueOnly = false;
       break;
     default:
       break;
@@ -130,7 +153,8 @@ async function loadFindings() {
   findingStore.setFilter('locationId', resolvedScope.locationId);
   findingStore.setFilter('specialtyCode', resolvedScope.specialtyCode);
   findingStore.setFilter('domain', resolvedScope.domain);
-  findingStore.setFilter('overdueOnly', resolvedScope.overdueOnly);
+  findingStore.setFilter('capOverdueOnly', resolvedScope.capOverdueOnly);
+  findingStore.setFilter('solutionOverdueOnly', resolvedScope.solutionOverdueOnly);
   await findingStore.fetchFindings();
 }
 
@@ -146,7 +170,7 @@ function goToFollowUps(findingId) {
   router.push({ name: 'followUps', query: { findingId } });
 }
 
-onBeforeMount(async () => {
+onMounted(async () => {
   const findingId = String(route.query?.findingId || '').trim();
   if (findingId) {
     scope.findingId = findingId;
@@ -157,26 +181,36 @@ onBeforeMount(async () => {
 
 <style scoped>
 .divergence-badge {
-  margin-left: 0.5rem;
-  background: #ffecb3;
-  color: #5d4037;
+  margin-left: var(--space-2);
+  background: var(--color-warning-100);
+  color: var(--color-warning-700);
   padding: 0.12rem 0.35rem;
-  border-radius: 6px;
-  font-size: 0.75rem;
+  border-radius: var(--radius-sm);
+  font-size: var(--text-xs);
+}
+
+.cap-overdue-badge {
+  margin-left: var(--space-2);
+  background: var(--color-warning-100);
+  color: var(--color-warning-700);
+  padding: 0.12rem 0.35rem;
+  border-radius: var(--radius-sm);
+  font-size: var(--text-xs);
 }
 
 .detail-panel {
   border: 1px solid var(--border-color);
-  border-radius: 10px;
-  padding: 1rem;
-  background: #ffffff;
+  border-radius: var(--radius-lg);
+  padding: var(--space-4);
+  background: var(--color-white);
+  margin-top: var(--space-4);
 }
 
 .warning-text {
-  color: #9a6700;
+  color: var(--color-warning-700);
 }
 
 .error-message {
-  color: #bf3030;
+  color: var(--color-error-700);
 }
 </style>

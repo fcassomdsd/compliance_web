@@ -6,8 +6,12 @@ This folder contains the backend authentication foundation for:
 2. GET /api/auth/session
 3. POST /api/auth/logout
 4. GET /api/auth/diagnostics
+5. GET /api/findings, GET /api/findings/:id
+6. POST /api/findings/:id/follow-ups, GET /api/findings/follow-ups
+7. GET /api/caps, GET /api/caps/:id, PATCH /api/caps/:id/review
+8. POST /api/findings/:id/caps
 
-It implements server-side session persistence through PostgreSQL and async best-effort provider ticket revocation on logout.
+It implements server-side session persistence through PostgreSQL, PG-backed login rate limiting, and PG-backed audit event logging. All PG-backed features gracefully fall back to in-memory/console-only when their database tables are not yet present.
 
 ## Required Environment Variables
 
@@ -48,7 +52,9 @@ npm run test:server
 
 ## Notes
 
-1. Logout is CSRF-protected. Send the csrf token returned by login/session in header x-csrf-token.
-2. Provider ticket is stored encrypted at rest using AUTH_TICKET_ENCRYPTION_KEY.
-3. Login endpoint includes IP+username in-memory rate limiting.
-4. Session id is rotated periodically and when roles change during refresh.
+1. Logout is CSRF-protected. The CSRF token is validated **before** the session cookie is cleared, so the session survives a CSRF mismatch.
+2. Provider ticket is stored encrypted at rest using AUTH_TICKET_ENCRYPTION_KEY. In production, the server refuses to start if this key is not set (no hardcoded default).
+3. Login rate limiting is PostgreSQL-backed when the `auth_login_attempt` table exists; falls back to in-memory for single-instance deployments.
+4. Auth audit events are persisted to the `auth_audit_event` table when available; otherwise logged to console only.
+5. Session expiry uses `<=` comparison (inclusive boundary) consistently across all code paths.
+6. Session ID is rotated periodically and when roles change during refresh.

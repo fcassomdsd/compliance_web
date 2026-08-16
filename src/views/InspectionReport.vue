@@ -1,8 +1,8 @@
 <template>
   <BaseManager title="Inspection Report">
-    <div class="input-group">
+    <div class="input-group report-grid">
       <div class="grid-cell1 grid-item">
-        <label for="selectedInspection">Selected Inspection:</label>
+        <label for="selectedInspection">Selected Site Visit:</label>
         <input id="selectedInspection" type="text" :value="selectedInspection?.code || 'None'" disabled />
       </div>
       <div class="grid-cell2 grid-item">
@@ -10,45 +10,52 @@
         <input id="locationName" type="text" :value="selectedInspection?.locationName || ''" disabled />
       </div>
       <div class="grid-cell3 grid-item">
-        <label for="reportDate">Report Date:</label>
-        <input id="reportDate" type="date" v-model="reportDate" :disabled="!selectedInspection" />
-      </div>
-      <div class="grid-cell4 grid-item">
-        <label for="serviceProvider">Service Provider:</label>
-        <select id="serviceProvider" v-model="selectedServiceProviderId"
-                :disabled="!selectedInspection || serviceProviders.length === 0">
-          <option value="">Select a service provider</option>
-          <option v-for="sp in serviceProviders" :key="sp.id" :value="sp.id">
-            {{ sp.name }}
+        <label for="providerSelect">Provider:</label>
+        <select id="providerSelect" v-model="selectedProviderId"
+                :disabled="!selectedInspection" @change="onProviderChange">
+          <option value="">Select a provider</option>
+          <option v-for="pi in providerInspections" :key="pi.id" :value="pi.serviceProviderId">
+            {{ pi.serviceProviderName || pi.name || pi.serviceProviderId }}
           </option>
         </select>
       </div>
+      <div class="grid-cell4 grid-item">
+        <label for="reportDate">Report Date:</label>
+        <input id="reportDate" type="date" v-model="reportDate" :disabled="!selectedInspection || !selectedProviderId" />
+      </div>
+
+      <template v-if="selectedProviderId">
+        <div class="grid-cell5 grid-item text-area">
+          <label for="obj">Objective:</label>
+          <textarea id="obj" v-model="reportFields.objective" disabled />
+        </div>
+        <div class="grid-cell6 grid-item text-area">
+          <label for="scp">Scope:</label>
+          <textarea id="scp" v-model="reportFields.scope" disabled />
+        </div>
+        <div class="grid-cell7 grid-item">
+          <label for="typ">Inspection Type:</label>
+          <input id="typ" v-model="reportFields.inspectionType" disabled />
+        </div>
+        <div class="grid-cell8 grid-item"></div>
+      </template>
+
+      <template v-if="selectedProviderId">
+        <div class="grid-cell9 grid-item text-area">
+          <label for="desc">Description:</label>
+          <textarea id="desc" v-model="reportFields.description" rows="4" placeholder="Describe the activities carried out during the inspection..." />
+        </div>
+        <div class="grid-cell10 grid-item text-area">
+          <label for="conc">Conclusion:</label>
+          <textarea id="conc" v-model="reportFields.conclusion" rows="4" placeholder="Enter the inspection conclusion..." />
+        </div>
+      </template>
+
       <div class="input-buttons">
-        <button id="generateBtn" @click="generateReport" :disabled="!canGenerate || loading">
-          Generate Report
-        </button>
+        <BaseButton id="generateBtn" variant="primary" :disabled="!canGenerate || loading" :loading="loading" @click="generateReport">Generate Report</BaseButton>
       </div>
     </div>
-    <p v-if="selectedInspection && serviceProviders.length === 0 && !loading" class="warning-text">
-      No service providers found for this inspection.
-    </p>
-    <p v-if="selectedInspection && !hasReportPermission && !loading" class="warning-text">
-      Only the main or secondary inspector assigned to this inspection can generate reports.
-    </p>
-    <div v-if="selectedInspection && !loading && authorityContext" class="authority-info" :class="{ authorized: hasReportPermission }">
-      <p>
-        Main inspector: <strong>{{ authorityContext.mainInspectorName || 'Not assigned' }}</strong>
-        | Secondary inspector: <strong>{{ authorityContext.secondaryInspectorName || 'Not assigned' }}</strong>
-      </p>
-      <p>
-        Your inspector profile: <strong>{{ authorityContext.currentInspectorName || 'Not linked' }}</strong>
-        ({{ authorityContext.currentInspectorId || 'N/A' }})
-      </p>
-      <p>
-        Authorization: <strong>{{ hasReportPermission ? 'Allowed' : 'Not allowed for this inspection' }}</strong>
-      </p>
-    </div>
-    <div v-if="loading" class="loader"></div>
+    <LoadingSpinner :visible="loading" />
 
     <div class="data-table">
       <table class="data-table">
@@ -67,16 +74,14 @@
           </tr>
         </thead>
         <tbody>
-          <tr v-for="inspection in inspectionStore.inspections" :key="inspection.id"
+          <tr v-for="inspection in reportEligibleInspections" :key="inspection.id"
               :class="{ 'selected-row': selectedInspection?.id === inspection.id }">
             <td>{{ inspection.code }}</td>
             <td>{{ inspection.locationName }}</td>
             <td>{{ inspection.startDate }}</td>
             <td class="actions-cell">
               <div>
-                <button :id="`select-${inspection.id}`" @click="selectInspection(inspection)">
-                  <img :src="viewImg" alt="Select" class="icon-btn"/>
-                </button>
+                <BaseButton :id="`select-${inspection.id}`" variant="ghost" size="sm" :icon="viewImg" alt="Select" @click="selectInspection(inspection)" />
               </div>
             </td>
           </tr>
@@ -87,69 +92,104 @@
 </template>
 
 <script setup>
-import { ref, computed, onBeforeMount } from 'vue';
+import { ref, computed, onMounted, reactive } from 'vue';
 import BaseManager from '@/components/base/BaseManager.vue';
+import BaseButton from '@/components/base/BaseButton.vue';
+import LoadingSpinner from '@/components/base/LoadingSpinner.vue';
+import { useSiteVisitStore } from '@/stores/siteVisitStore';
+import { useInspectedProviderStore } from '@/stores/inspectedProviderStore';
 import { useInspectionStore } from '@/stores/inspectionStore';
-import { useInspectedSpecialtyStore } from '@/stores/inspectedSpecialtyStore';
 import { useAuthStore } from '@/stores/authStore';
 import { useToast } from 'vue-toastification';
-import { apiInspectionByIdOrCode, apiInspectionReport } from '@/services/apiServices';
+import { apiInspectionReport } from '@/services/apiServices';
+import { isActive } from '@/utils/siteVisitStatus';
 import viewImg from '@/assets/images/icons/view.png';
 
+const siteVisitStore = useSiteVisitStore();
+const inspectedProviderStore = useInspectedProviderStore();
 const inspectionStore = useInspectionStore();
-const inspectedStore = useInspectedSpecialtyStore();
 const authStore = useAuthStore();
 const toast = useToast();
 
 const selectedInspection = ref(null);
+const selectedProviderId = ref('');
+const providerInspections = ref([]);
 const reportDate = ref('');
-const selectedServiceProviderId = ref('');
-const serviceProviders = ref([]);
 const loading = ref(false);
-const hasInspectionAuthority = ref(false);
-const authorityContext = ref(null);
+
+const reportFields = reactive({
+  objective: '',
+  scope: '',
+  inspectionType: '',
+  description: '',
+  conclusion: '',
+});
+
+const reportEligibleInspections = computed(() => {
+  return (siteVisitStore.siteVisits || []).filter(
+    (i) => isActive(i.status)
+  );
+});
 
 const hasReportPermission = computed(() => {
-  return authStore.hasRole('admin') || hasInspectionAuthority.value;
+  return authStore.hasRole('admin') || authStore.hasRole('planner');
 });
 
 const canGenerate = computed(() =>
   hasReportPermission.value &&
   !!selectedInspection.value &&
-  reportDate.value.trim().length > 0 &&
-  selectedServiceProviderId.value !== ''
+  !!selectedProviderId.value &&
+  reportDate.value.trim().length > 0
 );
 
-onBeforeMount(async () => {
-  await inspectionStore.refreshInspections();
+onMounted(async () => {
+  await siteVisitStore.refreshSiteVisits();
+  reportDate.value = new Date().toISOString().slice(0, 10);
 });
 
 const selectInspection = async (inspection) => {
   selectedInspection.value = inspection;
-  selectedServiceProviderId.value = '';
-  serviceProviders.value = [];
-  hasInspectionAuthority.value = false;
-  authorityContext.value = null;
+  selectedProviderId.value = '';
+  providerInspections.value = [];
+  clearReportFields();
+  try {
+    await inspectedProviderStore.getInspectedProviders(inspection.id);
+    providerInspections.value = inspectedProviderStore.getForInspection(inspection.id);
+  } catch {
+    providerInspections.value = [];
+  }
+};
+
+const clearReportFields = () => {
+  reportFields.objective = '';
+  reportFields.scope = '';
+  reportFields.inspectionType = '';
+  reportFields.description = '';
+  reportFields.conclusion = '';
+};
+
+const onProviderChange = async () => {
+  clearReportFields();
+  if (!selectedProviderId.value) return;
+
+  const providerInsp = inspectedProviderStore.getForInspection(selectedInspection.value?.id || '')
+    .find((pi) => pi.serviceProviderId === selectedProviderId.value);
+  if (!providerInsp) return;
+
   loading.value = true;
   try {
-    await authStore.refreshDomainContext();
-    const { data: inspectionDetails } = await apiInspectionByIdOrCode(inspection.id || inspection.code);
-    const inspectorId = authStore.inspectorProfile?.id;
-    hasInspectionAuthority.value = Boolean(
-      inspectorId &&
-      (inspectionDetails?.mainInspectorId === inspectorId || inspectionDetails?.secondaryInspectorId === inspectorId)
-    );
-    authorityContext.value = {
-      mainInspectorName: inspectionDetails?.mainInspectorName,
-      secondaryInspectorName: inspectionDetails?.secondaryInspectorName,
-      currentInspectorId: inspectorId,
-      currentInspectorName: authStore.inspectorProfile?.name,
-    };
-
-    await inspectedStore.getInspectedServices(inspection.id);
-    serviceProviders.value = await inspectedStore.getServiceProviders();
-  } catch (error) {
-    toast.error('Could not load service providers: ' + error.message);
+    await inspectionStore.getInspections(providerInsp.id);
+    const inspections = inspectionStore.getForInspectedProvider(providerInsp.id);
+    if (inspections.length > 0) {
+      const insp = inspections[0];
+      reportFields.objective = insp.objective || '';
+      reportFields.scope = insp.scope || '';
+      reportFields.inspectionType = insp.inspectionType || '';
+      reportFields.description = insp.description || '';
+      reportFields.conclusion = insp.conclusion || '';
+    }
+  } catch {
+    // fields remain empty
   } finally {
     loading.value = false;
   }
@@ -159,12 +199,30 @@ const generateReport = async () => {
   if (!canGenerate.value) return;
   loading.value = true;
   try {
+    const providerInsp = inspectedProviderStore.getForInspection(selectedInspection.value?.id || '')
+      .find((pi) => pi.serviceProviderId === selectedProviderId.value);
+    if (providerInsp) {
+      await inspectionStore.getInspections(providerInsp.id);
+      const inspections = inspectionStore.getForInspectedProvider(providerInsp.id);
+      if (inspections.length > 0) {
+        await inspectionStore.updateInspection({
+          id: inspections[0].id,
+          description: reportFields.description,
+          conclusion: reportFields.conclusion,
+          objective: reportFields.objective,
+          scope: reportFields.scope,
+          inspectionType: reportFields.inspectionType,
+        }, providerInsp.id);
+      }
+    }
+
     await apiInspectionReport(
       selectedInspection.value.code,
       reportDate.value,
-      selectedServiceProviderId.value
+      selectedProviderId.value,
     );
     toast.success('Inspection report generated successfully.');
+    await siteVisitStore.refreshSiteVisits();
   } catch (error) {
     toast.error('Could not generate inspection report: ' + error.message);
   } finally {
@@ -174,38 +232,35 @@ const generateReport = async () => {
 </script>
 
 <style scoped>
-.input-group {
+.report-grid {
   display: grid;
   grid-template-areas:
     "grid-cell1 grid-cell2"
     "grid-cell3 grid-cell4"
+    "grid-cell5 grid-cell6"
+    "grid-cell7 grid-cell8"
+    "grid-cell9 grid-cell10"
     "input-buttons input-buttons";
   gap: 1rem;
   grid-template-columns: 1fr 1fr;
 }
-.warning-text {
-  color: var(--warning-color, #e65100);
-  font-size: 0.9rem;
-  margin-top: 0.5rem;
-}
-.authority-info {
-  margin-top: 0.75rem;
-  border: 1px solid #d8e3ef;
-  border-radius: 8px;
-  padding: 0.75rem;
-  background: #f7fbff;
-  color: #33485f;
-}
-
-.authority-info.authorized {
-  border-color: #b6dfbc;
-  background: #f2fbf3;
-}
-
-.authority-info p {
-  margin: 0.2rem 0;
-}
+.grid-cell1 { grid-area: grid-cell1; }
+.grid-cell2 { grid-area: grid-cell2; }
+.grid-cell3 { grid-area: grid-cell3; }
+.grid-cell4 { grid-area: grid-cell4; }
+.grid-cell5 { grid-area: grid-cell5; }
+.grid-cell6 { grid-area: grid-cell6; }
+.grid-cell7 { grid-area: grid-cell7; }
+.grid-cell9 { grid-area: grid-cell9; }
+.grid-cell10 { grid-area: grid-cell10; }
+.input-buttons { grid-area: input-buttons; justify-self: center; display: flex; gap: var(--space-2); }
+.text-area { display: flex; align-items: center; }
+.text-area textarea { min-height: 60px; resize: vertical; border: 1px solid; border-radius: 4px; padding: 0.5rem; width: 100%; }
 .selected-row {
   background-color: var(--highlight-color, #e3f2fd);
+}
+
+@media (max-width: 768px) {
+  .report-grid { grid-template-columns: 1fr; grid-template-areas: "grid-cell1" "grid-cell2" "grid-cell3" "grid-cell4" "grid-cell5" "grid-cell6" "grid-cell7" "grid-full" "grid-full" "input-buttons"; }
 }
 </style>

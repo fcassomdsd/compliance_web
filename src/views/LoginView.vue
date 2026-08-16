@@ -1,6 +1,7 @@
 <template>
   <section class="login-view">
-    <h1>Sign in required</h1>
+    <img :src="logo" alt="Compliance Logo" class="login-logo" />
+    <h1>Operational Safety Compliance System</h1>
     <p>{{ message }}</p>
 
     <form class="login-form" @submit.prevent="onSubmit">
@@ -27,6 +28,7 @@
 import { computed, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useAuthStore } from '@/stores/authStore';
+import logo from '@/assets/images/logos/compliance-logo.png';
 
 const route = useRoute();
 const router = useRouter();
@@ -39,14 +41,13 @@ const message = computed(() => {
   if (route.query.reason === 'expired') {
     return 'Your session expired. Please sign in again.';
   }
-
   return 'You must sign in to access this page.';
 });
 
 async function onSubmit() {
   try {
     await authStore.login(username.value, password.value);
-    const redirectTarget = typeof route.query.redirect === 'string' ? route.query.redirect : '/inspection';
+    const redirectTarget = typeof route.query.redirect === 'string' ? route.query.redirect : '/site-visit';
     await router.push(redirectTarget);
   } catch {
     // Error state is already captured by auth store.
@@ -57,45 +58,69 @@ async function onSubmit() {
 <style scoped>
 .login-view {
   text-align: center;
-  padding: 2rem 1rem;
+  padding: var(--space-8) var(--space-4);
   max-width: 420px;
   margin: 0 auto;
 }
 
+.login-logo {
+  height: 64px;
+  margin-bottom: var(--space-6);
+}
+
 h1 {
-  margin-bottom: 0.5rem;
+  margin-bottom: var(--space-4);
+  font-size: var(--text-xl);
+  color: var(--color-primary-700);
 }
 
 p {
-  color: #444;
+  color: var(--color-gray-700);
+  font-size: var(--text-sm);
 }
 
 .login-form {
-  margin-top: 1rem;
+  margin-top: var(--space-6);
   display: grid;
-  gap: 0.75rem;
+  gap: var(--space-3);
   text-align: left;
 }
 
 label {
   display: grid;
-  gap: 0.4rem;
+  gap: var(--space-1);
   font-weight: 600;
+  color: var(--color-gray-900);
+  font-size: var(--text-sm);
 }
 
 input {
-  border: 1px solid #c6d3df;
-  border-radius: 6px;
-  padding: 0.55rem 0.65rem;
-  font-size: 1rem;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  padding: var(--space-3) var(--space-4);
+  font-size: var(--text-base);
+  font-family: inherit;
+  color: var(--color-gray-900);
+  background: var(--color-white);
+  transition: border-color var(--transition-fast);
+}
+
+input:focus {
+  border-color: var(--color-primary-500);
+  outline: none;
+  box-shadow: 0 0 0 2px var(--color-primary-100);
 }
 
 button {
-  margin-top: 0.5rem;
+  margin-top: var(--space-2);
 }
 
 .error-message {
-  margin-top: 0.75rem;
-  color: #b71c1c;
+  margin-top: var(--space-3);
+  color: var(--color-error-700);
+  font-size: var(--text-sm);
+  padding: var(--space-3);
+  background: var(--color-error-100);
+  border-radius: var(--radius-md);
 }
 </style>

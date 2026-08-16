@@ -3,6 +3,16 @@ import { default as axios } from 'axios';
 const apiServer = 'http://localhost:1880';
 const complianceApiServer = import.meta.env.VITE_COMPLIANCE_API_BASE_URL || '/api';
 
+let cachedTicket = null
+
+export function setAlfrescoTicket(ticket) {
+  cachedTicket = ticket || null
+}
+
+function buildNodeRedHeaders() {
+  return cachedTicket ? { 'X-Alfresco-Ticket': cachedTicket } : undefined
+}
+
 /*
 const apiQueryOps = [
   { op : "==", apiOp : "equal"},
@@ -117,7 +127,8 @@ export async function apiEntityCRUD(method, entityName, entityId = null, entityD
 
     const apiConfig = {
       method : apiOp[method].apiMethod,
-      url : `${apiServer}/${method}Entity${apiName}${(apiId ? apiId : "")}`
+      url : `${apiServer}/${method}Entity${apiName}${(apiId ? apiId : "")}`,
+      headers: buildNodeRedHeaders(),
     }
     if (apiData) {
       apiConfig["data"] = apiData;    
@@ -203,7 +214,8 @@ export async function apiEntityLinks(method, entityName, entityId, linkName, ent
 
     const apiConfig = {
       method : apiOp[method].apiMethod,
-      url : `${apiServer}/${method}${apiName}${(apiId ? apiId : "")}${(apiLink ? apiLink : "")}`
+      url : `${apiServer}/${method}${apiName}${(apiId ? apiId : "")}${(apiLink ? apiLink : "")}`,
+      headers: buildNodeRedHeaders(),
     }
     if (apiData) {
       apiConfig["data"] = apiData;    
@@ -217,14 +229,19 @@ export async function apiEntityLinks(method, entityName, entityId, linkName, ent
 
 }
 
-export async function apiInspectionPlan(inspectionCode) {
+export async function apiInspectionPlan(inspectionCode, inspectedProviderId = null) {
   try {
     if (!inspectionCode || typeof inspectionCode !== 'string' || inspectionCode.trim().length === 0) {
       throw new Error('inspectionCode is required');
     }
+    let url = `${apiServer}/inspectionPlan?siteVisit=${encodeURIComponent(inspectionCode.trim())}`;
+    if (inspectedProviderId) {
+      url += `&provider=${encodeURIComponent(inspectedProviderId)}`;
+    }
     const result = await axios({
       method: 'get',
-      url: `${apiServer}/inspectionPlan?inspection=${encodeURIComponent(inspectionCode.trim())}`
+      url,
+      headers: buildNodeRedHeaders(),
     });
     return { data: result.data, status: result.status };
   } catch (error) {
@@ -245,11 +262,25 @@ export async function apiInspectionReport(inspectionCode, reportDate, servicePro
     }
     const result = await axios({
       method: 'get',
-      url: `${apiServer}/inspectionReport?inspection=${encodeURIComponent(inspectionCode.trim())}&reportDate=${encodeURIComponent(reportDate.trim())}&provider=${encodeURIComponent(serviceProviderId.trim())}`
+      url: `${apiServer}/inspectionReport?siteVisit=${encodeURIComponent(inspectionCode.trim())}&reportDate=${encodeURIComponent(reportDate.trim())}&provider=${encodeURIComponent(serviceProviderId.trim())}`,
+      headers: buildNodeRedHeaders(),
     });
     return { data: result.data, status: result.status };
   } catch (error) {
     throw new Error('apiInspectionReport: ' + error.message);
+  }
+}
+
+export async function apiServiceAreas() {
+  try {
+    const result = await axios({
+      method: 'get',
+      url: `${apiServer}/serviceAreas`,
+      headers: buildNodeRedHeaders(),
+    });
+    return { data: result.data, status: result.status };
+  } catch (error) {
+    throw new Error('apiServiceAreas: ' + error.message);
   }
 }
 
@@ -262,6 +293,7 @@ export async function apiInspectorByAlfrescoUser(alfrescoUserId) {
     const result = await axios({
       method: 'get',
       url: `${apiServer}/inspector/${encodeURIComponent(alfrescoUserId.trim())}`,
+      headers: buildNodeRedHeaders(),
     });
     return { data: result.data, status: result.status };
   } catch (error) {
@@ -277,7 +309,8 @@ export async function apiInspectionByIdOrCode(inspectionRef) {
 
     const result = await axios({
       method: 'get',
-      url: `${apiServer}/inspection/${encodeURIComponent(inspectionRef.trim())}`,
+      url: `${apiServer}/siteVisit/${encodeURIComponent(inspectionRef.trim())}`,
+      headers: buildNodeRedHeaders(),
     });
     return { data: result.data, status: result.status };
   } catch (error) {
@@ -294,6 +327,7 @@ export async function apiAssignmentGroup(alfrescoGroup) {
     const result = await axios({
       method: 'get',
       url: `${apiServer}/assignmentGroup/${encodeURIComponent(alfrescoGroup.trim())}`,
+      headers: buildNodeRedHeaders(),
     });
     return { data: result.data, status: result.status };
   } catch (error) {
@@ -405,15 +439,71 @@ export async function apiReviewCap(capId, acceptanceStatus, csrfToken) {
   }
 }
 
-export async function apiCreateFollowUpReport(capId, payload, csrfToken) {
+export async function apiUpdateCapActionItem(capId, sequenceNumber, patch, csrfToken) {
   try {
     if (!capId || typeof capId !== 'string') {
       throw new Error('capId is required');
     }
+    if (!sequenceNumber) {
+      throw new Error('sequenceNumber is required');
+    }
+
+    const result = await axios({
+      method: 'patch',
+      url: `${complianceApiServer}/caps/${encodeURIComponent(capId)}/actions/${encodeURIComponent(sequenceNumber)}`,
+      data: patch,
+      headers: buildCsrfHeader(csrfToken),
+      withCredentials: true,
+    });
+    return { data: result.data, status: result.status };
+  } catch (error) {
+    const backendMessage = error?.response?.data?.message || error?.response?.data?.error;
+    const status = error?.response?.status;
+    const detail = backendMessage || error.message;
+    throw new Error(`apiUpdateCapActionItem: ${status ? `[${status}] ` : ''}${detail}`);
+  }
+}
+
+export async function apiUploadCapEvidence(capId, section, file, csrfToken) {
+  try {
+    if (!capId || typeof capId !== 'string') {
+      throw new Error('capId is required');
+    }
+    if (section !== 'rca' && section !== 'risk-assessment') {
+      throw new Error('section must be "rca" or "risk-assessment"');
+    }
+    if (!file) {
+      throw new Error('file is required');
+    }
+
+    const formData = new FormData();
+    formData.append('file', file);
 
     const result = await axios({
       method: 'post',
-      url: `${complianceApiServer}/caps/${encodeURIComponent(capId)}/follow-up-reports`,
+      url: `${complianceApiServer}/caps/${encodeURIComponent(capId)}/${section}/evidence`,
+      data: formData,
+      headers: buildCsrfHeader(csrfToken),
+      withCredentials: true,
+    });
+    return { data: result.data, status: result.status };
+  } catch (error) {
+    const backendMessage = error?.response?.data?.message || error?.response?.data?.error;
+    const status = error?.response?.status;
+    const detail = backendMessage || error.message;
+    throw new Error(`apiUploadCapEvidence: ${status ? `[${status}] ` : ''}${detail}`);
+  }
+}
+
+export async function apiCreateFollowUpReport(findingId, payload, csrfToken) {
+  try {
+    if (!findingId || typeof findingId !== 'string') {
+      throw new Error('findingId is required');
+    }
+
+    const result = await axios({
+      method: 'post',
+      url: `${complianceApiServer}/findings/${encodeURIComponent(findingId)}/follow-ups`,
       data: payload,
       headers: buildCsrfHeader(csrfToken),
       withCredentials: true,

@@ -17,11 +17,27 @@ This repository is intended for both adopters evaluating the platform and contri
 
 ## Feature Highlights
 
+- **Inspection status state machine** — linear lifecycle from `Created` through `Reported` with `Complete` (external) and `Inactive` (soft-delete) states. Status governs available actions (editing, service assignment, inspector assignment, checklist processing, plan/report generation). Backward transitions supported for plan regeneration and inspector reassignment.
 - Checklist manager with grouped questions and persisted selections.
 - Role-aware route and API authorization model.
 - Auth endpoints for login, session bootstrap, logout, and diagnostics.
 - Session policy controls: idle timeout, absolute timeout, refresh cadence, and rotation.
+- PostgreSQL-backed login rate limiting and auth audit logging with graceful fallback.
+- ZIP bomb protection and upload size limits on import endpoints.
 - Test coverage spanning frontend units, router/store auth paths, and server auth behavior.
+
+### Inspection Status States
+
+| Status | Meaning | Available Actions |
+|---|---|---|
+| `Created` | Basic values saved (location, dates, objective, scope, inspectors) | Edit basics, assign services/schedules |
+| `Defined` | Services and schedules configured | Assign inspectors |
+| `Assigned` | Inspectors assigned | Process checklists, generate plan, reassign inspectors |
+| `Planned` | Inspection plan generated | Upload checklists, regenerate plan, reassign (reverts to Assigned) |
+| `Uploaded` | Checklist data uploaded | Generate report |
+| `Reported` | Report generated | Regenerate report |
+| `Complete` | All operations confirmed (external) | Read-only |
+| `Inactive` | Soft-deleted, no longer operational | Read-only; permanent delete only for inactive inspections |
 
 ## Project Status
 
@@ -103,7 +119,8 @@ Common optional auth settings:
 - `AUTH_IDLE_TIMEOUT_SECONDS`
 - `AUTH_ABSOLUTE_TIMEOUT_SECONDS`
 - `AUTH_ROLE_REFRESH_INTERVAL_SECONDS`
-- `AUTH_TICKET_ENCRYPTION_KEY` (required in production)
+- `AUTH_TICKET_ENCRYPTION_KEY` (required in production — server refuses to start without it)
+- `AUTH_LOGIN_RATE_LIMIT_MAX_ATTEMPTS`
 
 Auth backend details: [server/README.md](server/README.md)
 
@@ -127,8 +144,12 @@ Auth endpoints exposed by the backend:
 
 - `POST /api/auth/login`
 - `GET /api/auth/session`
-- `POST /api/auth/logout`
+- `POST /api/auth/logout` (CSRF-protected, validates token before clearing cookie)
 - `GET /api/auth/diagnostics`
+- `GET /api/findings` / `GET /api/findings/:id`
+- `POST /api/findings/:id/follow-ups`
+- `GET /api/caps` / `GET /api/caps/:id` / `PATCH /api/caps/:id/review`
+- `POST /api/findings/:id/caps`
 
 Auth documentation:
 

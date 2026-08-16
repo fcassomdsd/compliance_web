@@ -1,16 +1,15 @@
 <template>
   <BaseManager title="Inspection Checklist">
-    <!-- Inspection Selection Section -->
-    <div class="input-group">
+    <div class="input-group checklist-filters">
       <div class="grid-cell1 grid-item">
-        <label for="inspectionSelect">Select Inspection:</label>
+        <label for="inspectionSelect">Site Visit:</label>
         <select 
           id="inspectionSelect" 
           v-model="selectedInspectionId"
           @change="onInspectionChange"
           :disabled="loadingInspections"
         >
-          <option :value="`${NONE_VALUE}`">Choose an inspection...</option>
+          <option :value="`${NONE_VALUE}`">Choose a site visit...</option>
           <option 
             v-for="inspection in availableInspections" 
             :key="inspection.id" 
@@ -20,12 +19,26 @@
           </option>
         </select>
       </div>
-    </div>
-
-    <!-- Specialty Selection Section (shown only after inspection is selected) -->
-    <div v-if="selectedInspectionId !== NONE_VALUE" class="input-group">
-      <div class="grid-cell1 grid-item">
-        <label for="specialtySelect">Select Specialty:</label>
+      <div class="grid-cell2 grid-item" v-if="selectedInspectionId !== NONE_VALUE">
+        <label for="providerSelect">Provider:</label>
+        <select 
+          id="providerSelect" 
+          v-model="selectedProviderId"
+          @change="onProviderChange"
+          :disabled="loading"
+        >
+          <option :value="`${NONE_VALUE}`">Choose a provider...</option>
+          <option 
+            v-for="pi in providerInspections" 
+            :key="pi.id" 
+            :value="pi.id"
+          >
+            {{ pi.serviceProviderName || pi.name || pi.serviceProviderId }}
+          </option>
+        </select>
+      </div>
+      <div class="grid-cell3 grid-item" v-if="selectedProviderId !== NONE_VALUE">
+        <label for="specialtySelect">Specialty:</label>
         <select 
           id="specialtySelect" 
           v-model="selectedInspectedSpecialtyId"
@@ -42,31 +55,17 @@
           </option>
         </select>
         <p v-if="isInspectorScopeFiltered" class="info-text">
-          Showing only specialties assigned to you for this inspection.
+          Showing only specialties assigned to you.
         </p>
       </div>
-
-      <!-- Global Control Buttons -->
-      <div class="control-buttons" v-if="selectedInspectedSpecialtyId !== NONE_VALUE">
-        <button 
-          class="btn btn-primary"
-          @click="selectAllQuestions"
-          :disabled="loading"
-        >
-          Select All Questions
-        </button>
-        <button 
-          class="btn btn-secondary"
-          @click="clearAllQuestions"
-          :disabled="loading"
-        >
-          Clear All Questions
-        </button>
+      <div class="checklist-actions" v-if="selectedInspectedSpecialtyId !== NONE_VALUE">
+        <BaseButton variant="success" size="sm" @click="selectAllQuestions" :disabled="loading">Select All</BaseButton>
+        <BaseButton variant="warning" size="sm" @click="clearAllQuestions" :disabled="loading">Clear All</BaseButton>
       </div>
     </div>
 
     <!-- Loading State -->
-    <div v-if="loading" class="loader">Loading...</div>
+    <LoadingSpinner :visible="loading" text="Loading..." />
 
     <!-- Error Message -->
     <div v-if="error" class="error-message">
@@ -98,13 +97,7 @@
 
       <!-- Save Button -->
       <div v-if="Object.keys(groupedQuestions).length > 0" class="save-section">
-        <button 
-          class="btn btn-save"
-          @click="saveChecklist"
-          :disabled="loading"
-        >
-          Save Checklist
-        </button>
+        <BaseButton variant="primary" @click="saveChecklist" :disabled="loading">Save Checklist</BaseButton>
         <span class="selection-info">
           {{ selectedQuestionIds.length }} / {{ totalQuestionCount }} questions selected
         </span>
@@ -117,21 +110,30 @@
 import { ref, computed, onMounted } from 'vue';
 import BaseManager from '@/components/base/BaseManager.vue';
 import TopicChecklistGroup from '@/components/TopicChecklistGroup.vue';
+import BaseButton from '@/components/base/BaseButton.vue';
+import LoadingSpinner from '@/components/base/LoadingSpinner.vue';
 import { useProtocolQuestionStore } from '@/stores/protocolQuestionStore';
 import { useInspectionQuestionStore } from '@/stores/inspectionQuestionStore';
 import { useInspectedSpecialtyStore } from '@/stores/inspectedSpecialtyStore';
+import { useSiteVisitStore } from '@/stores/siteVisitStore';
+import { useInspectedProviderStore } from '@/stores/inspectedProviderStore';
 import { useInspectionStore } from '@/stores/inspectionStore';
 import { useAuthStore } from '@/stores/authStore';
 import { useToast } from 'vue-toastification';
+import { isActive } from '@/utils/siteVisitStatus';
 
 const protocolQuestionStore = useProtocolQuestionStore();
 const inspectionQuestionStore = useInspectionQuestionStore();
 const inspectedSpecialtyStore = useInspectedSpecialtyStore();
+const siteVisitStore = useSiteVisitStore();
+const inspectedProviderStore = useInspectedProviderStore();
 const inspectionStore = useInspectionStore();
 const authStore = useAuthStore();
 const toast = useToast();
 
 const selectedInspectionId = ref('NONE');
+const selectedProviderId = ref('NONE');
+const providerInspections = ref([]);
 const selectedInspectedSpecialtyId = ref('NONE');
 const selectedQuestionIds = ref([]);
 const groupedQuestions = ref({});
@@ -147,12 +149,9 @@ const NONE_VALUE = 'NONE';
 onMounted(async () => {
   try {
     loadingInspections.value = true;
-    // Inspections are already loaded in the store, but ensure they're available
-    if (inspectionStore.inspections.length === 0) {
-      // If needed, the store would load inspections here
-    }
+    await siteVisitStore.refreshSiteVisits();
   } catch (err) {
-    console.error('Failed to load inspections:', err);
+    console.error('Failed to load site visits:', err);
   } finally {
     loadingInspections.value = false;
   }
@@ -162,7 +161,9 @@ onMounted(async () => {
  * Get available inspections from the store
  */
 const availableInspections = computed(() => {
-  return inspectionStore.inspections || [];
+  return (siteVisitStore.siteVisits || []).filter(
+    (i) => isActive(i.status)
+  );
 });
 
 /**
@@ -216,25 +217,55 @@ const isInspectorScopeFiltered = computed(() => {
  */
 const onInspectionChange = async () => {
   try {
+    selectedProviderId.value = NONE_VALUE;
     selectedInspectedSpecialtyId.value = NONE_VALUE;
     selectedQuestionIds.value = [];
     groupedQuestions.value = {};
     error.value = null;
     successMessage.value = null;
+    providerInspections.value = [];
 
     if (selectedInspectionId.value === NONE_VALUE) {
       return;
     }
 
     loading.value = true;
-
-    // Refresh in-session Atrocore inspector context when available.
     await authStore.refreshDomainContext();
 
-    // Load inspected services/specialties for this inspection
-    await inspectedSpecialtyStore.getInspectedServices(selectedInspectionId.value);
+    await inspectedProviderStore.getInspectedProviders(selectedInspectionId.value);
+    providerInspections.value = inspectedProviderStore.getForInspection(selectedInspectionId.value);
+  } catch (err) {
+    error.value = 'Failed to load providers: ' + err.message;
+    console.error('Error loading providers:', err);
+    toast.error('Failed to load providers');
+  } finally {
+    loading.value = false;
+  }
+};
 
-    // Load assignment map so inspectors only see specialties assigned to them in this inspection.
+const onProviderChange = async () => {
+  try {
+    selectedInspectedSpecialtyId.value = NONE_VALUE;
+    selectedQuestionIds.value = [];
+    groupedQuestions.value = {};
+    error.value = null;
+
+    if (selectedProviderId.value === NONE_VALUE) {
+      return;
+    }
+
+    loading.value = true;
+
+    await inspectionStore.getInspections(selectedProviderId.value);
+    const inspections = inspectionStore.getForInspectedProvider(selectedProviderId.value);
+    if (inspections.length === 0) {
+      error.value = 'No inspection found for this provider. Please configure it first.';
+      return;
+    }
+    const inspectionId = inspections[0].id;
+
+    await inspectedSpecialtyStore.getInspectedServices(inspectionId);
+
     const inspectedSpecialtyIds = [];
     for (const locServiceId in inspectedSpecialtyStore.inspectedServices) {
       const locService = inspectedSpecialtyStore.inspectedServices[locServiceId];
@@ -250,9 +281,9 @@ const onInspectionChange = async () => {
       await inspectedSpecialtyStore.loadActingInspectors({ inspectedSpecialtyId: inspectedSpecialtyIds });
     }
   } catch (err) {
-    error.value = 'Failed to load inspected specialties: ' + err.message;
-    console.error('Error loading inspected specialties:', err);
-    toast.error('Failed to load inspected specialties');
+    error.value = 'Failed to load inspection specialties: ' + err.message;
+    console.error('Error loading inspection:', err);
+    toast.error('Failed to load inspection specialties');
   } finally {
     loading.value = false;
   }
@@ -413,13 +444,9 @@ const saveChecklist = async () => {
       throw new Error('No specialty selected');
     }
 
-    // Delete all existing inspection questions for this specialty
-    await inspectionQuestionStore.deleteAllForSpecialty(selectedInspectedSpecialtyId.value);
+    const questionsToSave = [];
 
-    // Add selected questions with persisted sequence (per topic order)
     if (selectedQuestionIds.value.length > 0) {
-      const questionsToSave = [];
-
       if (Object.keys(groupedQuestions.value).length === 0) {
         selectedQuestionIds.value.forEach((item, index) => {
           questionsToSave.push({
@@ -449,12 +476,12 @@ const saveChecklist = async () => {
           }
         }
       }
-
-      await inspectionQuestionStore.addMultipleQuestions(
-        selectedInspectedSpecialtyId.value,
-        questionsToSave
-      );
     }
+
+    await inspectionQuestionStore.upsertChecklist(
+      selectedInspectedSpecialtyId.value,
+      questionsToSave,
+    );
 
     successMessage.value = `Checklist saved successfully! ${selectedQuestionIds.value.length} questions selected.`;
     toast.success('Checklist saved successfully!');
@@ -498,111 +525,75 @@ const totalQuestionCount = computed(() => {
 .input-group {
   display: flex;
   flex-direction: column;
-  gap: 1.5rem;
-  padding: 1.5rem;
-  background-color: #ffffff;
-  border-radius: 8px;
-  box-shadow: 0 2px 8px var(--shadow-color);
-  margin-bottom: 1.5rem;
+  gap: var(--space-6);
+  padding: var(--space-6);
+  background-color: var(--color-white);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-md);
+  margin-bottom: var(--space-6);
 }
 
-.grid-cell1 {
+.checklist-filters {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: var(--space-6);
+  flex-direction: row;
+  align-items: start;
+}
+
+.checklist-actions {
+  display: flex;
+  gap: var(--space-2);
+  align-items: center;
+}
+
+.grid-cell1, .grid-cell2, .grid-cell3 {
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
+  gap: var(--space-2);
 }
 
-.grid-cell1 label {
+.grid-cell1 label, .grid-cell2 label, .grid-cell3 label {
   font-weight: 600;
-  color: var(--primary-color);
-  font-size: 0.95rem;
+  color: var(--color-primary-700);
+  font-size: var(--text-sm);
 }
 
 .info-text {
-  margin-top: 0.45rem;
-  color: #546e7a;
-  font-size: 0.85rem;
+  margin-top: var(--space-1);
+  color: var(--color-gray-700);
+  font-size: var(--text-sm);
 }
 
-.grid-cell1 select {
-  padding: 0.75rem 1rem;
+.grid-cell1 select, .grid-cell2 select, .grid-cell3 select {
+  padding: var(--space-3) var(--space-4);
   border: 1px solid var(--border-color);
-  border-radius: 6px;
-  font-size: 0.95rem;
-  background-color: #ffffff;
-  color: var(--text-dark);
+  border-radius: var(--radius-sm);
+  font-size: var(--text-sm);
+  background-color: var(--color-white);
+  color: var(--color-gray-900);
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: all var(--transition-fast);
 }
 
-.grid-cell1 select:hover {
-  border-color: var(--secondary-color);
-  box-shadow: 0 2px 4px var(--shadow-color);
+.grid-cell1 select:hover, .grid-cell2 select:hover, .grid-cell3 select:hover {
+  border-color: var(--color-primary-500);
+  box-shadow: var(--shadow-sm);
 }
 
-.grid-cell1 select:focus {
+.grid-cell1 select:focus, .grid-cell2 select:focus, .grid-cell3 select:focus {
   outline: none;
-  border-color: var(--secondary-color);
-  box-shadow: 0 0 0 3px rgba(30, 136, 229, 0.1);
+  border-color: var(--color-primary-500);
+  box-shadow: 0 0 0 3px var(--color-primary-100);
 }
 
-.control-buttons {
-  display: flex;
-  gap: 1rem;
-  flex-wrap: wrap;
-}
-
-.btn {
-  padding: 0.75rem 1.5rem;
-  border: none;
-  border-radius: 6px;
-  font-size: 0.95rem;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.2s ease;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-}
-
-.btn-primary {
-  background-color: #4caf50;
-  color: white;
-}
-
-.btn-primary:hover:not(:disabled) {
-  background-color: #45a049;
-  box-shadow: 0 4px 12px rgba(76, 175, 80, 0.3);
-}
-
-.btn-secondary {
-  background-color: #ff9800;
-  color: white;
-}
-
-.btn-secondary:hover:not(:disabled) {
-  background-color: #f57c00;
-  box-shadow: 0 4px 12px rgba(255, 152, 0, 0.3);
-}
-
-.btn-save {
-  background-color: var(--secondary-color);
-  color: white;
-}
-
-.btn-save:hover:not(:disabled) {
-  background-color: #0d47a1;
-  box-shadow: 0 4px 12px rgba(30, 136, 229, 0.3);
-}
-
-.btn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
+.loader {
 }
 
 .loader {
   padding: 2rem;
   text-align: center;
-  font-size: 1rem;
+  font-size: var(--text-base);
   color: var(--primary-color);
 }
 
@@ -611,10 +602,10 @@ const totalQuestionCount = computed(() => {
   justify-content: space-between;
   align-items: center;
   padding: 1rem 1.5rem;
-  background-color: #ffebee;
-  border: 1px solid #ef5350;
+  background-color: var(--color-error-100);
+  border: 1px solid var(--color-error-500);
   border-radius: 6px;
-  color: #c62828;
+  color: var(--color-error-700);
   margin-bottom: 1.5rem;
   animation: slideIn 0.3s ease;
 }
@@ -622,8 +613,8 @@ const totalQuestionCount = computed(() => {
 .error-message .close-error {
   background: none;
   border: none;
-  color: #c62828;
-  font-size: 1.5rem;
+  color: var(--color-error-700);
+  font-size: var(--text-2xl);
   cursor: pointer;
   padding: 0;
   width: 24px;
@@ -640,10 +631,10 @@ const totalQuestionCount = computed(() => {
 
 .success-message {
   padding: 1rem 1.5rem;
-  background-color: #e8f5e9;
-  border: 1px solid #4caf50;
+  background-color: var(--color-success-100);
+  border: 1px solid var(--color-success-500);
   border-radius: 6px;
-  color: #2e7d32;
+  color: var(--color-success-700);
   margin-bottom: 1.5rem;
   animation: slideIn 0.3s ease;
 }
@@ -652,14 +643,14 @@ const totalQuestionCount = computed(() => {
   padding: 2rem;
   text-align: center;
   color: var(--text-dark);
-  background-color: #f5f5f5;
+  background-color: var(--color-gray-100);
   border-radius: 8px;
   border: 1px dashed var(--border-color);
 }
 
 .empty-state p {
   margin: 0;
-  font-size: 1rem;
+  font-size: var(--text-base);
 }
 
 .questions-section {
@@ -673,7 +664,7 @@ const totalQuestionCount = computed(() => {
   justify-content: space-between;
   align-items: center;
   padding: 1.5rem;
-  background-color: #ffffff;
+  background-color: var(--color-white);
   border: 1px solid var(--border-color);
   border-radius: 6px;
   margin-top: 2rem;
@@ -681,7 +672,7 @@ const totalQuestionCount = computed(() => {
 }
 
 .selection-info {
-  font-size: 0.95rem;
+  font-size: var(--text-sm);
   color: var(--primary-color);
   font-weight: 500;
 }
@@ -700,16 +691,17 @@ const totalQuestionCount = computed(() => {
 /* Responsive design */
 @media (max-width: 768px) {
   .input-group {
-    padding: 1rem;
+    padding: var(--space-4);
   }
 
-  .control-buttons {
+  .checklist-filters {
+    grid-template-columns: 1fr;
+  }
+
+  .checklist-actions {
     flex-direction: column;
   }
 
-  .btn {
-    width: 100%;
-  }
 
   .save-section {
     flex-direction: column;

@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia';
-import { authLogin, authLogout, authSession } from '@/services/authServices';
-import { apiAssignmentGroup, apiInspectorByAlfrescoUser } from '@/services/apiServices';
+import { authLogin, authLogout, authSession, authTicket } from '@/services/authServices';
+import { apiAssignmentGroup, apiInspectorByAlfrescoUser, setAlfrescoTicket } from '@/services/apiServices';
 
 function extractStatusCode(error) {
   const match = String(error?.message || '').match(/status code (\d{3})/i);
@@ -36,6 +36,12 @@ export const useAuthStore = defineStore('auth', {
     assignerSpecialtyIds: (state) => {
       return new Set((state.assignerSpecialties || []).map((specialty) => specialty?.id).filter(Boolean));
     },
+    canManageServiceArea: (state) => (serviceAreaId) => {
+      if (!state.hasRole('planner')) return false;
+      const plannerArea = state.inspectorProfile?.serviceAreaId;
+      if (plannerArea === null || plannerArea === undefined) return true;
+      return plannerArea === serviceAreaId;
+    },
   },
 
   actions: {
@@ -58,6 +64,17 @@ export const useAuthStore = defineStore('auth', {
       this.assignerSpecialties = [];
       this.session = null;
       this.csrfToken = null;
+      setAlfrescoTicket(null);
+    },
+
+    async refreshServiceTicket() {
+      if (!this.csrfToken) return;
+      try {
+        const { data } = await authTicket(this.csrfToken);
+        setAlfrescoTicket(data?.ticket || null);
+      } catch {
+        setAlfrescoTicket(null);
+      }
     },
 
     async refreshDomainContext() {
@@ -117,6 +134,7 @@ export const useAuthStore = defineStore('auth', {
       try {
         const { data } = await authSession();
         this.applyAuthPayload(data);
+        await this.refreshServiceTicket();
         void this.refreshDomainContext();
         this.initialized = true;
         this.lastCheckedAt = Date.now();
@@ -146,6 +164,7 @@ export const useAuthStore = defineStore('auth', {
       try {
         const { data } = await authLogin(username, password);
         this.applyAuthPayload(data);
+        await this.refreshServiceTicket();
         void this.refreshDomainContext();
         this.initialized = true;
         this.lastCheckedAt = Date.now();

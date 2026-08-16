@@ -14,7 +14,14 @@ const AUTH_CONFIG = {
   loginRateLimitWindowSeconds: Number(process.env.AUTH_LOGIN_RATE_LIMIT_WINDOW_SECONDS || 300),
   loginRateLimitBlockSeconds: Number(process.env.AUTH_LOGIN_RATE_LIMIT_BLOCK_SECONDS || 600),
   loginRateLimitMaxAttempts: Number(process.env.AUTH_LOGIN_RATE_LIMIT_MAX_ATTEMPTS || 5),
-  ticketEncryptionKey: process.env.AUTH_TICKET_ENCRYPTION_KEY || 'dev-only-ticket-encryption-key-change-me',
+  ticketEncryptionKey: (() => {
+    const envKey = process.env.AUTH_TICKET_ENCRYPTION_KEY;
+    if (envKey) return envKey;
+    if (process.env.NODE_ENV === 'production') {
+      throw new Error('AUTH_TICKET_ENCRYPTION_KEY is required in production');
+    }
+    return 'dev-only-ticket-encryption-key-change-me';
+  })(),
   alfrescoBaseUrl: process.env.ALFRESCO_BASE_URL || '',
 };
 

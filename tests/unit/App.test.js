@@ -57,7 +57,7 @@ describe('App.vue (router navigation)', () => {
     expect(logo.attributes('src')).toContain('compliance-logo');
   });
 
-  it('renders eight navigation links', async () => {
+  it('renders navigation links', async () => {
     const { wrapper } = await mountAppAt();
 
     const links = wrapper.findAll('a.nav-link');
@@ -65,7 +65,7 @@ describe('App.vue (router navigation)', () => {
 
     const labels = links.map((link) => link.text().trim());
     expect(labels).toEqual([
-      'Inspection Manager',
+      'Site Visits',
       'Assign Inspectors',
       'Inspection Checklist',
       'Inspection Plan',
@@ -109,9 +109,9 @@ describe('App.vue (router navigation)', () => {
   });
 
   it('hides logout control when user is not authenticated', async () => {
-    const { wrapper } = await mountAppAt('/inspection');
+    const { wrapper } = await mountAppAt('/site-visit');
 
-    expect(wrapper.find('.logout-button').exists()).toBe(false);
+    expect(wrapper.find('.signed-in-user').exists()).toBe(false);
   });
 
   it('shows logout control for authenticated user and redirects to login on sign out', async () => {
@@ -133,7 +133,7 @@ describe('App.vue (router navigation)', () => {
     });
 
     expect(wrapper.find('.signed-in-user').text()).toContain('fernando.casso');
-    const logoutButton = wrapper.find('.logout-button');
+    const logoutButton = wrapper.find('.btn-danger');
     expect(logoutButton.exists()).toBe(true);
 
     await logoutButton.trigger('click');
