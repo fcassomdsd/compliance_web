@@ -7,6 +7,7 @@ import {
   apiReviewCap,
   apiUpdateCapActionItem,
   apiUploadCapEvidence,
+  apiDeleteCapEvidence,
   apiCreateCapDraft,
   apiUpdateCapDraft,
   apiCapDrafts,
@@ -178,6 +179,19 @@ export const useCapStore = defineStore('cap', {
       try {
         const { data } = await apiUploadCapEvidence(capId, section, file, csrfToken);
         return data;
+      } catch (error) {
+        this.error = error.message;
+        throw error;
+      } finally {
+        this.loading = false;
+      }
+    },
+
+    async deleteCapEvidence({ capId, evidenceNodeId, csrfToken }) {
+      this.loading = true;
+      this.error = null;
+      try {
+        await apiDeleteCapEvidence(capId, evidenceNodeId, csrfToken);
       } catch (error) {
         this.error = error.message;
         throw error;

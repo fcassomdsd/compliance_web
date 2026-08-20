@@ -51,6 +51,7 @@ describe('CorrectiveActionManager.vue', () => {
       fetchCapDetail: vi.fn().mockResolvedValue(undefined),
       updateActionItem: vi.fn().mockResolvedValue(undefined),
       uploadCapEvidence: vi.fn().mockResolvedValue(undefined),
+      deleteCapEvidence: vi.fn().mockResolvedValue(undefined),
     };
     mockAuthStore = { csrfToken: 'csrf-token' };
 
@@ -96,7 +97,7 @@ describe('CorrectiveActionManager.vue', () => {
 
     wrapper.vm.capForm.findingId = 'F-1';
     wrapper.vm.capForm.dueDate = '2026-12-31';
-    wrapper.vm.rcaEvidenceFile = new File(['x'], 'evidence.pdf');
+    wrapper.vm.rcaEvidenceFiles = [new File(['x'], 'evidence.pdf')];
 
     await wrapper.vm.submitForReviewAction();
 
@@ -174,7 +175,7 @@ describe('CorrectiveActionManager.vue', () => {
     await wrapper.vm.$nextTick();
 
     wrapper.vm.editMode = { type: 'draft', draftId: 'DRAFT-9' };
-    wrapper.vm.riskEvidenceFile = new File(['x'], 'evidence.pdf');
+    wrapper.vm.riskEvidenceFiles = [new File(['x'], 'evidence.pdf')];
     await wrapper.vm.submitForReviewAction();
 
     expect(mockCapStore.saveDraft).toHaveBeenCalledWith(expect.objectContaining({ draftId: 'DRAFT-9' }));
@@ -312,7 +313,7 @@ describe('CorrectiveActionManager.vue', () => {
     const wrapper = mountComponent();
     await wrapper.vm.$nextTick();
 
-    wrapper.vm.rcaEvidenceFile = new File(['x'], 'evidence.pdf');
+    wrapper.vm.rcaEvidenceFiles = [new File(['x'], 'evidence.pdf')];
     await wrapper.vm.submitForReviewAction();
     await wrapper.vm.reviewCap();
 
@@ -355,21 +356,28 @@ describe('CorrectiveActionManager.vue', () => {
     expect(mockCapStore.submitCap).not.toHaveBeenCalled();
   });
 
-  it('uploads selected evidence right after a successful submit', async () => {
+  it('uploads every selected evidence file right after a successful submit', async () => {
     const wrapper = mountComponent();
     await wrapper.vm.$nextTick();
 
-    const rcaFile = new File(['x'], 'evidence.pdf');
+    const rcaFile1 = new File(['x'], 'evidence-1.pdf');
+    const rcaFile2 = new File(['z'], 'evidence-2.pdf');
     const riskFile = new File(['y'], 'risk.pdf');
     wrapper.vm.capForm.findingId = 'F-1';
-    wrapper.vm.rcaEvidenceFile = rcaFile;
-    wrapper.vm.riskEvidenceFile = riskFile;
+    wrapper.vm.rcaEvidenceFiles = [rcaFile1, rcaFile2];
+    wrapper.vm.riskEvidenceFiles = [riskFile];
     await wrapper.vm.submitForReviewAction();
 
     expect(mockCapStore.uploadCapEvidence).toHaveBeenCalledWith({
       capId: 'CAP-10',
       section: 'rca',
-      file: rcaFile,
+      file: rcaFile1,
+      csrfToken: 'csrf-token',
+    });
+    expect(mockCapStore.uploadCapEvidence).toHaveBeenCalledWith({
+      capId: 'CAP-10',
+      section: 'rca',
+      file: rcaFile2,
       csrfToken: 'csrf-token',
     });
     expect(mockCapStore.uploadCapEvidence).toHaveBeenCalledWith(
@@ -377,12 +385,38 @@ describe('CorrectiveActionManager.vue', () => {
     );
   });
 
+  it('selecting another file appends to the staged list instead of replacing it', async () => {
+    const wrapper = mountComponent();
+    await wrapper.vm.$nextTick();
+
+    const firstFile = new File(['x'], 'first.pdf');
+    const secondFile = new File(['y'], 'second.pdf');
+
+    wrapper.vm.onEvidenceFileChange({ target: { files: [firstFile], value: '' } }, 'rca');
+    wrapper.vm.onEvidenceFileChange({ target: { files: [secondFile], value: '' } }, 'rca');
+
+    expect(wrapper.vm.rcaEvidenceFiles).toEqual([firstFile, secondFile]);
+  });
+
+  it('removeStagedEvidence removes a single file without touching the others', async () => {
+    const wrapper = mountComponent();
+    await wrapper.vm.$nextTick();
+
+    const firstFile = new File(['x'], 'first.pdf');
+    const secondFile = new File(['y'], 'second.pdf');
+    wrapper.vm.rcaEvidenceFiles = [firstFile, secondFile];
+
+    wrapper.vm.removeStagedEvidence('rca', 0);
+
+    expect(wrapper.vm.rcaEvidenceFiles).toEqual([secondFile]);
+  });
+
   it('saveDraftAction warns that selected evidence is not saved with the draft', async () => {
     const wrapper = mountComponent();
     await wrapper.vm.$nextTick();
 
     wrapper.vm.capForm.findingId = 'F-1';
-    wrapper.vm.rcaEvidenceFile = new File(['x'], 'evidence.pdf');
+    wrapper.vm.rcaEvidenceFiles = [new File(['x'], 'evidence.pdf')];
     await wrapper.vm.saveDraftAction();
 
     expect(wrapper.vm.message).toContain('not saved with drafts');
@@ -445,6 +479,81 @@ describe('CorrectiveActionManager.vue', () => {
 
     expect(wrapper.text()).toContain('My Draft CAPs');
     expect(wrapper.text()).toContain('F-1');
+  });
+
+  it('shows attached evidence with View only (no Remove/upload) for a non-editable CAP', async () => {
+    mockCapStore.selectedCap = {
+      capId: 'CAP-90',
+      acceptanceStatus: 'Accepted',
+      rootCauseAnalysis: { method: 'Fishbone', evidence: [{ nodeId: 'ev-1', name: 'photo.jpg' }] },
+      riskAssessment: { identifiedHazard: 'x', evidence: [] },
+    };
+
+    const wrapper = mountComponent();
+    await wrapper.vm.$nextTick();
+
+    expect(wrapper.text()).toContain('photo.jpg');
+    const listItem = wrapper.findAll('li').find((li) => li.text().includes('photo.jpg'));
+    const buttonLabels = listItem.findAll('button').map((btn) => btn.text());
+    expect(buttonLabels).toContain('View');
+    expect(buttonLabels).not.toContain('Remove');
+    expect(wrapper.find('.evidence-upload').exists()).toBe(false);
+  });
+
+  it('shows Remove and the upload control for a Returned CAP', async () => {
+    mockCapStore.selectedCap = {
+      capId: 'CAP-91',
+      acceptanceStatus: 'Returned',
+      rootCauseAnalysis: { method: 'Fishbone', evidence: [{ nodeId: 'ev-2', name: 'notes.pdf' }] },
+    };
+
+    const wrapper = mountComponent();
+    await wrapper.vm.$nextTick();
+
+    const listItem = wrapper.findAll('li').find((li) => li.text().includes('notes.pdf'));
+    const buttonLabels = listItem.findAll('button').map((btn) => btn.text());
+    expect(buttonLabels).toContain('View');
+    expect(buttonLabels).toContain('Remove');
+    expect(wrapper.find('.evidence-upload').exists()).toBe(true);
+  });
+
+  it('viewEvidence opens the evidence content URL in a new tab', async () => {
+    mockCapStore.selectedCap = { capId: 'CAP-90', acceptanceStatus: 'Accepted' };
+    const openSpy = vi.spyOn(window, 'open').mockImplementation(() => {});
+
+    const wrapper = mountComponent();
+    await wrapper.vm.$nextTick();
+
+    wrapper.vm.viewEvidence({ nodeId: 'ev-1', name: 'photo.jpg' });
+
+    expect(openSpy).toHaveBeenCalledWith(expect.stringContaining('/caps/CAP-90/evidence/ev-1/content'), '_blank', 'noopener');
+    openSpy.mockRestore();
+  });
+
+  it('removing evidence requires confirmation before calling the store', async () => {
+    mockCapStore.selectedCap = { capId: 'CAP-91', acceptanceStatus: 'Returned' };
+
+    const wrapper = mountComponent();
+    await wrapper.vm.$nextTick();
+
+    wrapper.vm.confirmRemoveEvidence({ nodeId: 'ev-2', name: 'notes.pdf' });
+    expect(wrapper.vm.evidenceToRemove).toEqual({ nodeId: 'ev-2', name: 'notes.pdf' });
+    expect(mockCapStore.deleteCapEvidence).not.toHaveBeenCalled();
+
+    wrapper.vm.cancelRemoveEvidence();
+    expect(wrapper.vm.evidenceToRemove).toBe(null);
+    expect(mockCapStore.deleteCapEvidence).not.toHaveBeenCalled();
+
+    wrapper.vm.confirmRemoveEvidence({ nodeId: 'ev-2', name: 'notes.pdf' });
+    await wrapper.vm.removeEvidenceConfirmed();
+
+    expect(mockCapStore.deleteCapEvidence).toHaveBeenCalledWith({
+      capId: 'CAP-91',
+      evidenceNodeId: 'ev-2',
+      csrfToken: 'csrf-token',
+    });
+    expect(wrapper.vm.evidenceToRemove).toBe(null);
+    expect(wrapper.vm.message).toContain('Evidence removed');
   });
 
   it('renders cap detail and error message regions when store state is set', async () => {

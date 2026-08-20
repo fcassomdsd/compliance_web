@@ -624,6 +624,37 @@ export async function apiUploadCapEvidence(capId, section, file, csrfToken) {
   }
 }
 
+export function apiCapEvidenceContentUrl(capId, evidenceNodeId) {
+  if (!capId || !evidenceNodeId) {
+    throw new Error('apiCapEvidenceContentUrl: capId and evidenceNodeId are required');
+  }
+  return `${complianceApiServer}/caps/${encodeURIComponent(capId)}/evidence/${encodeURIComponent(evidenceNodeId)}/content`;
+}
+
+export async function apiDeleteCapEvidence(capId, evidenceNodeId, csrfToken) {
+  try {
+    if (!capId || typeof capId !== 'string') {
+      throw new Error('capId is required');
+    }
+    if (!evidenceNodeId || typeof evidenceNodeId !== 'string') {
+      throw new Error('evidenceNodeId is required');
+    }
+
+    const result = await axios({
+      method: 'delete',
+      url: `${complianceApiServer}/caps/${encodeURIComponent(capId)}/evidence/${encodeURIComponent(evidenceNodeId)}`,
+      headers: buildCsrfHeader(csrfToken),
+      withCredentials: true,
+    });
+    return { data: result.data, status: result.status };
+  } catch (error) {
+    const backendMessage = error?.response?.data?.message || error?.response?.data?.error;
+    const status = error?.response?.status;
+    const detail = backendMessage || error.message;
+    throw new Error(`apiDeleteCapEvidence: ${status ? `[${status}] ` : ''}${detail}`);
+  }
+}
+
 export async function apiCreateFollowUpReport(findingId, payload, csrfToken) {
   try {
     if (!findingId || typeof findingId !== 'string') {

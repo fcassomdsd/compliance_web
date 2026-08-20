@@ -87,7 +87,23 @@
         <p><strong>Main category:</strong> {{ capStore.selectedCap.rootCauseAnalysis.mainCategory || '-' }}</p>
         <p><strong>Root cause:</strong> {{ capStore.selectedCap.rootCauseAnalysis.rootCause || '-' }}</p>
         <p><strong>Contributing factors:</strong> {{ capStore.selectedCap.rootCauseAnalysis.contributingFactors || '-' }}</p>
-        <div class="evidence-upload">
+        <div v-if="capStore.selectedCap.rootCauseAnalysis.evidence?.length" class="evidence-list">
+          <p class="evidence-list-title"><strong>Attachments</strong></p>
+          <ul>
+            <li v-for="item in capStore.selectedCap.rootCauseAnalysis.evidence" :key="item.nodeId">
+              <span class="evidence-name">{{ item.name }}</span>
+              <BaseButton variant="ghost" size="sm" @click="viewEvidence(item)">View</BaseButton>
+              <BaseButton
+                v-if="isCapEditableStatus(capStore.selectedCap.acceptanceStatus)"
+                variant="ghost"
+                size="sm"
+                :disabled="capStore.loading"
+                @click="confirmRemoveEvidence(item)"
+              >Remove</BaseButton>
+            </li>
+          </ul>
+        </div>
+        <div v-if="isCapEditableStatus(capStore.selectedCap.acceptanceStatus)" class="evidence-upload">
           <input type="file" @change="onEvidenceFileChange($event, 'rcaDetail')" />
           <BaseButton variant="ghost" size="sm" :disabled="!rcaDetailEvidenceFile || capStore.loading" @click="uploadDetailEvidence('rca')">Upload RCA Evidence</BaseButton>
         </div>
@@ -102,7 +118,23 @@
         <p><strong>Calculated risk level:</strong> {{ capStore.selectedCap.riskAssessment.calculatedRiskLevel || '-' }}</p>
         <p><strong>Tolerability level:</strong> {{ capStore.selectedCap.riskAssessment.tolerabilityLevel || '-' }}</p>
         <p><strong>Justification:</strong> {{ capStore.selectedCap.riskAssessment.justification || '-' }}</p>
-        <div class="evidence-upload">
+        <div v-if="capStore.selectedCap.riskAssessment.evidence?.length" class="evidence-list">
+          <p class="evidence-list-title"><strong>Attachments</strong></p>
+          <ul>
+            <li v-for="item in capStore.selectedCap.riskAssessment.evidence" :key="item.nodeId">
+              <span class="evidence-name">{{ item.name }}</span>
+              <BaseButton variant="ghost" size="sm" @click="viewEvidence(item)">View</BaseButton>
+              <BaseButton
+                v-if="isCapEditableStatus(capStore.selectedCap.acceptanceStatus)"
+                variant="ghost"
+                size="sm"
+                :disabled="capStore.loading"
+                @click="confirmRemoveEvidence(item)"
+              >Remove</BaseButton>
+            </li>
+          </ul>
+        </div>
+        <div v-if="isCapEditableStatus(capStore.selectedCap.acceptanceStatus)" class="evidence-upload">
           <input type="file" @change="onEvidenceFileChange($event, 'riskDetail')" />
           <BaseButton variant="ghost" size="sm" :disabled="!riskDetailEvidenceFile || capStore.loading" @click="uploadDetailEvidence('risk-assessment')">Upload Risk Assessment Evidence</BaseButton>
         </div>
@@ -211,7 +243,15 @@
             </div>
             <div class="form-field" v-if="editMode.type !== 'returned'">
               <label for="rcaEvidence">Evidence of RCA</label>
-              <input id="rcaEvidence" type="file" @change="onEvidenceFileChange($event, 'rca')" />
+              <input id="rcaEvidence" type="file" multiple @change="onEvidenceFileChange($event, 'rca')" />
+              <div v-if="rcaEvidenceFiles.length" class="evidence-list">
+                <ul>
+                  <li v-for="(file, index) in rcaEvidenceFiles" :key="`${file.name}-${index}`">
+                    <span class="evidence-name">{{ file.name }}</span>
+                    <BaseButton variant="ghost" size="sm" @click="removeStagedEvidence('rca', index)">Remove</BaseButton>
+                  </li>
+                </ul>
+              </div>
             </div>
             <div class="form-field field-span-2" v-else>
               <p class="helper-text">Evidence can be attached from the CAP Detail view below.</p>
@@ -252,7 +292,15 @@
             </div>
             <div class="form-field" v-if="editMode.type !== 'returned'">
               <label for="raEvidence">Evidence</label>
-              <input id="raEvidence" type="file" @change="onEvidenceFileChange($event, 'risk')" />
+              <input id="raEvidence" type="file" multiple @change="onEvidenceFileChange($event, 'risk')" />
+              <div v-if="riskEvidenceFiles.length" class="evidence-list">
+                <ul>
+                  <li v-for="(file, index) in riskEvidenceFiles" :key="`${file.name}-${index}`">
+                    <span class="evidence-name">{{ file.name }}</span>
+                    <BaseButton variant="ghost" size="sm" @click="removeStagedEvidence('risk', index)">Remove</BaseButton>
+                  </li>
+                </ul>
+              </div>
             </div>
             <div class="form-field field-span-2" v-else>
               <p class="helper-text">Evidence can be attached from the CAP Detail view below.</p>
@@ -367,6 +415,15 @@
       @confirm="confirmSubmitWithoutEvidence"
       @cancel="cancelSubmitWithoutEvidence"
     />
+
+    <ModalWindow
+      :show="Boolean(evidenceToRemove)"
+      titulo="Remove evidence"
+      :explanation="`This will permanently remove '${evidenceToRemove?.name || ''}' from this CAP.`"
+      accion="remove this evidence file"
+      @confirm="removeEvidenceConfirmed"
+      @cancel="cancelRemoveEvidence"
+    />
   </BaseManager>
 </template>
 
@@ -380,6 +437,7 @@ import ModalWindow from '@/components/common/ModalWindow.vue';
 import { useCapStore } from '@/stores/capStore';
 import { useAuthStore } from '@/stores/authStore';
 import { formatDate } from '@/utils/formatDate';
+import { apiCapEvidenceContentUrl } from '@/services/apiServices';
 
 const route = useRoute();
 const capStore = useCapStore();
@@ -395,6 +453,7 @@ const showReview = ref(false);
 // being revised in place. { type: 'new' | 'draft' | 'returned', id }
 const editMode = ref({ type: 'new' });
 const showNoEvidenceConfirm = ref(false);
+const evidenceToRemove = ref(null);
 
 function isCapEditableStatus(status) {
   return status === 'Returned';
@@ -455,44 +514,48 @@ const capForm = reactive({
   },
 });
 
-const rcaEvidenceFile = ref(null);
-const riskEvidenceFile = ref(null);
+const rcaEvidenceFiles = ref([]);
+const riskEvidenceFiles = ref([]);
 const rcaDetailEvidenceFile = ref(null);
 const riskDetailEvidenceFile = ref(null);
 
 function onEvidenceFileChange(event, target) {
-  const file = event.target.files?.[0] || null;
+  const selectedFiles = Array.from(event.target.files || []);
   if (target === 'rca') {
-    rcaEvidenceFile.value = file;
+    rcaEvidenceFiles.value = [...rcaEvidenceFiles.value, ...selectedFiles];
   } else if (target === 'risk') {
-    riskEvidenceFile.value = file;
+    riskEvidenceFiles.value = [...riskEvidenceFiles.value, ...selectedFiles];
   } else if (target === 'rcaDetail') {
-    rcaDetailEvidenceFile.value = file;
+    rcaDetailEvidenceFile.value = selectedFiles[0] || null;
   } else if (target === 'riskDetail') {
-    riskDetailEvidenceFile.value = file;
+    riskDetailEvidenceFile.value = selectedFiles[0] || null;
+  }
+  // Clear the input so choosing the same file again still fires 'change'
+  // (each selection is appended to the staged list above, not replaced).
+  event.target.value = '';
+}
+
+function removeStagedEvidence(section, index) {
+  if (section === 'rca') {
+    rcaEvidenceFiles.value = rcaEvidenceFiles.value.filter((_, i) => i !== index);
+  } else if (section === 'risk') {
+    riskEvidenceFiles.value = riskEvidenceFiles.value.filter((_, i) => i !== index);
   }
 }
 
 function hasSelectedEvidence() {
-  return Boolean(rcaEvidenceFile.value || riskEvidenceFile.value);
+  return Boolean(rcaEvidenceFiles.value.length || riskEvidenceFiles.value.length);
 }
 
 async function uploadPendingEvidence(capId) {
-  if (rcaEvidenceFile.value && capId) {
-    await capStore.uploadCapEvidence({
-      capId,
-      section: 'rca',
-      file: rcaEvidenceFile.value,
-      csrfToken: authStore.csrfToken,
-    });
+  if (!capId) {
+    return;
   }
-  if (riskEvidenceFile.value && capId) {
-    await capStore.uploadCapEvidence({
-      capId,
-      section: 'risk-assessment',
-      file: riskEvidenceFile.value,
-      csrfToken: authStore.csrfToken,
-    });
+  for (const file of rcaEvidenceFiles.value) {
+    await capStore.uploadCapEvidence({ capId, section: 'rca', file, csrfToken: authStore.csrfToken });
+  }
+  for (const file of riskEvidenceFiles.value) {
+    await capStore.uploadCapEvidence({ capId, section: 'risk-assessment', file, csrfToken: authStore.csrfToken });
   }
 }
 
@@ -580,8 +643,8 @@ function resetForm() {
   capForm.correctiveActions = [emptyCorrectiveAction()];
   capForm.residualRisk = { probability: '', severity: '', riskLevel: '', justification: '' };
   capForm.effectivenessVerification = { method: '', indicators: '', projectedVerificationDate: '' };
-  rcaEvidenceFile.value = null;
-  riskEvidenceFile.value = null;
+  rcaEvidenceFiles.value = [];
+  riskEvidenceFiles.value = [];
   editMode.value = { type: 'new' };
 }
 
@@ -803,6 +866,39 @@ async function uploadDetailEvidence(section) {
   }
 }
 
+function viewEvidence(item) {
+  window.open(apiCapEvidenceContentUrl(capStore.selectedCap.capId, item.nodeId), '_blank', 'noopener');
+}
+
+function confirmRemoveEvidence(item) {
+  evidenceToRemove.value = item;
+}
+
+function cancelRemoveEvidence() {
+  evidenceToRemove.value = null;
+}
+
+async function removeEvidenceConfirmed() {
+  const item = evidenceToRemove.value;
+  if (!item) {
+    return;
+  }
+  message.value = '';
+  try {
+    await capStore.deleteCapEvidence({
+      capId: capStore.selectedCap.capId,
+      evidenceNodeId: item.nodeId,
+      csrfToken: authStore.csrfToken,
+    });
+    message.value = 'Evidence removed.';
+    await viewCap(capStore.selectedCap.capId);
+  } catch (error) {
+    console.error('Evidence removal failed:', error);
+  } finally {
+    evidenceToRemove.value = null;
+  }
+}
+
 async function reviewCap() {
   message.value = '';
   try {
@@ -958,6 +1054,41 @@ onMounted(async () => {
   align-items: center;
   gap: var(--space-2);
   margin-top: var(--space-2);
+}
+
+.evidence-list {
+  margin-top: var(--space-2);
+}
+
+.evidence-list-title {
+  margin: 0 0 var(--space-1);
+  font-size: var(--text-sm);
+  color: var(--color-primary-700);
+}
+
+.evidence-list ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.evidence-list li {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  background: var(--color-gray-50);
+}
+
+.evidence-name {
+  flex: 1;
+  font-size: var(--text-sm);
+  overflow-wrap: anywhere;
 }
 
 .action-item-card {
