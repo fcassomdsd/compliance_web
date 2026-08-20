@@ -39,7 +39,7 @@
             <td>{{ cap.capId }}</td>
             <td>{{ cap.acceptanceStatus }}</td>
             <td>{{ cap.responsibleEntity }}</td>
-            <td>{{ cap.dueDate || '-' }}</td>
+            <td>{{ formatDate(cap.dueDate) || '-' }}</td>
             <td><BaseButton variant="ghost" size="sm" @click="viewCap(cap.capId)">View</BaseButton></td>
           </tr>
         </tbody>
@@ -49,7 +49,7 @@
     <section v-if="capStore.selectedCap" class="card detail-panel">
       <h3>CAP Detail: {{ capStore.selectedCap.capId }}</h3>
       <p><strong>Acceptance status:</strong> {{ capStore.selectedCap.acceptanceStatus || '-' }}</p>
-      <p><strong>Due date:</strong> {{ capStore.selectedCap.dueDate || '-' }}</p>
+      <p><strong>Due date:</strong> {{ formatDate(capStore.selectedCap.dueDate) || '-' }}</p>
       <p><strong>Action items:</strong> {{ capStore.selectedCap.correctiveActions?.length || 0 }}</p>
       <p><strong>Follow-up reports:</strong> {{ capStore.selectedCap.followUpReports?.length || 0 }}</p>
 
@@ -103,7 +103,7 @@
               <td>{{ item.description }}</td>
               <td>{{ item.priority || '-' }}</td>
               <td>{{ item.responsiblePerson }}</td>
-              <td>{{ item.deadline }}</td>
+              <td>{{ formatDate(item.deadline) }}</td>
               <td>
                 <select v-model="item.itemStatus">
                   <option value="Open">Open</option>
@@ -131,7 +131,7 @@
         <h4>Effectiveness Verification</h4>
         <p><strong>Method:</strong> {{ capStore.selectedCap.effectivenessVerification.method || '-' }}</p>
         <p><strong>Indicators:</strong> {{ capStore.selectedCap.effectivenessVerification.indicators || '-' }}</p>
-        <p><strong>Projected verification date:</strong> {{ capStore.selectedCap.effectivenessVerification.projectedVerificationDate || '-' }}</p>
+        <p><strong>Projected verification date:</strong> {{ formatDate(capStore.selectedCap.effectivenessVerification.projectedVerificationDate) || '-' }}</p>
       </div>
     </section>
 
@@ -156,72 +156,74 @@
         </div>
       </div>
 
-      <div class="section-card">
-        <h4 class="section-title">1. Root Cause Analysis</h4>
-        <div class="form-grid">
-          <div class="form-field">
-            <label for="rcaMethod">Method used</label>
-            <select id="rcaMethod" v-model="capForm.rootCauseAnalysis.method">
-              <option v-for="method in rcaMethods" :key="method" :value="method">{{ method }}</option>
-            </select>
-          </div>
-          <div v-if="capForm.rootCauseAnalysis.method === 'Other'" class="form-field">
-            <label for="rcaOtherMethodDescription">Other method description</label>
-            <input id="rcaOtherMethodDescription" v-model="capForm.rootCauseAnalysis.otherMethodDescription" type="text" />
-          </div>
-          <div class="form-field">
-            <label for="rcaMainCategory">Main category</label>
-            <input id="rcaMainCategory" v-model="capForm.rootCauseAnalysis.mainCategory" type="text" />
-          </div>
-          <div class="form-field field-span-2">
-            <label for="rootCause">Root cause</label>
-            <textarea id="rootCause" v-model="capForm.rootCauseAnalysis.rootCause" rows="2" />
-          </div>
-          <div class="form-field field-span-2">
-            <label for="contributingFactors">Contributing factors</label>
-            <textarea id="contributingFactors" v-model="capForm.rootCauseAnalysis.contributingFactors" rows="2" />
-          </div>
-          <div class="form-field">
-            <label for="rcaEvidence">Evidence of RCA</label>
-            <input id="rcaEvidence" type="file" @change="onEvidenceFileChange($event, 'rca')" />
+      <div class="split-grid">
+        <div class="section-card">
+          <h4 class="section-title">1. Root Cause Analysis</h4>
+          <div class="form-grid">
+            <div class="form-field">
+              <label for="rcaMethod">Method used</label>
+              <select id="rcaMethod" v-model="capForm.rootCauseAnalysis.method">
+                <option v-for="method in rcaMethods" :key="method" :value="method">{{ method }}</option>
+              </select>
+            </div>
+            <div v-if="capForm.rootCauseAnalysis.method === 'Other'" class="form-field">
+              <label for="rcaOtherMethodDescription">Other method description</label>
+              <input id="rcaOtherMethodDescription" v-model="capForm.rootCauseAnalysis.otherMethodDescription" type="text" />
+            </div>
+            <div class="form-field">
+              <label for="rcaMainCategory">Main category</label>
+              <input id="rcaMainCategory" v-model="capForm.rootCauseAnalysis.mainCategory" type="text" />
+            </div>
+            <div class="form-field field-span-2">
+              <label for="rootCause">Root cause</label>
+              <textarea id="rootCause" v-model="capForm.rootCauseAnalysis.rootCause" rows="2" />
+            </div>
+            <div class="form-field field-span-2">
+              <label for="contributingFactors">Contributing factors</label>
+              <textarea id="contributingFactors" v-model="capForm.rootCauseAnalysis.contributingFactors" rows="2" />
+            </div>
+            <div class="form-field">
+              <label for="rcaEvidence">Evidence of RCA</label>
+              <input id="rcaEvidence" type="file" @change="onEvidenceFileChange($event, 'rca')" />
+            </div>
           </div>
         </div>
-      </div>
 
-      <div class="section-card">
-        <h4 class="section-title">2. Risk Assessment</h4>
-        <div class="form-grid">
-          <div class="form-field">
-            <label for="raHazard">Identified hazard</label>
-            <input id="raHazard" v-model="capForm.riskAssessment.hazard" type="text" />
-          </div>
-          <div class="form-field">
-            <label for="raConsequence">Potential consequence</label>
-            <input id="raConsequence" v-model="capForm.riskAssessment.consequence" type="text" />
-          </div>
-          <div class="form-field">
-            <label for="raProbability">Probability</label>
-            <input id="raProbability" v-model="capForm.riskAssessment.probability" type="text" />
-          </div>
-          <div class="form-field">
-            <label for="raSeverity">Severity</label>
-            <input id="raSeverity" v-model="capForm.riskAssessment.severity" type="text" />
-          </div>
-          <div class="form-field">
-            <label for="raCalculatedRiskLevel">Calculated risk level</label>
-            <input id="raCalculatedRiskLevel" v-model="capForm.riskAssessment.calculatedRiskLevel" type="text" />
-          </div>
-          <div class="form-field">
-            <label for="raTolerabilityLevel">Tolerability level</label>
-            <input id="raTolerabilityLevel" v-model="capForm.riskAssessment.tolerabilityLevel" type="text" />
-          </div>
-          <div class="form-field field-span-2">
-            <label for="raJustification">Justification</label>
-            <textarea id="raJustification" v-model="capForm.riskAssessment.justification" rows="2" />
-          </div>
-          <div class="form-field">
-            <label for="raEvidence">Evidence</label>
-            <input id="raEvidence" type="file" @change="onEvidenceFileChange($event, 'risk')" />
+        <div class="section-card">
+          <h4 class="section-title">2. Risk Assessment</h4>
+          <div class="form-grid">
+            <div class="form-field">
+              <label for="raHazard">Identified hazard</label>
+              <input id="raHazard" v-model="capForm.riskAssessment.hazard" type="text" />
+            </div>
+            <div class="form-field">
+              <label for="raConsequence">Potential consequence</label>
+              <input id="raConsequence" v-model="capForm.riskAssessment.consequence" type="text" />
+            </div>
+            <div class="form-field">
+              <label for="raProbability">Probability</label>
+              <input id="raProbability" v-model="capForm.riskAssessment.probability" type="text" />
+            </div>
+            <div class="form-field">
+              <label for="raSeverity">Severity</label>
+              <input id="raSeverity" v-model="capForm.riskAssessment.severity" type="text" />
+            </div>
+            <div class="form-field">
+              <label for="raCalculatedRiskLevel">Calculated risk level</label>
+              <input id="raCalculatedRiskLevel" v-model="capForm.riskAssessment.calculatedRiskLevel" type="text" />
+            </div>
+            <div class="form-field">
+              <label for="raTolerabilityLevel">Tolerability level</label>
+              <input id="raTolerabilityLevel" v-model="capForm.riskAssessment.tolerabilityLevel" type="text" />
+            </div>
+            <div class="form-field field-span-2">
+              <label for="raJustification">Justification</label>
+              <textarea id="raJustification" v-model="capForm.riskAssessment.justification" rows="2" />
+            </div>
+            <div class="form-field">
+              <label for="raEvidence">Evidence</label>
+              <input id="raEvidence" type="file" @change="onEvidenceFileChange($event, 'risk')" />
+            </div>
           </div>
         </div>
       </div>
@@ -253,42 +255,44 @@
         </div>
       </div>
 
-      <div class="section-card">
-        <h4 class="section-title">4. Expected Residual Risk</h4>
-        <div class="form-grid">
-          <div class="form-field">
-            <label for="residualProbability">Probability</label>
-            <input id="residualProbability" v-model="capForm.residualRisk.probability" type="text" />
-          </div>
-          <div class="form-field">
-            <label for="residualSeverity">Severity</label>
-            <input id="residualSeverity" v-model="capForm.residualRisk.severity" type="text" />
-          </div>
-          <div class="form-field field-span-2">
-            <label for="residualRiskLevel">Residual risk level</label>
-            <input id="residualRiskLevel" v-model="capForm.residualRisk.riskLevel" type="text" />
-          </div>
-          <div class="form-field field-span-2">
-            <label for="residualJustification">Justification</label>
-            <textarea id="residualJustification" v-model="capForm.residualRisk.justification" rows="2" />
+      <div class="split-grid">
+        <div class="section-card">
+          <h4 class="section-title">4. Expected Residual Risk</h4>
+          <div class="form-grid">
+            <div class="form-field">
+              <label for="residualProbability">Probability</label>
+              <input id="residualProbability" v-model="capForm.residualRisk.probability" type="text" />
+            </div>
+            <div class="form-field">
+              <label for="residualSeverity">Severity</label>
+              <input id="residualSeverity" v-model="capForm.residualRisk.severity" type="text" />
+            </div>
+            <div class="form-field field-span-2">
+              <label for="residualRiskLevel">Residual risk level</label>
+              <input id="residualRiskLevel" v-model="capForm.residualRisk.riskLevel" type="text" />
+            </div>
+            <div class="form-field field-span-2">
+              <label for="residualJustification">Justification</label>
+              <textarea id="residualJustification" v-model="capForm.residualRisk.justification" rows="2" />
+            </div>
           </div>
         </div>
-      </div>
 
-      <div class="section-card">
-        <h4 class="section-title">5. Effectiveness Verification</h4>
-        <div class="form-grid">
-          <div class="form-field">
-            <label for="verificationMethod">Method</label>
-            <input id="verificationMethod" v-model="capForm.effectivenessVerification.method" type="text" />
-          </div>
-          <div class="form-field">
-            <label for="verificationIndicators">Indicator(s)</label>
-            <textarea id="verificationIndicators" v-model="capForm.effectivenessVerification.indicators" rows="2" />
-          </div>
-          <div class="form-field">
-            <label for="projectedVerificationDate">Projected date of verification</label>
-            <input id="projectedVerificationDate" v-model="capForm.effectivenessVerification.projectedVerificationDate" type="date" />
+        <div class="section-card">
+          <h4 class="section-title">5. Effectiveness Verification</h4>
+          <div class="form-grid">
+            <div class="form-field">
+              <label for="verificationMethod">Method</label>
+              <input id="verificationMethod" v-model="capForm.effectivenessVerification.method" type="text" />
+            </div>
+            <div class="form-field">
+              <label for="verificationIndicators">Indicator(s)</label>
+              <textarea id="verificationIndicators" v-model="capForm.effectivenessVerification.indicators" rows="2" />
+            </div>
+            <div class="form-field">
+              <label for="projectedVerificationDate">Projected date of verification</label>
+              <input id="projectedVerificationDate" v-model="capForm.effectivenessVerification.projectedVerificationDate" type="date" />
+            </div>
           </div>
         </div>
       </div>
@@ -327,6 +331,7 @@ import BaseButton from '@/components/base/BaseButton.vue';
 import ScopePicker from '@/components/common/ScopePicker.vue';
 import { useCapStore } from '@/stores/capStore';
 import { useAuthStore } from '@/stores/authStore';
+import { formatDate } from '@/utils/formatDate';
 
 const route = useRoute();
 const capStore = useCapStore();
@@ -764,6 +769,10 @@ onMounted(async () => {
 }
 
 @media (max-width: 768px) {
+  .split-grid {
+    grid-template-columns: 1fr;
+  }
+
   .form-grid {
     grid-template-columns: 1fr;
   }

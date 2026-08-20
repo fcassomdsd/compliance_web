@@ -193,7 +193,7 @@ describe('FindingManager.vue', () => {
     await followUpButtons[0].trigger('click');
     await followUpButtons[1].trigger('click');
 
-    expect(mockRouter.push).toHaveBeenNthCalledWith(1, { name: 'followUps', query: { findingId: 'F-9' } });
-    expect(mockRouter.push).toHaveBeenNthCalledWith(2, { name: 'followUps', query: { findingId: 'F-1' } });
+    expect(mockRouter.push).toHaveBeenNthCalledWith(1, { name: 'followUps', query: { findingId: 'F-1' } });
+    expect(mockRouter.push).toHaveBeenNthCalledWith(2, { name: 'followUps', query: { findingId: 'F-9' } });
   });
 });

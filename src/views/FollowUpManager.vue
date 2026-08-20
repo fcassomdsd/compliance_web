@@ -1,24 +1,24 @@
 <template>
   <BaseManager title="Follow-ups">
-    <ScopePicker
-      v-model="scope"
-      mode="follow-ups"
-      title="Follow-up Scope"
-      :loading="followUpStore.loading"
-      :show-provider-id="true"
-      :show-status="true"
-      :show-cap-overdue-only="false"
-      :show-solution-overdue-only="false"
-      :show-domain="true"
-      :show-inspection-id="true"
-      :presets="[]"
-      :show-follow-up-type="true"
-      @search="loadFollowUps"
-      @reset="loadFollowUps"
-    />
-
     <section class="card">
       <h3>Follow-up Listing</h3>
+      <ScopePicker
+        v-model="scope"
+        mode="follow-ups"
+        title="Follow-up Scope"
+        :loading="followUpStore.loading"
+        :show-provider-id="true"
+        :show-status="true"
+        :show-cap-overdue-only="false"
+        :show-solution-overdue-only="false"
+        :show-domain="true"
+        :show-inspection-id="true"
+        :presets="[]"
+        :show-follow-up-type="true"
+        @search="loadFollowUps"
+        @reset="loadFollowUps"
+      />
+
       <table class="data-table">
         <thead>
           <tr>
@@ -52,36 +52,56 @@
     <section v-if="showForm" class="card">
       <h3>Register Follow-up</h3>
       <div class="form-grid">
-        <label for="followFindingId">Finding ID</label>
-        <input id="followFindingId" v-model="form.findingId" type="text" />
+        <div class="form-field">
+          <label for="followFindingId">Finding ID</label>
+          <input id="followFindingId" v-model="form.findingId" type="text" />
+        </div>
 
-        <label for="followType">Follow-up Type</label>
-        <select id="followType" v-model="form.followUpType">
-          <option v-for="type in followUpTypes" :key="type" :value="type">{{ type }}</option>
-        </select>
+        <div class="form-field">
+          <label for="followType">Follow-up Type</label>
+          <select id="followType" v-model="form.followUpType">
+            <option v-for="type in followUpTypes" :key="type" :value="type">{{ type }}</option>
+          </select>
+        </div>
 
-        <label for="followInheritedCapId">Inherited CAP ID (optional)</label>
-        <input id="followInheritedCapId" v-model="form.inheritedCapId" type="text" />
+        <div class="form-field">
+          <label for="followInheritedCapId">Inherited CAP ID (optional)</label>
+          <input id="followInheritedCapId" v-model="form.inheritedCapId" type="text" />
+        </div>
 
-        <label for="followDate">Follow-up Date</label>
-        <input id="followDate" v-model="form.followUpDate" type="datetime-local" />
+        <div class="form-field">
+          <label for="followDate">Follow-up Date</label>
+          <input id="followDate" v-model="form.followUpDate" type="datetime-local" />
+        </div>
 
-        <label for="followPercent">Percent Complete</label>
-        <input id="followPercent" v-model.number="form.percentComplete" type="number" min="0" max="100" />
+        <div class="form-field">
+          <label for="followPercent">Percent Complete</label>
+          <input id="followPercent" v-model.number="form.percentComplete" type="number" min="0" max="100" />
+        </div>
 
-        <label for="followClosed">Finding Closed</label>
-        <input id="followClosed" v-model="form.findingClosed" type="checkbox" />
+        <div class="form-field">
+          <label for="followClosed">Finding Closed</label>
+          <input id="followClosed" v-model="form.findingClosed" type="checkbox" />
+        </div>
 
-        <label for="followEffective">Effectiveness Confirmed</label>
-        <input id="followEffective" v-model="form.effectivenessConfirmed" type="checkbox" />
+        <div class="form-field">
+          <label for="followEffective">Effectiveness Confirmed</label>
+          <input id="followEffective" v-model="form.effectivenessConfirmed" type="checkbox" />
+        </div>
 
-        <label for="followClosureDate">Closure Date</label>
-        <input id="followClosureDate" v-model="form.followUpClosureDate" type="date" />
+        <div class="form-field">
+          <label for="followClosureDate">Closure Date</label>
+          <input id="followClosureDate" v-model="form.followUpClosureDate" type="date" />
+        </div>
 
-        <label for="followMethod">Verification Method</label>
-        <input id="followMethod" v-model="form.closureVerificationMethod" type="text" />
+        <div class="form-field">
+          <label for="followMethod">Verification Method</label>
+          <input id="followMethod" v-model="form.closureVerificationMethod" type="text" />
+        </div>
       </div>
-      <BaseButton variant="primary" @click="createFollowUp" :disabled="followUpStore.loading">Create Follow-up</BaseButton>
+      <div class="form-actions">
+        <BaseButton variant="primary" @click="createFollowUp" :disabled="followUpStore.loading">Create Follow-up</BaseButton>
+      </div>
     </section>
 
     <p v-if="searchErrorMessage" class="error-message">{{ searchErrorMessage }}</p>
@@ -215,31 +235,50 @@ onMounted(async () => {
 
 .form-grid {
   display: grid;
-  grid-template-columns: 1fr;
-  gap: var(--space-2);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-4);
   margin-bottom: var(--space-3);
+}
+
+.form-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.field-span-2 {
+  grid-column: 1 / -1;
 }
 
 .form-grid input,
 .form-grid select,
 .form-grid textarea {
+  width: 100%;
   padding: var(--space-3) var(--space-4);
   border: 1px solid var(--border-color);
   border-radius: var(--radius-md);
   font-family: inherit;
   font-size: var(--text-base);
   color: var(--color-gray-900);
+  box-sizing: border-box;
 }
 
 .form-grid input[type="checkbox"] {
   width: auto;
-  margin-top: var(--space-2);
 }
 
 .form-grid label {
   font-weight: 600;
   font-size: var(--text-sm);
   color: var(--color-primary-700);
+}
+
+.form-actions {
+  grid-column: 1 / -1;
+  display: flex;
+  justify-content: center;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
 }
 
 .error-message {
@@ -260,5 +299,19 @@ onMounted(async () => {
   background-color: var(--color-primary-700);
   color: var(--color-white);
   border-color: var(--color-primary-700);
+}
+
+@media (max-width: 768px) {
+  .form-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .field-span-2 {
+    grid-column: auto;
+  }
+
+  .form-actions {
+    justify-content: flex-start;
+  }
 }
 </style>
