@@ -37,6 +37,8 @@ Pseudo-rule:
 | /api/caps/drafts/:draftId | capDraftUpdateApi | true | cap_entry, admin | Save draft CAP content (PATCH) |
 | /api/caps/drafts/:draftId | capDraftDeleteApi | true | cap_entry, admin | Discard a draft CAP (DELETE) |
 | /api/caps/drafts/:draftId/submit | capDraftSubmitApi | true | cap_entry, admin | Promote a draft into a real, Pending-review CAP |
+| /api/caps/:capId/evidence/:evidenceNodeId/content | capEvidenceContentApi | true | inspector, planner, cap_entry, admin | View/download RCA or Risk Assessment evidence (never gated by CAP status) |
+| /api/caps/:capId/evidence/:evidenceNodeId | capEvidenceDeleteApi | true | cap_entry, admin | Remove evidence (Returned CAPs only; DELETE) |
 | /forbidden | forbidden | true | (none) | UX page for denied role |
 | /login | login | false | (none) | Login entry point |
 | /:pathMatch(.*)* | notFound | false | (none) | Catch-all |

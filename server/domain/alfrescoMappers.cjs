@@ -125,6 +125,18 @@ function mapEffectivenessVerificationNode(node) {
   };
 }
 
+async function listEvidenceForSection({ alfrescoClient, ticket, sectionNodeId }) {
+  if (!sectionNodeId) {
+    return [];
+  }
+  const evidenceNodes = await alfrescoClient.listTargetAssociations({
+    ticket,
+    nodeId: sectionNodeId,
+    assocType: 'vso:relatedEvidence',
+  });
+  return evidenceNodes.map(mapEvidenceItemNode);
+}
+
 async function getCapChildSections({ alfrescoClient, ticket, capNodeId }) {
   const [rcaNodes, raNodes, actionItemNodes, residualRiskNodes, effectivenessNodes] = await Promise.all([
     alfrescoClient.listChildrenByType({ ticket, parentNodeId: capNodeId, nodeType: 'vso:rootCauseAnalysis' }),
@@ -138,9 +150,23 @@ async function getCapChildSections({ alfrescoClient, ticket, capNodeId }) {
     .map(mapCorrectiveActionItemNode)
     .sort((a, b) => (Number(a.sequenceNumber) || 0) - (Number(b.sequenceNumber) || 0));
 
+  const [rcaEvidence, riskEvidence] = await Promise.all([
+    listEvidenceForSection({ alfrescoClient, ticket, sectionNodeId: rcaNodes[0]?.id }),
+    listEvidenceForSection({ alfrescoClient, ticket, sectionNodeId: raNodes[0]?.id }),
+  ]);
+
+  const rootCauseAnalysis = mapRootCauseAnalysisNode(rcaNodes[0]);
+  if (rootCauseAnalysis) {
+    rootCauseAnalysis.evidence = rcaEvidence;
+  }
+  const riskAssessment = mapRiskAssessmentNode(raNodes[0]);
+  if (riskAssessment) {
+    riskAssessment.evidence = riskEvidence;
+  }
+
   return {
-    rootCauseAnalysis: mapRootCauseAnalysisNode(rcaNodes[0]),
-    riskAssessment: mapRiskAssessmentNode(raNodes[0]),
+    rootCauseAnalysis,
+    riskAssessment,
     correctiveActions,
     residualRisk: mapResidualRiskNode(residualRiskNodes[0]),
     effectivenessVerification: mapEffectivenessVerificationNode(effectivenessNodes[0]),
@@ -191,6 +217,7 @@ module.exports = {
   mapResidualRiskNode,
   mapEffectivenessVerificationNode,
   getCapChildSections,
+  listEvidenceForSection,
   resolveFindingIdForCap,
   getFollowUpReportsForFinding,
 };

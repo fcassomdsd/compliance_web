@@ -67,6 +67,8 @@ function buildFixture() {
     capNode,
     capSectionChildren: new Map(),
     deletedNodeIds: [],
+    evidenceAssociations: new Map(),
+    nodeContents: new Map(),
   };
 }
 
@@ -169,6 +171,36 @@ async function buildApp({ roles = ['cap_entry'], username = 'tester', now = new 
       for (const [key, nodes] of fixture.capSectionChildren.entries()) {
         fixture.capSectionChildren.set(key, nodes.filter((node) => node.id !== nodeId));
       }
+      for (const [sectionId, evidenceNodes] of fixture.evidenceAssociations.entries()) {
+        fixture.evidenceAssociations.set(sectionId, evidenceNodes.filter((node) => node.id !== nodeId));
+      }
+    },
+    createTargetAssociation: async ({ sourceNodeId, targetNodeId, assocType }) => {
+      if (assocType === 'vso:relatedEvidence') {
+        let targetNode = null;
+        for (const nodes of fixture.capSectionChildren.values()) {
+          const found = nodes.find((node) => node.id === targetNodeId);
+          if (found) {
+            targetNode = found;
+            break;
+          }
+        }
+        const existing = fixture.evidenceAssociations.get(sourceNodeId) || [];
+        fixture.evidenceAssociations.set(sourceNodeId, [...existing, targetNode || { id: targetNodeId }]);
+      }
+      return { id: `${sourceNodeId}->${targetNodeId}` };
+    },
+    putNodeContent: async ({ nodeId }) => {
+      return { id: nodeId };
+    },
+    listTargetAssociations: async ({ nodeId, assocType }) => {
+      if (assocType !== 'vso:relatedEvidence') {
+        return [];
+      }
+      return fixture.evidenceAssociations.get(nodeId) || [];
+    },
+    getNodeContent: async ({ nodeId }) => {
+      return fixture.nodeContents.get(nodeId) || { buffer: Buffer.from(''), contentType: 'application/octet-stream' };
     },
     updateNodeProperties: async ({ nodeId, properties }) => {
       if (nodeId === fixture.findingNode.id) {
@@ -564,5 +596,88 @@ describe('PATCH /api/caps/:capId/review preconditions', () => {
 
     expect(response.status).toBe(200);
     expect(response.body.cap.acceptanceStatus).toBe('Accepted');
+  });
+});
+
+describe('CAP evidence management (view/remove)', () => {
+  function seedRcaEvidence(fixture, { evidenceNodeId = 'evidence-1', filename = 'photo.jpg', mimeType = 'image/jpeg' } = {}) {
+    const sectionNode = { id: 'rca-section-1', parentId: fixture.capNode.id, nodeType: 'vso:rootCauseAnalysis', properties: { 'vso:rcaMethod': 'Fishbone' } };
+    fixture.capSectionChildren.set(`${fixture.capNode.id}:vso:rootCauseAnalysis`, [sectionNode]);
+
+    const evidenceNode = {
+      id: evidenceNodeId,
+      name: `EV-${evidenceNodeId}-${filename}`,
+      properties: { 'vso:evidenceId': `EV-${evidenceNodeId}`, 'vso:evidenceType': mimeType, 'vso:evidenceRole': 'RCA Evidence' },
+    };
+    fixture.evidenceAssociations.set(sectionNode.id, [evidenceNode]);
+    fixture.nodeContents.set(evidenceNodeId, { buffer: Buffer.from('file-bytes'), contentType: mimeType });
+
+    return { sectionNode, evidenceNode };
+  }
+
+  it('includes attached evidence in the CAP detail response', async () => {
+    const { app, fixture } = await buildApp();
+    seedRcaEvidence(fixture);
+
+    const response = await request(app)
+      .get(`/api/caps/${fixture.capNode.properties['vso:capId']}`)
+      .set('Cookie', 'compliance_session_id=session-1');
+
+    expect(response.status).toBe(200);
+    expect(response.body.rootCauseAnalysis.evidence).toHaveLength(1);
+    expect(response.body.rootCauseAnalysis.evidence[0].name).toContain('photo.jpg');
+  });
+
+  it('streams evidence content regardless of CAP status (view is never gated)', async () => {
+    const { app, fixture } = await buildApp();
+    fixture.capNode.properties['vso:acceptanceStatus'] = 'Accepted';
+    const { evidenceNode } = seedRcaEvidence(fixture);
+
+    const response = await request(app)
+      .get(`/api/caps/${fixture.capNode.properties['vso:capId']}/evidence/${evidenceNode.id}/content`)
+      .set('Cookie', 'compliance_session_id=session-1');
+
+    expect(response.status).toBe(200);
+    expect(response.headers['content-type']).toContain('image/jpeg');
+    expect(Buffer.from(response.body).toString()).toBe('file-bytes');
+  });
+
+  it('404s when the evidence node does not belong to this CAP', async () => {
+    const { app, fixture } = await buildApp();
+    seedRcaEvidence(fixture);
+
+    const response = await request(app)
+      .get(`/api/caps/${fixture.capNode.properties['vso:capId']}/evidence/not-a-real-evidence-id/content`)
+      .set('Cookie', 'compliance_session_id=session-1');
+
+    expect(response.status).toBe(404);
+  });
+
+  it('removes evidence from a Returned CAP', async () => {
+    const { app, fixture } = await buildApp();
+    const { sectionNode, evidenceNode } = seedRcaEvidence(fixture);
+
+    const response = await request(app)
+      .delete(`/api/caps/${fixture.capNode.properties['vso:capId']}/evidence/${evidenceNode.id}`)
+      .set('Cookie', 'compliance_session_id=session-1')
+      .set('x-csrf-token', 'csrf-token-1');
+
+    expect(response.status).toBe(204);
+    expect(fixture.deletedNodeIds).toContain(evidenceNode.id);
+    expect(fixture.evidenceAssociations.get(sectionNode.id)).toHaveLength(0);
+  });
+
+  it('rejects removing evidence from a CAP that is not Returned', async () => {
+    const { app, fixture } = await buildApp();
+    fixture.capNode.properties['vso:acceptanceStatus'] = 'Pending review';
+    const { evidenceNode } = seedRcaEvidence(fixture);
+
+    const response = await request(app)
+      .delete(`/api/caps/${fixture.capNode.properties['vso:capId']}/evidence/${evidenceNode.id}`)
+      .set('Cookie', 'compliance_session_id=session-1')
+      .set('x-csrf-token', 'csrf-token-1');
+
+    expect(response.status).toBe(409);
+    expect(fixture.deletedNodeIds).not.toContain(evidenceNode.id);
   });
 });

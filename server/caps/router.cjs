@@ -10,6 +10,7 @@ const {
   mapEvidenceItemNode,
   mapCorrectiveActionItemNode,
   getCapChildSections,
+  listEvidenceForSection,
   resolveFindingIdForCap,
   getFollowUpReportsForFinding,
 } = require('../domain/alfrescoMappers.cjs');
@@ -345,6 +346,24 @@ async function uploadEvidenceForSection({ alfrescoClient, ticket, capId, section
   });
 
   return { status: 201, body: { evidence: mapEvidenceItemNode(evidenceNode) } };
+}
+
+// Confirms an evidence node actually belongs to this CAP's RCA or Risk
+// Assessment section, rather than trusting a client-supplied node id
+// blindly — prevents one CAP's evidence being fetched/deleted via another
+// CAP's URL.
+async function findEvidenceNodeForCap({ alfrescoClient, ticket, capNode }, evidenceNodeId) {
+  const [rcaNodes, raNodes] = await Promise.all([
+    alfrescoClient.listChildrenByType({ ticket, parentNodeId: capNode.id, nodeType: 'vso:rootCauseAnalysis' }),
+    alfrescoClient.listChildrenByType({ ticket, parentNodeId: capNode.id, nodeType: 'vso:riskAssessment' }),
+  ]);
+
+  const [rcaEvidence, raEvidence] = await Promise.all([
+    listEvidenceForSection({ alfrescoClient, ticket, sectionNodeId: rcaNodes[0]?.id }),
+    listEvidenceForSection({ alfrescoClient, ticket, sectionNodeId: raNodes[0]?.id }),
+  ]);
+
+  return [...rcaEvidence, ...raEvidence].find((item) => item.nodeId === evidenceNodeId) || null;
 }
 
 function escapeAftsValue(value) {
@@ -1324,6 +1343,85 @@ function createCapsRouter({ auth, alfrescoClient, capDraftRepository, now = () =
         return res
           .status(status && status >= 400 && status < 500 ? status : 502)
           .json(buildError('EVIDENCE_UPLOAD_FAILED', extractRepositoryErrorMessage(error)));
+      }
+    }
+  );
+
+  router.get(
+    '/caps/:capId/evidence/:evidenceNodeId/content',
+    auth.authenticate,
+    auth.authorize(['inspector', 'planner', 'admin', 'cap_entry']),
+    async (req, res) => {
+      try {
+        const capNode = await alfrescoClient.searchCapByBusinessId({
+          ticket: req.auth.ticket,
+          capId: req.params.capId,
+        });
+        if (!capNode) {
+          return res.status(404).json(buildError('CAP_NOT_FOUND', 'Corrective action not found'));
+        }
+
+        const evidence = await findEvidenceNodeForCap(
+          { alfrescoClient, ticket: req.auth.ticket, capNode },
+          req.params.evidenceNodeId
+        );
+        if (!evidence) {
+          return res.status(404).json(buildError('EVIDENCE_NOT_FOUND', 'Evidence item not found for this CAP'));
+        }
+
+        const { buffer, contentType } = await alfrescoClient.getNodeContent({
+          ticket: req.auth.ticket,
+          nodeId: evidence.nodeId,
+        });
+
+        res.setHeader('Content-Type', evidence.evidenceType || contentType);
+        res.setHeader('Content-Disposition', `inline; filename="${(evidence.name || 'evidence').replace(/"/g, '')}"`);
+        return res.status(200).send(buffer);
+      } catch (error) {
+        const status = extractRepositoryErrorStatus(error);
+        return res
+          .status(status && status >= 400 && status < 500 ? status : 502)
+          .json(buildError('EVIDENCE_CONTENT_FAILED', extractRepositoryErrorMessage(error)));
+      }
+    }
+  );
+
+  router.delete(
+    '/caps/:capId/evidence/:evidenceNodeId',
+    auth.authenticate,
+    auth.authorize(['cap_entry', 'admin']),
+    auth.requireCsrf(),
+    async (req, res) => {
+      try {
+        const capNode = await alfrescoClient.searchCapByBusinessId({
+          ticket: req.auth.ticket,
+          capId: req.params.capId,
+        });
+        if (!capNode) {
+          return res.status(404).json(buildError('CAP_NOT_FOUND', 'Corrective action not found'));
+        }
+
+        const currentStatus = capNode?.properties?.['vso:acceptanceStatus'];
+        if (!isCapEditable(currentStatus)) {
+          return res.status(409).json(buildError('CAP_NOT_EDITABLE', 'Only CAPs Returned for revision can have evidence removed'));
+        }
+
+        const evidence = await findEvidenceNodeForCap(
+          { alfrescoClient, ticket: req.auth.ticket, capNode },
+          req.params.evidenceNodeId
+        );
+        if (!evidence) {
+          return res.status(404).json(buildError('EVIDENCE_NOT_FOUND', 'Evidence item not found for this CAP'));
+        }
+
+        await alfrescoClient.deleteNode({ ticket: req.auth.ticket, nodeId: evidence.nodeId });
+
+        return res.status(204).send();
+      } catch (error) {
+        const status = extractRepositoryErrorStatus(error);
+        return res
+          .status(status && status >= 400 && status < 500 ? status : 502)
+          .json(buildError('EVIDENCE_DELETE_FAILED', extractRepositoryErrorMessage(error)));
       }
     }
   );

@@ -187,6 +187,29 @@ class AlfrescoClient {
     return response?.data?.entry || null;
   }
 
+  async getNodeContent({ ticket, nodeId }) {
+    if (!ticket || !nodeId) {
+      throw new Error('ticket and nodeId are required');
+    }
+
+    const response = await this.request({
+      method: 'get',
+      url: `${this.baseUrl}/alfresco/api/-default-/public/alfresco/versions/1/nodes/${encodeURIComponent(nodeId)}/content`,
+      params: {
+        attachment: false,
+        alf_ticket: ticket,
+      },
+      responseType: 'arraybuffer',
+      maxBodyLength: Infinity,
+      maxContentLength: Infinity,
+    });
+
+    return {
+      buffer: Buffer.from(response.data),
+      contentType: response.headers?.['content-type'] || 'application/octet-stream',
+    };
+  }
+
   async updateNodeProperties({ ticket, nodeId, properties = {} }) {
     if (!ticket || !nodeId) {
       throw new Error('ticket and nodeId are required');
