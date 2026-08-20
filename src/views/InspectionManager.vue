@@ -114,6 +114,7 @@ import { useLocationStore } from '@/stores/locationStore';
 import { useToast } from 'vue-toastification';
 import { apiEntityCRUD } from '@/services/apiServices';
 import { INSPECTION_STATUS, canAssignServices, canEditBasicValues } from '@/utils/siteVisitStatus';
+import { formatDateTime } from '@/utils/formatDate';
 import saveImg from '@/assets/images/icons/save.png';
 import cancelImg from '@/assets/images/icons/cancel.png';
 import editImg from '@/assets/images/icons/edit.png';
@@ -415,11 +416,6 @@ const checkAndTransitionToDefined = async () => {
       toast.warning('Could not update status to Defined: ' + error.message);
     }
   }
-};
-
-const formatDateTime = (dateTimeStr) => {
-  if (!dateTimeStr) return '';
-  return new Date(dateTimeStr).toLocaleString('en-US');
 };
 
 const toInputDateTime = (dateTimeStr) => {

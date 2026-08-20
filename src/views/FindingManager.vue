@@ -1,76 +1,79 @@
 <template>
   <BaseManager title="Findings">
-    <ScopePicker
-      v-model="scope"
-      mode="findings"
-      title="Finding Scope"
-      :loading="findingStore.loading"
-      :presets="findingPresets"
-      :show-provider-id="true"
-      :show-location-id="true"
-      :show-specialty-code="true"
-      :show-inspection-id="true"
-      :show-domain="true"
-      :show-status="true"
-      :show-cap-overdue-only="true"
-      :show-solution-overdue-only="true"
-      @search="loadFindings"
-      @reset="loadFindings"
-    />
-
     <div v-if="findingStore.error" class="error-message">{{ findingStore.error }}</div>
 
-    <div v-if="findingStore.selectedFinding" class="detail-panel">
+    <section class="card">
+      <h3>Finding Listing</h3>
+      <ScopePicker
+        v-model="scope"
+        mode="findings"
+        title="Finding Scope"
+        :loading="findingStore.loading"
+        :presets="findingPresets"
+        :show-provider-id="true"
+        :show-location-id="true"
+        :show-specialty-code="true"
+        :show-inspection-id="true"
+        :show-domain="true"
+        :show-status="true"
+        :show-cap-overdue-only="true"
+        :show-solution-overdue-only="true"
+        @search="loadFindings"
+        @reset="loadFindings"
+      />
+
+      <table class="data-table">
+
+        <colgroup>
+          <col style="width: 12%;">
+          <col style="width: 10%;">
+          <col style="width: 12%;">
+          <col style="width: 10%;">
+          <col style="width: 10%;">
+          <col style="width: 10%;">
+        </colgroup>
+        <thead>
+          <tr>
+            <th>Finding ID</th>
+            <th>Level</th>
+            <th>Status</th>
+            <th>CAP Deadline</th>
+            <th>Resolution Deadline</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr v-for="finding in findingStore.findings" :key="finding.findingId">
+            <td>{{ finding.findingId }}</td>
+            <td>{{ finding.findingLevel }}</td>
+            <td>
+              {{ finding.effectiveStatus }}
+              <span v-if="finding.statusDivergence" class="divergence-badge">Calculated</span>
+              <span v-if="finding.capOverdue && finding.effectiveStatus !== 'CAP Overdue'" class="cap-overdue-badge">CAP also overdue</span>
+            </td>
+            <td>{{ formatDate(finding.submissionDeadline) || '-' }}</td>
+            <td>{{ formatDate(finding.resolutionDeadline) || '-' }}</td>
+            <td>
+              <BaseButton variant="ghost" size="sm" @click="viewDetail(finding.findingId)">View</BaseButton>
+              <BaseButton variant="ghost" size="sm" @click="goToFollowUps(finding.findingId)">Follow-ups</BaseButton>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section v-if="findingStore.selectedFinding" class="card detail-panel">
       <h3>Finding Detail: {{ findingStore.selectedFinding.findingId }}</h3>
       <p><strong>Description:</strong> {{ findingStore.selectedFinding.description || '-' }}</p>
       <p><strong>Requirement breached:</strong> {{ findingStore.selectedFinding.requirementBreached || '-' }}</p>
-      <p><strong>Opened:</strong> {{ findingStore.selectedFinding.openedDate || '-' }}</p>
-      <p><strong>Last status change:</strong> {{ findingStore.selectedFinding.lastStatusChange || '-' }}</p>
+      <p><strong>Opened:</strong> {{ formatDate(findingStore.selectedFinding.openedDate) || '-' }}</p>
+      <p><strong>Last status change:</strong> {{ formatDate(findingStore.selectedFinding.lastStatusChange) || '-' }}</p>
       <p v-if="findingStore.selectedFinding.statusDivergence" class="warning-text">
         Stored status differs from calculated status. Calculated status is shown in the listing.
       </p>
       <BaseButton variant="primary" size="sm" @click="goToCaps(findingStore.selectedFinding.findingId)">Open CAP Manager</BaseButton>
       <BaseButton variant="ghost" size="sm" @click="goToFollowUps(findingStore.selectedFinding.findingId)">Open Follow-up Manager</BaseButton>
-    </div>
-
-    <table class="data-table">
-
-      <colgroup>
-        <col style="width: 12%;">
-        <col style="width: 10%;">
-        <col style="width: 12%;">
-        <col style="width: 10%;">
-        <col style="width: 10%;">
-        <col style="width: 10%;">
-      </colgroup>
-      <thead>
-        <tr>
-          <th>Finding ID</th>
-          <th>Level</th>
-          <th>Status</th>
-          <th>CAP Deadline</th>
-          <th>Resolution Deadline</th>
-          <th>Actions</th>
-        </tr>
-      </thead>
-      <tbody>
-        <tr v-for="finding in findingStore.findings" :key="finding.findingId">
-          <td>{{ finding.findingId }}</td>
-          <td>{{ finding.findingLevel }}</td>
-          <td>
-            {{ finding.effectiveStatus }}
-            <span v-if="finding.statusDivergence" class="divergence-badge">Calculated</span>
-            <span v-if="finding.capOverdue && finding.effectiveStatus !== 'CAP Overdue'" class="cap-overdue-badge">CAP also overdue</span>
-          </td>
-          <td>{{ finding.submissionDeadline || '-' }}</td>
-          <td>{{ finding.resolutionDeadline || '-' }}</td>
-          <td>
-            <BaseButton variant="ghost" size="sm" @click="viewDetail(finding.findingId)">View</BaseButton>
-            <BaseButton variant="ghost" size="sm" @click="goToFollowUps(finding.findingId)">Follow-ups</BaseButton>
-          </td>
-        </tr>
-      </tbody>
-    </table>
+    </section>
   </BaseManager>
 </template>
 
@@ -81,6 +84,7 @@ import BaseManager from '@/components/base/BaseManager.vue';
 import BaseButton from '@/components/base/BaseButton.vue';
 import ScopePicker from '@/components/common/ScopePicker.vue';
 import { useFindingStore } from '@/stores/findingStore';
+import { formatDate } from '@/utils/formatDate';
 
 const router = useRouter();
 const route = useRoute();
@@ -198,12 +202,16 @@ onMounted(async () => {
   font-size: var(--text-xs);
 }
 
-.detail-panel {
+.card {
   border: 1px solid var(--border-color);
   border-radius: var(--radius-lg);
   padding: var(--space-4);
   background: var(--color-white);
-  margin-top: var(--space-4);
+  margin-bottom: var(--space-4);
+}
+
+.detail-panel {
+  border-color: var(--color-primary-500);
 }
 
 .warning-text {

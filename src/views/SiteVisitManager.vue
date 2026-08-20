@@ -111,7 +111,7 @@
              {{ siteVisit?.locationName }}
            </td>
            <td :id="`startDate-${siteVisit.id}`" >
-             {{ siteVisit?.startDate }}
+             {{ formatDate(siteVisit?.startDate) }}
            </td>
             <td class="actions-cell">
               <div>
@@ -129,6 +129,7 @@
 
 <script setup>
 import { ref, computed } from 'vue';
+import { formatDate } from '@/utils/formatDate';
 import BaseManager from '@/components/base/BaseManager.vue';
 import BaseButton from '@/components/base/BaseButton.vue';
 import StatusBadge from '@/components/base/StatusBadge.vue';
