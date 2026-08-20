@@ -29,7 +29,14 @@ Pseudo-rule:
 | /api/findings/:findingId/caps | capSubmitApi | true | cap_entry, admin | CAP submission |
 | /api/caps | capsApi | true | inspector, planner, cap_entry, admin | CAP list and filters |
 | /api/caps/:capId | capDetailApi | true | inspector, planner, cap_entry, admin | CAP detail |
-| /api/caps/:capId/review | capReviewApi | true | inspector, admin | CAP review decision |
+| /api/caps/:capId | capUpdateApi | true | cap_entry, admin | CAP content edit (Returned CAPs only; PATCH) |
+| /api/caps/:capId/review | capReviewApi | true | inspector, admin | CAP review decision (only from Pending review) |
+| /api/caps/drafts | capDraftCreateApi | true | cap_entry, admin | Create a draft CAP (Postgres-staged, POST) |
+| /api/caps/drafts | capDraftListApi | true | cap_entry, admin | List current user's draft CAPs (GET) |
+| /api/caps/drafts/:draftId | capDraftDetailApi | true | cap_entry, admin | Draft CAP detail (GET) |
+| /api/caps/drafts/:draftId | capDraftUpdateApi | true | cap_entry, admin | Save draft CAP content (PATCH) |
+| /api/caps/drafts/:draftId | capDraftDeleteApi | true | cap_entry, admin | Discard a draft CAP (DELETE) |
+| /api/caps/drafts/:draftId/submit | capDraftSubmitApi | true | cap_entry, admin | Promote a draft into a real, Pending-review CAP |
 | /forbidden | forbidden | true | (none) | UX page for denied role |
 | /login | login | false | (none) | Login entry point |
 | /:pathMatch(.*)* | notFound | false | (none) | Catch-all |

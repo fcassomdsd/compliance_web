@@ -439,6 +439,135 @@ export async function apiReviewCap(capId, acceptanceStatus, csrfToken) {
   }
 }
 
+export async function apiUpdateCap(capId, payload, csrfToken) {
+  try {
+    if (!capId || typeof capId !== 'string') {
+      throw new Error('capId is required');
+    }
+
+    const result = await axios({
+      method: 'patch',
+      url: `${complianceApiServer}/caps/${encodeURIComponent(capId)}`,
+      data: payload,
+      headers: buildCsrfHeader(csrfToken),
+      withCredentials: true,
+    });
+    return { data: result.data, status: result.status };
+  } catch (error) {
+    const backendMessage = error?.response?.data?.message || error?.response?.data?.error;
+    const status = error?.response?.status;
+    const detail = backendMessage || error.message;
+    throw new Error(`apiUpdateCap: ${status ? `[${status}] ` : ''}${detail}`);
+  }
+}
+
+export async function apiCreateCapDraft(findingId, payload, csrfToken) {
+  try {
+    if (!findingId || typeof findingId !== 'string') {
+      throw new Error('findingId is required');
+    }
+
+    const result = await axios({
+      method: 'post',
+      url: `${complianceApiServer}/caps/drafts`,
+      data: { findingId, ...payload },
+      headers: buildCsrfHeader(csrfToken),
+      withCredentials: true,
+    });
+    return { data: result.data, status: result.status };
+  } catch (error) {
+    throw new Error('apiCreateCapDraft: ' + error.message);
+  }
+}
+
+export async function apiUpdateCapDraft(draftId, payload, csrfToken) {
+  try {
+    if (!draftId || typeof draftId !== 'string') {
+      throw new Error('draftId is required');
+    }
+
+    const result = await axios({
+      method: 'patch',
+      url: `${complianceApiServer}/caps/drafts/${encodeURIComponent(draftId)}`,
+      data: payload,
+      headers: buildCsrfHeader(csrfToken),
+      withCredentials: true,
+    });
+    return { data: result.data, status: result.status };
+  } catch (error) {
+    throw new Error('apiUpdateCapDraft: ' + error.message);
+  }
+}
+
+export async function apiCapDrafts() {
+  try {
+    const result = await axios({
+      method: 'get',
+      url: `${complianceApiServer}/caps/drafts`,
+      withCredentials: true,
+    });
+    return { data: result.data, status: result.status };
+  } catch (error) {
+    throw new Error('apiCapDrafts: ' + error.message);
+  }
+}
+
+export async function apiCapDraftDetail(draftId) {
+  try {
+    if (!draftId || typeof draftId !== 'string') {
+      throw new Error('draftId is required');
+    }
+
+    const result = await axios({
+      method: 'get',
+      url: `${complianceApiServer}/caps/drafts/${encodeURIComponent(draftId)}`,
+      withCredentials: true,
+    });
+    return { data: result.data, status: result.status };
+  } catch (error) {
+    throw new Error('apiCapDraftDetail: ' + error.message);
+  }
+}
+
+export async function apiDeleteCapDraft(draftId, csrfToken) {
+  try {
+    if (!draftId || typeof draftId !== 'string') {
+      throw new Error('draftId is required');
+    }
+
+    const result = await axios({
+      method: 'delete',
+      url: `${complianceApiServer}/caps/drafts/${encodeURIComponent(draftId)}`,
+      headers: buildCsrfHeader(csrfToken),
+      withCredentials: true,
+    });
+    return { data: result.data, status: result.status };
+  } catch (error) {
+    throw new Error('apiDeleteCapDraft: ' + error.message);
+  }
+}
+
+export async function apiSubmitCapDraft(draftId, csrfToken) {
+  try {
+    if (!draftId || typeof draftId !== 'string') {
+      throw new Error('draftId is required');
+    }
+
+    const result = await axios({
+      method: 'post',
+      url: `${complianceApiServer}/caps/drafts/${encodeURIComponent(draftId)}/submit`,
+      headers: buildCsrfHeader(csrfToken),
+      withCredentials: true,
+    });
+    return { data: result.data, status: result.status };
+  } catch (error) {
+    const backendMessage = error?.response?.data?.message || error?.response?.data?.error;
+    const status = error?.response?.status;
+    const detail = backendMessage || error.message;
+    throw new Error(`apiSubmitCapDraft: ${status ? `[${status}] ` : ''}${detail}`);
+  }
+}
+
 export async function apiUpdateCapActionItem(capId, sequenceNumber, patch, csrfToken) {
   try {
     if (!capId || typeof capId !== 'string') {

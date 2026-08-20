@@ -187,6 +187,15 @@ function isValidCapAcceptanceStatus(status) {
   return Object.values(CAP_ACCEPTANCE_STATUS).includes(status);
 }
 
+// A CAP's content (RCA, risk assessment, action items, residual risk,
+// effectiveness verification) can only be edited in place while it's
+// Returned for revision. Pending-review/Accepted/Rejected CAPs are
+// immutable content-wise. Draft CAPs are staged outside Alfresco
+// entirely (see cap_draft table) and never reach this check.
+function isCapEditable(acceptanceStatus) {
+  return acceptanceStatus === CAP_ACCEPTANCE_STATUS.RETURNED_FOR_REVISION;
+}
+
 module.exports = {
   FINDING_STATUS,
   CAP_ACCEPTANCE_STATUS,
@@ -203,4 +212,5 @@ module.exports = {
   computeEffectiveFindingStatus,
   canSubmitCap,
   isValidCapAcceptanceStatus,
+  isCapEditable,
 };

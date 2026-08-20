@@ -206,6 +206,21 @@ class AlfrescoClient {
     return response?.data?.entry || null;
   }
 
+  async deleteNode({ ticket, nodeId, permanent = true }) {
+    if (!ticket || !nodeId) {
+      throw new Error('ticket and nodeId are required');
+    }
+
+    await this.request({
+      method: 'delete',
+      url: `${this.baseUrl}/alfresco/api/-default-/public/alfresco/versions/1/nodes/${encodeURIComponent(nodeId)}`,
+      params: {
+        alf_ticket: ticket,
+        permanent,
+      },
+    });
+  }
+
   async listTargetAssociations({ ticket, nodeId, assocType, skipCount = 0, maxItems = 200 }) {
     if (!ticket || !nodeId || !assocType) {
       throw new Error('ticket, nodeId and assocType are required');

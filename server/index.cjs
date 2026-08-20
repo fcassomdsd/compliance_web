@@ -5,6 +5,7 @@ const { AlfrescoClient } = require('./auth/alfrescoClient.cjs');
 const { createTicketProtector } = require('./auth/ticketProtector.cjs');
 const { PgLoginRateLimiter } = require('./auth/pgLoginRateLimiter.cjs');
 const { PgAuditLogger } = require('./auth/pgAuditLogger.cjs');
+const { PgCapDraftRepository } = require('./caps/pgCapDraftRepository.cjs');
 const { startFindingOverdueJob } = require('./jobs/findingOverdueJob.cjs');
 
 const port = Number(process.env.AUTH_SERVER_PORT || 4000);
@@ -31,6 +32,7 @@ async function start() {
   });
 
   const auditLogger = new PgAuditLogger({ connectionString });
+  const capDraftRepository = new PgCapDraftRepository({ connectionString });
 
   const app = createApp({
     config: runtimeConfig,
@@ -38,6 +40,7 @@ async function start() {
     alfrescoClient,
     loginRateLimiter,
     logger: auditLogger,
+    capDraftRepository,
   });
 
   app.listen(port, () => {

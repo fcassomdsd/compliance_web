@@ -34,13 +34,19 @@ describe('CorrectiveActionManager.vue', () => {
     vi.mocked(useRoute).mockReturnValue({ query: { findingId: 'FIND-123' } });
 
     mockCapStore = {
-      caps: [{ capId: 'CAP-1', acceptanceStatus: 'Pending Review', responsibleEntity: 'Org A', dueDate: '2026-05-01' }],
+      caps: [{ capId: 'CAP-1', acceptanceStatus: 'Pending review', responsibleEntity: 'Org A', dueDate: '2026-05-01' }],
+      drafts: [],
       selectedCap: null,
       loading: false,
       error: null,
       setFilter: vi.fn(),
       fetchCaps: vi.fn().mockResolvedValue(undefined),
+      fetchDrafts: vi.fn().mockResolvedValue(undefined),
       submitCap: vi.fn().mockResolvedValue({ cap: { capId: 'CAP-10' } }),
+      updateCap: vi.fn().mockResolvedValue({ cap: { capId: 'CAP-1', acceptanceStatus: 'Returned' } }),
+      saveDraft: vi.fn().mockResolvedValue({ draftId: 'DRAFT-1' }),
+      deleteDraft: vi.fn().mockResolvedValue(undefined),
+      submitDraft: vi.fn().mockResolvedValue({ cap: { capId: 'CAP-20' } }),
       reviewCap: vi.fn().mockResolvedValue({ ok: true }),
       fetchCapDetail: vi.fn().mockResolvedValue(undefined),
       updateActionItem: vi.fn().mockResolvedValue(undefined),
@@ -52,12 +58,15 @@ describe('CorrectiveActionManager.vue', () => {
     vi.mocked(useAuthStore).mockReturnValue(mockAuthStore);
   });
 
-  it('loads caps on mount and pre-fills finding id from query', async () => {
+  it('loads caps and drafts on mount and pre-fills finding id from query', async () => {
     const wrapper = mountComponent();
+    await wrapper.vm.$nextTick();
     await wrapper.vm.$nextTick();
 
     expect(mockCapStore.fetchCaps).toHaveBeenCalled();
+    expect(mockCapStore.fetchDrafts).toHaveBeenCalled();
     expect(wrapper.vm.capForm.findingId).toBe('FIND-123');
+    expect(wrapper.vm.editMode.type).toBe('new');
   });
 
   it('loadCaps applies filters before fetching', async () => {
@@ -81,14 +90,15 @@ describe('CorrectiveActionManager.vue', () => {
     expect(mockCapStore.fetchCaps).toHaveBeenCalledTimes(2);
   });
 
-  it('submitCap sends payload, shows success message, resets form and refreshes', async () => {
+  it('submitForReviewAction (new CAP) sends payload, shows success message, resets form and refreshes', async () => {
     const wrapper = mountComponent();
     await wrapper.vm.$nextTick();
 
     wrapper.vm.capForm.findingId = 'F-1';
     wrapper.vm.capForm.dueDate = '2026-12-31';
+    wrapper.vm.rcaEvidenceFile = new File(['x'], 'evidence.pdf');
 
-    await wrapper.vm.submitCap();
+    await wrapper.vm.submitForReviewAction();
 
     expect(mockCapStore.submitCap).toHaveBeenCalledWith({
       findingId: 'F-1',
@@ -128,7 +138,145 @@ describe('CorrectiveActionManager.vue', () => {
       csrfToken: 'csrf-token',
     });
     expect(wrapper.vm.message).toContain('submitted successfully');
+    expect(wrapper.vm.editMode.type).toBe('new');
     expect(mockCapStore.fetchCaps).toHaveBeenCalledTimes(2);
+  });
+
+  it('saveDraftAction creates a new draft and switches editMode to draft', async () => {
+    const wrapper = mountComponent();
+    await wrapper.vm.$nextTick();
+
+    wrapper.vm.capForm.findingId = 'F-1';
+    await wrapper.vm.saveDraftAction();
+
+    expect(mockCapStore.saveDraft).toHaveBeenCalledWith({
+      draftId: null,
+      findingId: 'F-1',
+      payload: expect.any(Object),
+      csrfToken: 'csrf-token',
+    });
+    expect(wrapper.vm.editMode).toEqual({ type: 'draft', draftId: 'DRAFT-1' });
+    expect(wrapper.vm.message).toContain('Draft saved');
+  });
+
+  it('saveDraftAction updates an existing draft in place', async () => {
+    const wrapper = mountComponent();
+    await wrapper.vm.$nextTick();
+
+    wrapper.vm.editMode = { type: 'draft', draftId: 'DRAFT-9' };
+    await wrapper.vm.saveDraftAction();
+
+    expect(mockCapStore.saveDraft).toHaveBeenCalledWith(expect.objectContaining({ draftId: 'DRAFT-9' }));
+  });
+
+  it('submitForReviewAction (draft mode) saves then promotes the draft', async () => {
+    const wrapper = mountComponent();
+    await wrapper.vm.$nextTick();
+
+    wrapper.vm.editMode = { type: 'draft', draftId: 'DRAFT-9' };
+    wrapper.vm.riskEvidenceFile = new File(['x'], 'evidence.pdf');
+    await wrapper.vm.submitForReviewAction();
+
+    expect(mockCapStore.saveDraft).toHaveBeenCalledWith(expect.objectContaining({ draftId: 'DRAFT-9' }));
+    expect(mockCapStore.submitDraft).toHaveBeenCalledWith('DRAFT-9', 'csrf-token');
+    expect(wrapper.vm.editMode.type).toBe('new');
+    expect(mockCapStore.fetchDrafts).toHaveBeenCalledTimes(2);
+  });
+
+  it('editDraft populates the form from a draft payload and enters draft edit mode', async () => {
+    const wrapper = mountComponent();
+    await wrapper.vm.$nextTick();
+
+    wrapper.vm.editDraft({
+      draftId: 'DRAFT-5',
+      findingId: 'F-9',
+      payload: {
+        dueDate: '2026-08-01',
+        rootCauseAnalysis: { method: 'Fishbone' },
+      },
+    });
+
+    expect(wrapper.vm.editMode).toEqual({ type: 'draft', draftId: 'DRAFT-5' });
+    expect(wrapper.vm.capForm.findingId).toBe('F-9');
+    expect(wrapper.vm.capForm.dueDate).toBe('2026-08-01');
+    expect(wrapper.vm.capForm.rootCauseAnalysis.method).toBe('Fishbone');
+    expect(wrapper.vm.showSubmit).toBe(true);
+  });
+
+  it('deleteDraftAction removes the draft and resets the form if it was being edited', async () => {
+    const wrapper = mountComponent();
+    await wrapper.vm.$nextTick();
+
+    wrapper.vm.editMode = { type: 'draft', draftId: 'DRAFT-5' };
+    await wrapper.vm.deleteDraftAction('DRAFT-5');
+
+    expect(mockCapStore.deleteDraft).toHaveBeenCalledWith('DRAFT-5', 'csrf-token');
+    expect(wrapper.vm.editMode.type).toBe('new');
+  });
+
+  it('editCap fetches CAP detail and populates the form for a Returned CAP', async () => {
+    mockCapStore.fetchCapDetail = vi.fn().mockImplementation(async () => {
+      mockCapStore.selectedCap = {
+        capId: 'CAP-7',
+        findingId: 'F-7',
+        dueDate: '2026-09-01',
+        acceptanceStatus: 'Returned',
+        rootCauseAnalysis: { method: 'BowTie' },
+        correctiveActions: [{ sequenceNumber: 1, description: 'Existing', responsiblePerson: 'A', deadline: '2026-09-15' }],
+      };
+    });
+
+    const wrapper = mountComponent();
+    await wrapper.vm.$nextTick();
+
+    await wrapper.vm.editCap({ capId: 'CAP-7' });
+
+    expect(mockCapStore.fetchCapDetail).toHaveBeenCalledWith('CAP-7');
+    expect(wrapper.vm.editMode).toEqual({ type: 'returned', capId: 'CAP-7' });
+    expect(wrapper.vm.capForm.findingId).toBe('F-7');
+    expect(wrapper.vm.capForm.rootCauseAnalysis.method).toBe('BowTie');
+    expect(wrapper.vm.capForm.correctiveActions).toHaveLength(1);
+    expect(wrapper.vm.showSubmit).toBe(true);
+  });
+
+  it('saveReturnedChangesAction saves without resubmitting', async () => {
+    const wrapper = mountComponent();
+    await wrapper.vm.$nextTick();
+
+    wrapper.vm.editMode = { type: 'returned', capId: 'CAP-7' };
+    await wrapper.vm.saveReturnedChangesAction();
+
+    expect(mockCapStore.updateCap).toHaveBeenCalledWith({
+      capId: 'CAP-7',
+      payload: expect.not.objectContaining({ resubmit: true }),
+      csrfToken: 'csrf-token',
+    });
+    expect(mockCapStore.fetchCapDetail).toHaveBeenCalledWith('CAP-7');
+    expect(wrapper.vm.editMode.type).toBe('returned');
+  });
+
+  it('resubmitReturnedAction saves with resubmit flag and resets the form', async () => {
+    const wrapper = mountComponent();
+    await wrapper.vm.$nextTick();
+
+    wrapper.vm.editMode = { type: 'returned', capId: 'CAP-7' };
+    await wrapper.vm.resubmitReturnedAction();
+
+    expect(mockCapStore.updateCap).toHaveBeenCalledWith({
+      capId: 'CAP-7',
+      payload: expect.objectContaining({ resubmit: true }),
+      csrfToken: 'csrf-token',
+    });
+    expect(wrapper.vm.editMode.type).toBe('new');
+  });
+
+  it('isCapEditableStatus is true only for Returned', async () => {
+    const wrapper = mountComponent();
+    await wrapper.vm.$nextTick();
+
+    expect(wrapper.vm.isCapEditableStatus('Returned')).toBe(true);
+    expect(wrapper.vm.isCapEditableStatus('Pending review')).toBe(false);
+    expect(wrapper.vm.isCapEditableStatus('Accepted')).toBe(false);
   });
 
   it('reviewCap sends payload, resets cap id and refreshes', async () => {
@@ -164,11 +312,95 @@ describe('CorrectiveActionManager.vue', () => {
     const wrapper = mountComponent();
     await wrapper.vm.$nextTick();
 
-    await wrapper.vm.submitCap();
+    wrapper.vm.rcaEvidenceFile = new File(['x'], 'evidence.pdf');
+    await wrapper.vm.submitForReviewAction();
     await wrapper.vm.reviewCap();
 
     expect(consoleSpy).toHaveBeenCalled();
     consoleSpy.mockRestore();
+  });
+
+  it('shows a confirmation modal instead of submitting when no evidence is attached', async () => {
+    const wrapper = mountComponent();
+    await wrapper.vm.$nextTick();
+
+    wrapper.vm.capForm.findingId = 'F-1';
+    await wrapper.vm.submitForReviewAction();
+
+    expect(wrapper.vm.showNoEvidenceConfirm).toBe(true);
+    expect(mockCapStore.submitCap).not.toHaveBeenCalled();
+  });
+
+  it('confirmSubmitWithoutEvidence closes the modal and proceeds with submission', async () => {
+    const wrapper = mountComponent();
+    await wrapper.vm.$nextTick();
+
+    wrapper.vm.capForm.findingId = 'F-1';
+    await wrapper.vm.submitForReviewAction();
+    await wrapper.vm.confirmSubmitWithoutEvidence();
+
+    expect(wrapper.vm.showNoEvidenceConfirm).toBe(false);
+    expect(mockCapStore.submitCap).toHaveBeenCalled();
+  });
+
+  it('cancelSubmitWithoutEvidence closes the modal without submitting', async () => {
+    const wrapper = mountComponent();
+    await wrapper.vm.$nextTick();
+
+    wrapper.vm.capForm.findingId = 'F-1';
+    await wrapper.vm.submitForReviewAction();
+    wrapper.vm.cancelSubmitWithoutEvidence();
+
+    expect(wrapper.vm.showNoEvidenceConfirm).toBe(false);
+    expect(mockCapStore.submitCap).not.toHaveBeenCalled();
+  });
+
+  it('uploads selected evidence right after a successful submit', async () => {
+    const wrapper = mountComponent();
+    await wrapper.vm.$nextTick();
+
+    const rcaFile = new File(['x'], 'evidence.pdf');
+    const riskFile = new File(['y'], 'risk.pdf');
+    wrapper.vm.capForm.findingId = 'F-1';
+    wrapper.vm.rcaEvidenceFile = rcaFile;
+    wrapper.vm.riskEvidenceFile = riskFile;
+    await wrapper.vm.submitForReviewAction();
+
+    expect(mockCapStore.uploadCapEvidence).toHaveBeenCalledWith({
+      capId: 'CAP-10',
+      section: 'rca',
+      file: rcaFile,
+      csrfToken: 'csrf-token',
+    });
+    expect(mockCapStore.uploadCapEvidence).toHaveBeenCalledWith(
+      expect.objectContaining({ capId: 'CAP-10', section: 'risk-assessment' })
+    );
+  });
+
+  it('saveDraftAction warns that selected evidence is not saved with the draft', async () => {
+    const wrapper = mountComponent();
+    await wrapper.vm.$nextTick();
+
+    wrapper.vm.capForm.findingId = 'F-1';
+    wrapper.vm.rcaEvidenceFile = new File(['x'], 'evidence.pdf');
+    await wrapper.vm.saveDraftAction();
+
+    expect(wrapper.vm.message).toContain('not saved with drafts');
+  });
+
+  it('hides the create-time evidence inputs while editing a Returned CAP', async () => {
+    mockCapStore.fetchCapDetail = vi.fn().mockImplementation(async () => {
+      mockCapStore.selectedCap = { capId: 'CAP-7', findingId: 'F-7', acceptanceStatus: 'Returned' };
+    });
+
+    const wrapper = mountComponent();
+    await wrapper.vm.$nextTick();
+    await wrapper.vm.editCap({ capId: 'CAP-7' });
+    await wrapper.vm.$nextTick();
+
+    expect(wrapper.find('#rcaEvidence').exists()).toBe(false);
+    expect(wrapper.find('#raEvidence').exists()).toBe(false);
+    expect(wrapper.text()).toContain('Evidence can be attached from the CAP Detail view below.');
   });
 
   it('wires template actions through buttons (search and view)', async () => {
@@ -184,6 +416,35 @@ describe('CorrectiveActionManager.vue', () => {
 
     expect(mockCapStore.fetchCaps).toHaveBeenCalled();
     expect(mockCapStore.fetchCapDetail).toHaveBeenCalledWith('CAP-1');
+  });
+
+  it('shows an Edit button in the listing only for Returned CAPs', async () => {
+    mockCapStore.caps = [
+      { capId: 'CAP-1', acceptanceStatus: 'Pending review', responsibleEntity: 'Org A', dueDate: '2026-05-01' },
+      { capId: 'CAP-2', acceptanceStatus: 'Returned', responsibleEntity: 'Org B', dueDate: '2026-06-01' },
+    ];
+
+    const wrapper = mountComponent();
+    await wrapper.vm.$nextTick();
+
+    const rows = wrapper.findAll('tbody tr');
+    const editButtonsInFirstRow = rows[0].findAll('button').filter((btn) => btn.text() === 'Edit');
+    const editButtonsInSecondRow = rows[1].findAll('button').filter((btn) => btn.text() === 'Edit');
+
+    expect(editButtonsInFirstRow).toHaveLength(0);
+    expect(editButtonsInSecondRow).toHaveLength(1);
+  });
+
+  it('renders the My Draft CAPs section when drafts exist', async () => {
+    mockCapStore.drafts = [
+      { draftId: 'DRAFT-1', findingId: 'F-1', updatedAt: '2026-06-01' },
+    ];
+
+    const wrapper = mountComponent();
+    await wrapper.vm.$nextTick();
+
+    expect(wrapper.text()).toContain('My Draft CAPs');
+    expect(wrapper.text()).toContain('F-1');
   });
 
   it('renders cap detail and error message regions when store state is set', async () => {

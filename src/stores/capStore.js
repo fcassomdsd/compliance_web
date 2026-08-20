@@ -3,15 +3,22 @@ import {
   apiCaps,
   apiCapDetail,
   apiSubmitCap,
+  apiUpdateCap,
   apiReviewCap,
   apiUpdateCapActionItem,
   apiUploadCapEvidence,
+  apiCreateCapDraft,
+  apiUpdateCapDraft,
+  apiCapDrafts,
+  apiDeleteCapDraft,
+  apiSubmitCapDraft,
 } from '@/services/apiServices';
 
 export const useCapStore = defineStore('cap', {
   state: () => ({
     caps: [],
     selectedCap: null,
+    drafts: [],
     loading: false,
     error: null,
     filters: {
@@ -57,6 +64,77 @@ export const useCapStore = defineStore('cap', {
       this.error = null;
       try {
         const { data } = await apiSubmitCap(findingId, payload, csrfToken);
+        return data;
+      } catch (error) {
+        this.error = error.message;
+        throw error;
+      } finally {
+        this.loading = false;
+      }
+    },
+
+    async updateCap({ capId, payload, csrfToken }) {
+      this.loading = true;
+      this.error = null;
+      try {
+        const { data } = await apiUpdateCap(capId, payload, csrfToken);
+        return data;
+      } catch (error) {
+        this.error = error.message;
+        throw error;
+      } finally {
+        this.loading = false;
+      }
+    },
+
+    async fetchDrafts() {
+      this.loading = true;
+      this.error = null;
+      try {
+        const { data } = await apiCapDrafts();
+        this.drafts = Array.isArray(data?.list) ? data.list : [];
+      } catch (error) {
+        this.error = error.message;
+        throw error;
+      } finally {
+        this.loading = false;
+      }
+    },
+
+    async saveDraft({ draftId, findingId, payload, csrfToken }) {
+      this.loading = true;
+      this.error = null;
+      try {
+        const { data } = draftId
+          ? await apiUpdateCapDraft(draftId, payload, csrfToken)
+          : await apiCreateCapDraft(findingId, payload, csrfToken);
+        return data?.draft || null;
+      } catch (error) {
+        this.error = error.message;
+        throw error;
+      } finally {
+        this.loading = false;
+      }
+    },
+
+    async deleteDraft(draftId, csrfToken) {
+      this.loading = true;
+      this.error = null;
+      try {
+        await apiDeleteCapDraft(draftId, csrfToken);
+      } catch (error) {
+        this.error = error.message;
+        throw error;
+      } finally {
+        this.loading = false;
+      }
+    },
+
+    async submitDraft(draftId, csrfToken) {
+      this.loading = true;
+      this.error = null;
+      try {
+        const { data } = await apiSubmitCapDraft(draftId, csrfToken);
         return data;
       } catch (error) {
         this.error = error.message;

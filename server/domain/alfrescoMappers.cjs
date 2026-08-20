@@ -30,6 +30,11 @@ function mapFindingNode(node) {
 function mapCorrectiveActionNode(node) {
   return {
     nodeId: node?.id || null,
+    // The finding this CAP belongs to isn't a stored property on the CAP
+    // node itself (it's a parent/child association) — callers that need
+    // vso:findingId (not just this Alfresco-internal node id) should
+    // resolve it via alfrescoClient.getNodeById({ nodeId: parentNodeId }).
+    parentNodeId: node?.parentId || null,
     capId: nodeProperty(node, 'vso:capId'),
     proposedAction: nodeProperty(node, 'vso:proposedAction'),
     responsibleEntity: nodeProperty(node, 'vso:responsibleEntity'),
@@ -142,6 +147,16 @@ async function getCapChildSections({ alfrescoClient, ticket, capNodeId }) {
   };
 }
 
+async function resolveFindingIdForCap({ alfrescoClient, ticket, capNode }) {
+  const parentNodeId = capNode?.parentId;
+  if (!parentNodeId) {
+    return null;
+  }
+
+  const parentFindingNode = await alfrescoClient.getNodeById({ ticket, nodeId: parentNodeId });
+  return nodeProperty(parentFindingNode, 'vso:findingId');
+}
+
 function mapFollowUpReportNode(node) {
   return {
     nodeId: node?.id || null,
@@ -176,6 +191,7 @@ module.exports = {
   mapResidualRiskNode,
   mapEffectivenessVerificationNode,
   getCapChildSections,
+  resolveFindingIdForCap,
   getFollowUpReportsForFinding,
 };
 
