@@ -75,6 +75,7 @@
     <section v-if="capStore.selectedCap" class="card detail-panel">
       <h3>CAP Detail: {{ capStore.selectedCap.capId }}</h3>
       <BaseButton v-if="isCapEditableStatus(capStore.selectedCap.acceptanceStatus)" variant="ghost" size="sm" @click="editCap(capStore.selectedCap)">Edit</BaseButton>
+      <BaseButton variant="ghost" size="sm" @click="closeCapDetail">Close</BaseButton>
       <p><strong>Acceptance status:</strong> {{ capStore.selectedCap.acceptanceStatus || '-' }}</p>
       <p><strong>Due date:</strong> {{ formatDate(capStore.selectedCap.dueDate) || '-' }}</p>
       <p><strong>Action items:</strong> {{ capStore.selectedCap.correctiveActions?.length || 0 }}</p>
@@ -918,6 +919,10 @@ async function reviewCap() {
 
 async function viewCap(capId) {
   await capStore.fetchCapDetail(capId);
+}
+
+function closeCapDetail() {
+  capStore.clearSelectedCap();
 }
 
 onMounted(async () => {

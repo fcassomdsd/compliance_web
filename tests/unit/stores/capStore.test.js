@@ -55,6 +55,16 @@ describe('capStore', () => {
     expect(store.error).toBe('detail failed');
   });
 
+  it('clearSelectedCap resets selectedCap to null', async () => {
+    vi.mocked(apiCapDetail).mockResolvedValueOnce({ data: { capId: 'CAP-2' } });
+    await store.fetchCapDetail('CAP-2');
+    expect(store.selectedCap).toEqual({ capId: 'CAP-2' });
+
+    store.clearSelectedCap();
+
+    expect(store.selectedCap).toBeNull();
+  });
+
   it('submitCap returns API data and tracks errors', async () => {
     const payload = { findingId: 'F1', payload: { capId: 'CAP-4' }, csrfToken: 'csrf' };
     vi.mocked(apiSubmitCap).mockResolvedValue({ data: { ok: true } });

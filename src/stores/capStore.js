@@ -46,6 +46,10 @@ export const useCapStore = defineStore('cap', {
       }
     },
 
+    clearSelectedCap() {
+      this.selectedCap = null;
+    },
+
     async fetchCapDetail(capId) {
       this.loading = true;
       this.error = null;

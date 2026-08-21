@@ -52,6 +52,7 @@ describe('CorrectiveActionManager.vue', () => {
       updateActionItem: vi.fn().mockResolvedValue(undefined),
       uploadCapEvidence: vi.fn().mockResolvedValue(undefined),
       deleteCapEvidence: vi.fn().mockResolvedValue(undefined),
+      clearSelectedCap: vi.fn(),
     };
     mockAuthStore = { csrfToken: 'csrf-token' };
 
@@ -554,6 +555,20 @@ describe('CorrectiveActionManager.vue', () => {
     });
     expect(wrapper.vm.evidenceToRemove).toBe(null);
     expect(wrapper.vm.message).toContain('Evidence removed');
+  });
+
+  it('closeCapDetail clears the selected CAP so the detail card can be dismissed', async () => {
+    mockCapStore.selectedCap = { capId: 'CAP-90', acceptanceStatus: 'Accepted' };
+
+    const wrapper = mountComponent();
+    await wrapper.vm.$nextTick();
+
+    const closeButton = wrapper.findAll('button').find((btn) => btn.text() === 'Close');
+    expect(closeButton).toBeDefined();
+
+    await closeButton.trigger('click');
+
+    expect(mockCapStore.clearSelectedCap).toHaveBeenCalled();
   });
 
   it('renders cap detail and error message regions when store state is set', async () => {
