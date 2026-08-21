@@ -47,7 +47,7 @@ function buildFixture() {
       'vso:proposedAction': 'Action A',
       'vso:responsibleEntity': 'Provider 1',
       'vso:dueDate': '2026-05-01',
-      'vso:acceptanceStatus': 'Pending Review',
+      'vso:acceptanceStatus': 'Pending review',
       'vso:inspectionId': 'MDPP-001',
       'vso:locationId': 'LOC-01',
       'vso:locationCode': 'MDPP',

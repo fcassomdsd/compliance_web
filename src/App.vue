@@ -50,7 +50,7 @@
 </template>
 
 <script setup>
-import { ref } from 'vue';
+import { ref, onMounted, onUnmounted } from 'vue';
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/authStore';
 import BaseButton from '@/components/base/BaseButton.vue';
@@ -65,6 +65,25 @@ async function onLogout() {
   await router.push({ name: 'login' })
 }
 
+// authStore.ensureSessionFresh() is otherwise only triggered by route
+// navigation guards, so a long dwell on a single page (e.g. filling out a
+// multi-section CAP form) never resets the session's idle-timeout clock.
+// Poll well under the 30-minute idle timeout so the session stays alive
+// during real, in-page activity.
+const SESSION_KEEPALIVE_INTERVAL_MS = 5 * 60 * 1000;
+let sessionKeepaliveTimer = null;
+
+onMounted(() => {
+  sessionKeepaliveTimer = setInterval(() => {
+    if (authStore.authenticated) {
+      authStore.ensureSessionFresh();
+    }
+  }, SESSION_KEEPALIVE_INTERVAL_MS);
+});
+
+onUnmounted(() => {
+  clearInterval(sessionKeepaliveTimer);
+});
 </script>
 
 <style scoped>

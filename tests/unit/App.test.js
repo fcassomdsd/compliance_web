@@ -142,4 +142,59 @@ describe('App.vue (router navigation)', () => {
     expect(logoutSpy).toHaveBeenCalledTimes(1);
     expect(pushSpy).toHaveBeenCalledWith({ name: 'login' });
   });
+
+  it('periodically keeps the session alive for an authenticated user, independent of navigation', async () => {
+    vi.useFakeTimers();
+    try {
+      const router = createTestRouter();
+      const pinia = createPinia();
+      const authStore = useAuthStore(pinia);
+      authStore.authenticated = true;
+      authStore.user = { username: 'fernando.casso' };
+      const ensureSessionFreshSpy = vi.spyOn(authStore, 'ensureSessionFresh').mockResolvedValue(true);
+
+      router.push('/inspection');
+      await router.isReady();
+
+      mount(App, {
+        global: {
+          plugins: [pinia, router],
+        },
+      });
+
+      expect(ensureSessionFreshSpy).not.toHaveBeenCalled();
+
+      await vi.advanceTimersByTimeAsync(5 * 60 * 1000);
+      expect(ensureSessionFreshSpy).toHaveBeenCalledTimes(1);
+
+      await vi.advanceTimersByTimeAsync(5 * 60 * 1000);
+      expect(ensureSessionFreshSpy).toHaveBeenCalledTimes(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('does not poll the session for an unauthenticated user', async () => {
+    vi.useFakeTimers();
+    try {
+      const router = createTestRouter();
+      const pinia = createPinia();
+      const authStore = useAuthStore(pinia);
+      const ensureSessionFreshSpy = vi.spyOn(authStore, 'ensureSessionFresh').mockResolvedValue(false);
+
+      router.push('/login');
+      await router.isReady();
+
+      mount(App, {
+        global: {
+          plugins: [pinia, router],
+        },
+      });
+
+      await vi.advanceTimersByTimeAsync(5 * 60 * 1000);
+      expect(ensureSessionFreshSpy).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });
