@@ -370,6 +370,33 @@ export async function apiFindingDetail(findingId) {
   }
 }
 
+export async function apiOversightPostureReport(filters = {}) {
+  try {
+    const result = await axios({
+      method: 'get',
+      url: `${complianceApiServer}/reports/oversight-posture`,
+      params: filters,
+      withCredentials: true,
+    });
+    return { data: result.data, status: result.status };
+  } catch (error) {
+    throw new Error('apiOversightPostureReport: ' + error.message);
+  }
+}
+
+export async function apiOversightPostureFilterOptions() {
+  try {
+    const result = await axios({
+      method: 'get',
+      url: `${complianceApiServer}/reports/oversight-posture/filter-options`,
+      withCredentials: true,
+    });
+    return { data: result.data, status: result.status };
+  } catch (error) {
+    throw new Error('apiOversightPostureFilterOptions: ' + error.message);
+  }
+}
+
 export async function apiSubmitCap(findingId, payload, csrfToken) {
   try {
     if (!findingId || typeof findingId !== 'string') {

@@ -10,10 +10,16 @@ function mapFindingNode(node) {
     requirementBreached: nodeProperty(node, 'vso:requirementBreached'),
     description: nodeProperty(node, 'vso:description'),
     findingStatus: nodeProperty(node, 'vso:findingStatus'),
+    findingSeverity: nodeProperty(node, 'vso:findingSeverity'),
+    riskClassification: nodeProperty(node, 'vso:riskClassification'),
     submissionDeadline: nodeProperty(node, 'vso:submissionDeadline'),
     resolutionDeadline: nodeProperty(node, 'vso:resolutionDeadline'),
     findingClosureDate: nodeProperty(node, 'vso:findingClosureDate'),
+    // vso:openedDate was renamed to vso:dateIssued in the Alfresco model;
+    // dateIssued is the canonical field going forward (see CLAUDE.md).
+    // openedDate is kept for any callers still reading the legacy property.
     openedDate: nodeProperty(node, 'vso:openedDate'),
+    dateIssued: nodeProperty(node, 'vso:dateIssued'),
     lastStatusChange: nodeProperty(node, 'vso:lastStatusChange'),
     inspectionId: nodeProperty(node, 'vso:inspectionId'),
     locationId: nodeProperty(node, 'vso:locationId'),
