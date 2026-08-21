@@ -16,6 +16,9 @@
       </button>
     </div>
     <div class="controls-container" :class="{ 'nav-open': navOpen }">
+      <RouterLink to="/oversight-posture" class="nav-link" exact-active-class="active-view" @click="navOpen = false">
+        Oversight Posture
+      </RouterLink>
       <RouterLink to="/site-visit" class="nav-link" exact-active-class="active-view" @click="navOpen = false">
         Site Visits
       </RouterLink>

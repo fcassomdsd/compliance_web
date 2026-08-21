@@ -61,10 +61,11 @@ describe('App.vue (router navigation)', () => {
     const { wrapper } = await mountAppAt();
 
     const links = wrapper.findAll('a.nav-link');
-    expect(links).toHaveLength(8);
+    expect(links).toHaveLength(9);
 
     const labels = links.map((link) => link.text().trim());
     expect(labels).toEqual([
+      'Oversight Posture',
       'Site Visits',
       'Assign Inspectors',
       'Inspection Checklist',

@@ -1,0 +1,162 @@
+const express = require('express');
+
+const { buildError } = require('../auth/sessionAuth.cjs');
+const { mapFindingNode, mapCorrectiveActionNode } = require('../domain/alfrescoMappers.cjs');
+const {
+  computeStatusCounts,
+  computeSeverityTrend,
+  computeOverdueAging,
+  computeCapCycleTime,
+  computeRecurrence,
+  computeProviderRanking,
+  computeFilterOptions,
+} = require('./postureAggregator.cjs');
+
+function escapeAftsValue(value) {
+  return String(value || '').replace(/"/g, '\\"');
+}
+
+function escapeAftsDate(value) {
+  // Only ISO-ish date strings are ever interpolated unescaped into a
+  // range predicate; reject anything else rather than risk AFTS syntax
+  // injection through a malformed dateFrom/dateTo query param.
+  return /^\d{4}-\d{2}-\d{2}/.test(String(value || '')) ? value : null;
+}
+
+function buildDateRangePredicate(field, dateFrom, dateTo) {
+  const from = escapeAftsDate(dateFrom) || 'MIN';
+  const to = escapeAftsDate(dateTo) || 'MAX';
+  if (from === 'MIN' && to === 'MAX') {
+    return null;
+  }
+  return `${field}:[${from} TO ${to}]`;
+}
+
+function buildReportFindingsQuery(filters = {}) {
+  const predicates = [
+    "TYPE:'vso:finding'",
+    `PATH:'/app:company_home/st:sites/cm:vigilancia-de-la-so/cm:documentLibrary/cm:Vigilancia/cm:Hallazgos//*'`,
+  ];
+
+  // Plain phrase match, not the '=' exact-term operator: vso:locationId/
+  // vso:providerId aren't configured for cross-locale indexing, and AFTS
+  // exact-term search throws a 500 in Solr without it. Phrase match on
+  // these opaque single-token IDs is behaviorally equivalent.
+  if (filters.locationId) {
+    predicates.push(`vso:locationId:"${escapeAftsValue(filters.locationId)}"`);
+  }
+  if (filters.providerId) {
+    predicates.push(`vso:providerId:"${escapeAftsValue(filters.providerId)}"`);
+  }
+
+  const dateRange = buildDateRangePredicate('vso:dateIssued', filters.dateFrom, filters.dateTo);
+  if (dateRange) {
+    predicates.push(dateRange);
+  }
+
+  return predicates.join(' AND ');
+}
+
+function buildReportCapsQuery(filters = {}) {
+  const predicates = ["TYPE:'vso:correctiveAction'"];
+
+  if (filters.locationId) {
+    predicates.push(`vso:locationId:"${escapeAftsValue(filters.locationId)}"`);
+  }
+  if (filters.providerId) {
+    predicates.push(`vso:providerId:"${escapeAftsValue(filters.providerId)}"`);
+  }
+
+  return predicates.join(' AND ');
+}
+
+function createReportsRouter({ auth, alfrescoClient, now = () => new Date() }) {
+  const router = express.Router();
+
+  router.get(
+    '/oversight-posture/filter-options',
+    auth.authenticate,
+    auth.authorize(['inspector', 'planner', 'reporter', 'admin']),
+    async (req, res) => {
+      try {
+        const findingNodes = await alfrescoClient.searchNodes({
+          ticket: req.auth.ticket,
+          query: buildReportFindingsQuery({}),
+          maxItems: 1000,
+        });
+
+        const findings = findingNodes.map(mapFindingNode);
+
+        return res.status(200).json({
+          success: true,
+          ...computeFilterOptions(findings),
+        });
+      } catch (error) {
+        return res.status(502).json(buildError('OVERSIGHT_POSTURE_FILTER_OPTIONS_FAILED', error.message));
+      }
+    }
+  );
+
+  router.get(
+    '/oversight-posture',
+    auth.authenticate,
+    auth.authorize(['inspector', 'planner', 'reporter', 'admin']),
+    async (req, res) => {
+      try {
+        const filters = {
+          providerId: req.query?.providerId,
+          locationId: req.query?.locationId,
+          dateFrom: req.query?.dateFrom,
+          dateTo: req.query?.dateTo,
+        };
+
+        // Sequential, not Promise.all: this is the only endpoint in this
+        // backend that issues two searches for one request. Running them
+        // concurrently on the same ticket was reliably producing a 500
+        // from Solr with literal, unsubstituted AUTHORITY_FILTER_FROM_JSON/
+        // TENANT_FILTER_FROM_JSON placeholders in the fq clauses — a
+        // known Alfresco Search Services failure mode when its search
+        // webscript builds the security filter under concurrent requests,
+        // not a problem with the query text itself.
+        const findingNodes = await alfrescoClient.searchNodes({
+          ticket: req.auth.ticket,
+          query: buildReportFindingsQuery(filters),
+          maxItems: 1000,
+        });
+        const capNodes = await alfrescoClient.searchNodes({
+          ticket: req.auth.ticket,
+          query: buildReportCapsQuery(filters),
+          maxItems: 1000,
+        });
+
+        const findings = findingNodes.map(mapFindingNode);
+        const correctiveActions = capNodes.map(mapCorrectiveActionNode);
+        const nowValue = now();
+
+        return res.status(200).json({
+          success: true,
+          timestamp: new Date().toISOString(),
+          filters,
+          summary: {
+            statusCounts: computeStatusCounts(findings),
+            severityTrend: computeSeverityTrend(findings),
+            overdueAging: computeOverdueAging(findings, nowValue),
+            capCycleTime: computeCapCycleTime(findings, correctiveActions),
+            recurrence: computeRecurrence(findings),
+            providerRanking: computeProviderRanking(findings),
+          },
+        });
+      } catch (error) {
+        return res.status(502).json(buildError('OVERSIGHT_POSTURE_REPORT_FAILED', error.message));
+      }
+    }
+  );
+
+  return router;
+}
+
+module.exports = {
+  createReportsRouter,
+  buildReportFindingsQuery,
+  buildReportCapsQuery,
+};
