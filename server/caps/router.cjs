@@ -30,6 +30,7 @@ const {
   isCapEditable,
   isFindingReviewConfirmed,
 } = require('../domain/statusRules.cjs');
+const { notifyRoleInbox } = require('../notifications/roleNotify.cjs');
 
 const RCA_METHODS = ['5 Whys', 'Fishbone', 'BowTie', 'TapRooT', 'Barrier Analysis', 'Other'];
 const ACTION_PRIORITIES = ['High', 'Medium', 'Low'];
@@ -585,7 +586,7 @@ async function performCapCreate({
   };
 }
 
-function createCapsRouter({ auth, alfrescoClient, capDraftRepository, now = () => new Date() }) {
+function createCapsRouter({ auth, alfrescoClient, capDraftRepository, notificationService, now = () => new Date() }) {
   const router = express.Router();
 
   router.post(
@@ -659,6 +660,15 @@ function createCapsRouter({ auth, alfrescoClient, capDraftRepository, now = () =
         if (result.error) {
           return res.status(result.error.status).json(buildError(result.error.code, result.error.message));
         }
+
+        await notifyRoleInbox({
+          notificationService,
+          envVar: 'INSPECTOR_NOTIFICATIONS_EMAIL',
+          eventType: 'cap_submitted',
+          subject: `CAP submitted for review: ${finding.findingId}`,
+          body: `A corrective action plan (${result.cap?.capId || capId}) was submitted for finding ${finding.findingId} and is awaiting review.`,
+          context: { findingId: finding.findingId, capId: result.cap?.capId || capId },
+        });
 
         return res.status(201).json(result);
       } catch (error) {
@@ -860,6 +870,15 @@ function createCapsRouter({ auth, alfrescoClient, capDraftRepository, now = () =
         // Only discard the draft after the Alfresco create succeeded, so a
         // failure here leaves the user's work intact.
         await capDraftRepository.delete(req.params.draftId, { ownerUsername: req.auth.username });
+
+        await notifyRoleInbox({
+          notificationService,
+          envVar: 'INSPECTOR_NOTIFICATIONS_EMAIL',
+          eventType: 'cap_submitted',
+          subject: `CAP submitted for review: ${finding.findingId}`,
+          body: `A corrective action plan (${result.cap?.capId || capId}) was submitted for finding ${finding.findingId} and is awaiting review.`,
+          context: { findingId: finding.findingId, capId: result.cap?.capId || capId },
+        });
 
         return res.status(201).json(result);
       } catch (error) {
@@ -1150,6 +1169,15 @@ function createCapsRouter({ auth, alfrescoClient, capDraftRepository, now = () =
               'vso:lastStatusChange': nowIsoDate(now()),
             },
           });
+
+          await notifyRoleInbox({
+            notificationService,
+            envVar: 'INSPECTOR_NOTIFICATIONS_EMAIL',
+            eventType: 'cap_submitted',
+            subject: `CAP resubmitted for review: ${req.params.capId}`,
+            body: `Corrective action plan ${req.params.capId} was resubmitted after revision and is awaiting review.`,
+            context: { capId: req.params.capId },
+          });
         }
 
         const updatedCapNode = await alfrescoClient.getNodeById({ ticket: req.auth.ticket, nodeId: capNode.id });
@@ -1227,6 +1255,15 @@ function createCapsRouter({ auth, alfrescoClient, capDraftRepository, now = () =
             },
           });
         }
+
+        await notifyRoleInbox({
+          notificationService,
+          envVar: 'CAP_ENTRY_NOTIFICATIONS_EMAIL',
+          eventType: 'cap_reviewed',
+          subject: `CAP ${acceptanceStatus.toLowerCase()}: ${req.params.capId}`,
+          body: `Corrective action plan ${req.params.capId} was ${acceptanceStatus.toLowerCase()} by a reviewer.`,
+          context: { capId: req.params.capId, acceptanceStatus },
+        });
 
         return res.status(200).json({
           cap: mapCorrectiveActionNode(updatedCap),

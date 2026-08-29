@@ -8,8 +8,8 @@ const { InMemoryNotificationRepository } = require('../setup/mocks/InMemoryNotif
 
 const NOW = new Date('2026-04-03T10:00:00.000Z');
 
-function buildAlfrescoClient({ findingStatus, resolutionDeadline }) {
-  const findingNode = {
+function buildAlfrescoClient({ findingStatus, resolutionDeadline, findingReviewStatus, findingNodes } = {}) {
+  const nodes = findingNodes || [{
     id: 'finding-node-1',
     properties: {
       'vso:findingId': 'MDPP001-AYVIS-01',
@@ -17,18 +17,19 @@ function buildAlfrescoClient({ findingStatus, resolutionDeadline }) {
       'vso:resolutionDeadline': resolutionDeadline,
       'vso:providerName': 'Provider 1',
       'vso:locationName': 'Main Airport',
+      ...(findingReviewStatus ? { 'vso:findingReviewStatus': findingReviewStatus } : {}),
     },
-  };
+  }];
 
   return {
     updated: [],
     createTicket: async () => ({ ticket: 'test-ticket' }),
     revokeTicket: async () => {},
-    searchNodes: async () => [findingNode],
+    searchNodes: async () => nodes,
     listChildrenByType: async () => [],
     updateNodeProperties: async function updateNodeProperties(args) {
       this.updated.push(args);
-      return findingNode;
+      return nodes[0];
     },
   };
 }
@@ -120,5 +121,59 @@ describe('runFindingOverdueSync case escalation', () => {
     });
 
     expect(result.updated).toBe(1);
+  });
+});
+
+describe('runFindingOverdueSync pending-review digest', () => {
+  const originalEmail = process.env.INSPECTOR_NOTIFICATIONS_EMAIL;
+
+  beforeEach(() => {
+    process.env.INSPECTOR_NOTIFICATIONS_EMAIL = 'inspectors@example.com';
+  });
+
+  afterEach(() => {
+    process.env.INSPECTOR_NOTIFICATIONS_EMAIL = originalEmail;
+  });
+
+  it('sends one aggregate digest listing all findings pending review', async () => {
+    const alfrescoClient = buildAlfrescoClient({
+      findingNodes: [
+        { id: 'f1', properties: { 'vso:findingId': 'MDPP001-AYVIS-01', 'vso:findingStatus': 'Open', 'vso:findingReviewStatus': 'Pending Review', 'vso:providerName': 'Provider 1' } },
+        { id: 'f2', properties: { 'vso:findingId': 'MDPP001-AYVIS-02', 'vso:findingStatus': 'Open', 'vso:findingReviewStatus': 'Pending Review', 'vso:providerName': 'Provider 2' } },
+        { id: 'f3', properties: { 'vso:findingId': 'MDPP001-AYVIS-03', 'vso:findingStatus': 'Open', 'vso:findingReviewStatus': 'Confirmed', 'vso:providerName': 'Provider 3' } },
+      ],
+    });
+    const { service, sent } = buildNotificationService();
+
+    const result = await runFindingOverdueSync({
+      alfrescoClient,
+      username: 'job-user',
+      password: 'job-pass',
+      notificationService: service,
+      now: () => NOW,
+    });
+
+    expect(result.pendingReview).toBe(2);
+    expect(sent).toHaveLength(1);
+    expect(sent[0].to).toBe('inspectors@example.com');
+    expect(sent[0].subject).toContain('2 finding');
+    expect(sent[0].text).toContain('MDPP001-AYVIS-01');
+    expect(sent[0].text).toContain('MDPP001-AYVIS-02');
+    expect(sent[0].text).not.toContain('MDPP001-AYVIS-03');
+  });
+
+  it('sends no digest when nothing is pending review', async () => {
+    const alfrescoClient = buildAlfrescoClient({ findingStatus: 'Open', findingReviewStatus: 'Confirmed' });
+    const { service, sent } = buildNotificationService();
+
+    await runFindingOverdueSync({
+      alfrescoClient,
+      username: 'job-user',
+      password: 'job-pass',
+      notificationService: service,
+      now: () => NOW,
+    });
+
+    expect(sent).toHaveLength(0);
   });
 });

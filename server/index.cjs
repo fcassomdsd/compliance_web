@@ -69,6 +69,7 @@ async function start() {
     logger: auditLogger,
     capDraftRepository,
     notificationRepository,
+    notificationService,
   });
 
   app.listen(port, () => {

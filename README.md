@@ -127,7 +127,11 @@ Notification settings (see `NOTIFICATIONS_SQL.sql` for the schema):
 - `SMTP_HOST` — if unset, email notifications queue as `pending` and fail on every retry attempt until configured; in-app notifications are unaffected.
 - `SMTP_PORT` (default `587`), `SMTP_SECURE` (default `false`), `SMTP_USER`, `SMTP_PASS`, `SMTP_FROM` (default `noreply@compliance.local`)
 - `NOTIFICATION_SEND_INTERVAL_MS` (default `60000`) — how often the retry sweep runs
-- `CASE_ESCALATION_EMAIL` — fixed distribution-list address for case-escalation notifications (finding overdue job); escalation is skipped, not queued, if unset
+- `CASE_ESCALATION_EMAIL` — fixed distribution-list address for case-escalation notifications (finding overdue job)
+- `INSPECTOR_NOTIFICATIONS_EMAIL` — fixed distribution list for events an inspector/reviewer needs to act on: CAP submitted, follow-up evidence needs review, evidence marked inadequate, finding pending post-upload review (daily digest), finding closure pending approval, finding closure rejected, deadline extension requested
+- `CAP_ENTRY_NOTIFICATIONS_EMAIL` — fixed distribution list for events the CAP submitter side needs to know about: CAP reviewed, deadline extension reviewed, finding closed
+
+All notification env vars are optional — each notification type is skipped (not queued) if its target env var isn't set, rather than failing.
 
 Auth backend details: [server/README.md](server/README.md)
 

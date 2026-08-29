@@ -1,5 +1,6 @@
 const { mapFindingNode, mapFollowUpReportNode, getFollowUpReportsForFinding } = require('../domain/alfrescoMappers.cjs');
 const { computeEffectiveFindingStatus, FINDING_STATUS } = require('../domain/statusRules.cjs');
+const { notifyRoleInbox } = require('../notifications/roleNotify.cjs');
 
 function untilNextRunMs(hourLocal = 1, now = new Date()) {
   const next = new Date(now);
@@ -40,19 +41,11 @@ async function getFollowUpReportsForFindingAndCaps({ alfrescoClient, ticket, fin
 // Seguridad". Recipient is a fixed distribution list, not resolved
 // per-user, since no email addresses exist anywhere in this data model.
 async function escalateNewlyOverdueFinding({ finding, effectiveStatus, notificationService, now }) {
-  if (!notificationService) {
-    return;
-  }
-  const escalationEmail = process.env.CASE_ESCALATION_EMAIL;
-  if (!escalationEmail) {
-    return;
-  }
-
   const deadlineKind = effectiveStatus === FINDING_STATUS.CAP_OVERDUE ? 'CAP submission' : 'finding resolution';
-  await notificationService.notify({
+  await notifyRoleInbox({
+    notificationService,
+    envVar: 'CASE_ESCALATION_EMAIL',
     eventType: 'case_escalation',
-    channel: 'email',
-    recipient: escalationEmail,
     subject: `Case escalation required: ${finding.findingId} (${deadlineKind} deadline missed)`,
     body: [
       `Finding ${finding.findingId} has missed its ${deadlineKind} deadline and requires case escalation.`,
@@ -63,6 +56,29 @@ async function escalateNewlyOverdueFinding({ finding, effectiveStatus, notificat
     ].join('\n'),
     context: { findingId: finding.findingId, effectiveStatus },
     isCritical: true,
+  });
+}
+
+// Daily digest, appended to the same sweep, of findings still awaiting
+// post-upload review (see PATCH /findings/:findingId/review). There's no
+// Express endpoint call to hook a trigger into here — findings land in
+// "Pending Review" via the canonical-import webscript in compliance_cmis,
+// which this service doesn't observe synchronously — so this polls
+// instead, same as overdue detection itself.
+async function sendPendingReviewDigest({ pendingReviewFindings, notificationService }) {
+  if (pendingReviewFindings.length === 0) {
+    return;
+  }
+  await notifyRoleInbox({
+    notificationService,
+    envVar: 'INSPECTOR_NOTIFICATIONS_EMAIL',
+    eventType: 'finding_review_pending',
+    subject: `${pendingReviewFindings.length} finding(s) awaiting review`,
+    body: [
+      'The following findings are awaiting reviewer confirmation before a CAP can be submitted against them:',
+      ...pendingReviewFindings.map((f) => `- ${f.findingId} (${f.providerName || f.providerId || 'unknown provider'})`),
+    ].join('\n'),
+    context: { findingIds: pendingReviewFindings.map((f) => f.findingId) },
   });
 }
 
@@ -84,9 +100,15 @@ async function runFindingOverdueSync({ alfrescoClient, username, password, notif
 
     let updated = 0;
     let drift = 0;
+    const pendingReviewFindings = [];
 
     for (const findingNode of findings) {
       const finding = mapFindingNode(findingNode);
+
+      if (finding.findingReviewStatus === 'Pending Review') {
+        pendingReviewFindings.push(finding);
+      }
+
       const followUps = await getFollowUpReportsForFindingAndCaps({
         alfrescoClient,
         ticket,
@@ -127,8 +149,10 @@ async function runFindingOverdueSync({ alfrescoClient, username, password, notif
       }
     }
 
-    logger.info('Finding overdue sync completed', { updated, drift, total: findings.length });
-    return { skipped: false, updated, drift };
+    await sendPendingReviewDigest({ pendingReviewFindings, notificationService });
+
+    logger.info('Finding overdue sync completed', { updated, drift, pendingReview: pendingReviewFindings.length, total: findings.length });
+    return { skipped: false, updated, drift, pendingReview: pendingReviewFindings.length };
   } finally {
     await alfrescoClient.revokeTicket(ticket).catch(() => undefined);
   }

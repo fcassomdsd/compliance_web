@@ -18,6 +18,7 @@ const {
   resolveFindingStatusFromFollowUp,
 } = require('../domain/statusRules.cjs');
 const { canReviewFinding } = require('../domain/statusRules.cjs');
+const { notifyRoleInbox } = require('../notifications/roleNotify.cjs');
 
 const FINDINGS_LIBRARY_PATH = "Sites/vigilancia-de-la-so/documentLibrary/Vigilancia/Hallazgos";
 
@@ -196,7 +197,7 @@ function applyFindingFilters({ findings, status, capOverdueOnly, solutionOverdue
   });
 }
 
-function createFindingsRouter({ auth, alfrescoClient, now = () => new Date() }) {
+function createFindingsRouter({ auth, alfrescoClient, notificationService, now = () => new Date() }) {
   const router = express.Router();
 
   router.get(
@@ -527,6 +528,15 @@ function createFindingsRouter({ auth, alfrescoClient, now = () => new Date() }) 
           });
         }
 
+        await notifyRoleInbox({
+          notificationService,
+          envVar: 'INSPECTOR_NOTIFICATIONS_EMAIL',
+          eventType: 'evidence_review_pending',
+          subject: `Follow-up evidence needs review: ${finding.findingId}`,
+          body: `Follow-up ${followUpId} was submitted for finding ${finding.findingId} and its evidence needs review.`,
+          context: { findingId: finding.findingId, followUpId },
+        });
+
         return res.status(201).json({
           followUpReport: {
             ...mapFollowUpReportNode(created),
@@ -616,6 +626,26 @@ function createFindingsRouter({ auth, alfrescoClient, now = () => new Date() }) 
               'vso:findingStatus': nextFindingStatus,
               'vso:lastStatusChange': toDateOnly(now()),
             },
+          });
+
+          if (nextFindingStatus === FINDING_STATUS.PENDING_CLOSURE_APPROVAL) {
+            await notifyRoleInbox({
+              notificationService,
+              envVar: 'INSPECTOR_NOTIFICATIONS_EMAIL',
+              eventType: 'closure_pending_approval',
+              subject: `Finding closure awaiting approval: ${req.params.findingId}`,
+              body: `Finding ${req.params.findingId} has effective closure evidence and is awaiting a reviewer's closure approval.`,
+              context: { findingId: req.params.findingId, followUpId: req.params.followUpId },
+            });
+          }
+        } else {
+          await notifyRoleInbox({
+            notificationService,
+            envVar: 'INSPECTOR_NOTIFICATIONS_EMAIL',
+            eventType: 'evidence_inadequate',
+            subject: `Follow-up evidence needs resubmission: ${req.params.findingId}`,
+            body: `Follow-up ${req.params.followUpId} for finding ${req.params.findingId} was marked inadequate${notes ? `: ${notes}` : '.'}`,
+            context: { findingId: req.params.findingId, followUpId: req.params.followUpId },
           });
         }
 
@@ -726,6 +756,26 @@ function createFindingsRouter({ auth, alfrescoClient, now = () => new Date() }) 
           properties: statusProperties,
         });
 
+        if (decision === 'approve') {
+          await notifyRoleInbox({
+            notificationService,
+            envVar: 'CAP_ENTRY_NOTIFICATIONS_EMAIL',
+            eventType: 'finding_closed',
+            subject: `Finding closed: ${req.params.findingId}`,
+            body: `Finding ${req.params.findingId} has been reviewed and formally closed.`,
+            context: { findingId: req.params.findingId },
+          });
+        } else {
+          await notifyRoleInbox({
+            notificationService,
+            envVar: 'INSPECTOR_NOTIFICATIONS_EMAIL',
+            eventType: 'closure_rejected',
+            subject: `Finding closure rejected: ${req.params.findingId}`,
+            body: `Finding ${req.params.findingId}'s closure was rejected and requires further follow-up work.`,
+            context: { findingId: req.params.findingId },
+          });
+        }
+
         return res.status(200).json({
           finding: mapFindingNode(updatedFinding),
         });
@@ -778,6 +828,15 @@ function createFindingsRouter({ auth, alfrescoClient, now = () => new Date() }) 
           },
         });
 
+        await notifyRoleInbox({
+          notificationService,
+          envVar: 'INSPECTOR_NOTIFICATIONS_EMAIL',
+          eventType: 'deadline_extension_requested',
+          subject: `Deadline extension requested: ${req.params.findingId}`,
+          body: `A resolution-deadline extension to ${requestedResolutionDeadline} was requested for finding ${req.params.findingId}.`,
+          context: { findingId: req.params.findingId, requestedResolutionDeadline },
+        });
+
         return res.status(201).json({
           finding: mapFindingNode(updatedFinding),
         });
@@ -824,6 +883,15 @@ function createFindingsRouter({ auth, alfrescoClient, now = () => new Date() }) 
           ticket: req.auth.ticket,
           nodeId: findingNode.id,
           properties,
+        });
+
+        await notifyRoleInbox({
+          notificationService,
+          envVar: 'CAP_ENTRY_NOTIFICATIONS_EMAIL',
+          eventType: 'deadline_extension_reviewed',
+          subject: `Deadline extension ${decision.toLowerCase()}: ${req.params.findingId}`,
+          body: `The requested resolution-deadline extension for finding ${req.params.findingId} was ${decision.toLowerCase()}.`,
+          context: { findingId: req.params.findingId, decision },
         });
 
         return res.status(200).json({
