@@ -5,8 +5,9 @@ const { createAuthRouter } = require('./auth/router.cjs');
 const { createSessionAuth } = require('./auth/sessionAuth.cjs');
 const { createFindingsRouter } = require('./findings/router.cjs');
 const { createCapsRouter } = require('./caps/router.cjs');
+const { createReportsRouter } = require('./reports/router.cjs');
 
-function createApp({ config, sessionRepository, alfrescoClient, loginRateLimiter, logger, now }) {
+function createApp({ config, sessionRepository, alfrescoClient, loginRateLimiter, logger, capDraftRepository, now }) {
   const app = express();
   app.use(express.json());
   app.use(cookieParser());
@@ -45,6 +46,16 @@ function createApp({ config, sessionRepository, alfrescoClient, loginRateLimiter
   app.use(
     '/api',
     createCapsRouter({
+      auth,
+      alfrescoClient,
+      capDraftRepository,
+      now,
+    })
+  );
+
+  app.use(
+    '/api/reports',
+    createReportsRouter({
       auth,
       alfrescoClient,
       now,

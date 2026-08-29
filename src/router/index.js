@@ -4,7 +4,19 @@ import { applyAuthGuards } from '@/router/guards';
 const routes = [
   {
     path: '/',
-    redirect: '/site-visit',
+    name: 'home',
+    // Role-aware landing page: inspectors land on the oversight posture
+    // dashboard, everyone else keeps the previous default. Deciding this
+    // inside HomeView.vue (rather than a static redirect string) means the
+    // auth guard has already refreshed authStore.roles before we choose.
+    component: () => import('@/views/HomeView.vue'),
+    meta: { requiresAuth: true },
+  },
+  {
+    path: '/oversight-posture',
+    name: 'oversightPosture',
+    component: () => import('@/views/OversightPostureDashboard.vue'),
+    meta: { requiresAuth: true, requiredRoles: ['inspector', 'planner', 'reporter', 'admin'] },
   },
   {
     path: '/site-visit',

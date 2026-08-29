@@ -78,7 +78,7 @@
               :class="{ 'selected-row': selectedInspection?.id === inspection.id }">
             <td>{{ inspection.code }}</td>
             <td>{{ inspection.locationName }}</td>
-            <td>{{ inspection.startDate }}</td>
+            <td>{{ formatDate(inspection.startDate) }}</td>
             <td class="actions-cell">
               <div>
                 <BaseButton :id="`select-${inspection.id}`" variant="ghost" size="sm" :icon="viewImg" alt="Select" @click="selectInspection(inspection)" />
@@ -103,6 +103,7 @@ import { useAuthStore } from '@/stores/authStore';
 import { useToast } from 'vue-toastification';
 import { apiInspectionReport } from '@/services/apiServices';
 import { isActive } from '@/utils/siteVisitStatus';
+import { formatDate } from '@/utils/formatDate';
 import viewImg from '@/assets/images/icons/view.png';
 
 const siteVisitStore = useSiteVisitStore();

@@ -10,7 +10,7 @@
     </div>
     <div class="header-row">
       <span class="header-label">Dates:</span>
-      <span class="header-value">{{ startDate }} — {{ endDate }}</span>
+      <span class="header-value">{{ formatDate(startDate) }} — {{ formatDate(endDate) }}</span>
     </div>
     <div class="header-row">
       <span class="header-label">Provider:</span>
@@ -20,6 +20,8 @@
 </template>
 
 <script setup>
+import { formatDate } from '@/utils/formatDate';
+
 defineProps({
   code: { type: String, required: true },
   locationName: { type: String, default: '' },

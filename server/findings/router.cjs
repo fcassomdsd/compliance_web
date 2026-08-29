@@ -26,23 +26,29 @@ function buildFindingsQuery(filters = {}) {
     `PATH:'/app:company_home/st:sites/cm:vigilancia-de-la-so/cm:documentLibrary/cm:Vigilancia/cm:Hallazgos//*'`,
   ];
 
+  // Plain phrase match, not the '=' exact-term operator: these properties
+  // aren't configured for cross-locale indexing, and AFTS exact-term
+  // search throws a 500 in Solr without it (UnsupportedOperationException:
+  // "Exact Term search is not supported unless you configure the field
+  // ... for cross locale search"). Phrase match on these opaque
+  // single-token IDs/codes is behaviorally equivalent.
   if (filters.findingId) {
-    predicates.push(`=vso:findingId:"${escapeAftsValue(filters.findingId)}"`);
+    predicates.push(`vso:findingId:"${escapeAftsValue(filters.findingId)}"`);
   }
   if (filters.inspectionId) {
-    predicates.push(`=vso:inspectionId:"${escapeAftsValue(filters.inspectionId)}"`);
+    predicates.push(`vso:inspectionId:"${escapeAftsValue(filters.inspectionId)}"`);
   }
   if (filters.locationId) {
-    predicates.push(`=vso:locationId:"${escapeAftsValue(filters.locationId)}"`);
+    predicates.push(`vso:locationId:"${escapeAftsValue(filters.locationId)}"`);
   }
   if (filters.providerId) {
-    predicates.push(`=vso:providerId:"${escapeAftsValue(filters.providerId)}"`);
+    predicates.push(`vso:providerId:"${escapeAftsValue(filters.providerId)}"`);
   }
   if (filters.specialtyCode) {
-    predicates.push(`=vso:specialtyCode:"${escapeAftsValue(filters.specialtyCode)}"`);
+    predicates.push(`vso:specialtyCode:"${escapeAftsValue(filters.specialtyCode)}"`);
   }
   if (filters.domain) {
-    predicates.push(`=vso:domain:"${escapeAftsValue(filters.domain)}"`);
+    predicates.push(`vso:domain:"${escapeAftsValue(filters.domain)}"`);
   }
 
   return predicates.join(' AND ');

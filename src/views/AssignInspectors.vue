@@ -77,7 +77,7 @@
           <tr v-for="inspection in assignableInspections" :key="inspection.id">
             <td>{{ inspection?.code }}</td>
             <td>{{ inspection?.locationName }}</td>
-            <td>{{ inspection?.startDate }}</td>
+            <td>{{ formatDate(inspection?.startDate) }}</td>
             <td class="actions-cell">
               <div>
                 <BaseButton :id="`select-${inspection.id}`" variant="ghost" size="sm" :icon="viewImg" alt="Select" :disabled="inspectorStore.inspectors.length==0" @click="selectInspection(inspection)" />
@@ -98,6 +98,7 @@ import { useSiteVisitStore } from '@/stores/siteVisitStore';
 import { useInspectionStore } from '@/stores/inspectionStore';
 import { useInspectorStore } from '@/stores/inspectorStore';
 import { useInspectedSpecialtyStore } from '@/stores/inspectedSpecialtyStore';
+import { formatDate } from '@/utils/formatDate';
 import { useInspectedProviderStore } from '@/stores/inspectedProviderStore';
 import { useAuthStore } from '@/stores/authStore';
 // specialtyStore not required here; inspectorStore provides inspector specialties

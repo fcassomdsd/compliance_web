@@ -39,8 +39,34 @@
             <td>{{ cap.capId }}</td>
             <td>{{ cap.acceptanceStatus }}</td>
             <td>{{ cap.responsibleEntity }}</td>
-            <td>{{ cap.dueDate || '-' }}</td>
-            <td><BaseButton variant="ghost" size="sm" @click="viewCap(cap.capId)">View</BaseButton></td>
+            <td>{{ formatDate(cap.dueDate) || '-' }}</td>
+            <td>
+              <BaseButton variant="ghost" size="sm" @click="viewCap(cap.capId)">View</BaseButton>
+              <BaseButton v-if="isCapEditableStatus(cap.acceptanceStatus)" variant="ghost" size="sm" @click="editCap(cap)">Edit</BaseButton>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section v-if="capStore.drafts.length" class="card">
+      <h3>My Draft CAPs</h3>
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>Finding ID</th>
+            <th>Last Saved</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr v-for="draft in capStore.drafts" :key="draft.draftId">
+            <td>{{ draft.findingId }}</td>
+            <td>{{ formatDate(draft.updatedAt) || '-' }}</td>
+            <td>
+              <BaseButton variant="ghost" size="sm" @click="editDraft(draft)">Edit</BaseButton>
+              <BaseButton variant="ghost" size="sm" :disabled="capStore.loading" @click="deleteDraftAction(draft.draftId)">Delete</BaseButton>
+            </td>
           </tr>
         </tbody>
       </table>
@@ -48,8 +74,10 @@
 
     <section v-if="capStore.selectedCap" class="card detail-panel">
       <h3>CAP Detail: {{ capStore.selectedCap.capId }}</h3>
+      <BaseButton v-if="isCapEditableStatus(capStore.selectedCap.acceptanceStatus)" variant="ghost" size="sm" @click="editCap(capStore.selectedCap)">Edit</BaseButton>
+      <BaseButton variant="ghost" size="sm" @click="closeCapDetail">Close</BaseButton>
       <p><strong>Acceptance status:</strong> {{ capStore.selectedCap.acceptanceStatus || '-' }}</p>
-      <p><strong>Due date:</strong> {{ capStore.selectedCap.dueDate || '-' }}</p>
+      <p><strong>Due date:</strong> {{ formatDate(capStore.selectedCap.dueDate) || '-' }}</p>
       <p><strong>Action items:</strong> {{ capStore.selectedCap.correctiveActions?.length || 0 }}</p>
       <p><strong>Follow-up reports:</strong> {{ capStore.selectedCap.followUpReports?.length || 0 }}</p>
 
@@ -60,7 +88,23 @@
         <p><strong>Main category:</strong> {{ capStore.selectedCap.rootCauseAnalysis.mainCategory || '-' }}</p>
         <p><strong>Root cause:</strong> {{ capStore.selectedCap.rootCauseAnalysis.rootCause || '-' }}</p>
         <p><strong>Contributing factors:</strong> {{ capStore.selectedCap.rootCauseAnalysis.contributingFactors || '-' }}</p>
-        <div class="evidence-upload">
+        <div v-if="capStore.selectedCap.rootCauseAnalysis.evidence?.length" class="evidence-list">
+          <p class="evidence-list-title"><strong>Attachments</strong></p>
+          <ul>
+            <li v-for="item in capStore.selectedCap.rootCauseAnalysis.evidence" :key="item.nodeId">
+              <span class="evidence-name">{{ item.name }}</span>
+              <BaseButton variant="ghost" size="sm" @click="viewEvidence(item)">View</BaseButton>
+              <BaseButton
+                v-if="isCapEditableStatus(capStore.selectedCap.acceptanceStatus)"
+                variant="ghost"
+                size="sm"
+                :disabled="capStore.loading"
+                @click="confirmRemoveEvidence(item)"
+              >Remove</BaseButton>
+            </li>
+          </ul>
+        </div>
+        <div v-if="isCapEditableStatus(capStore.selectedCap.acceptanceStatus)" class="evidence-upload">
           <input type="file" @change="onEvidenceFileChange($event, 'rcaDetail')" />
           <BaseButton variant="ghost" size="sm" :disabled="!rcaDetailEvidenceFile || capStore.loading" @click="uploadDetailEvidence('rca')">Upload RCA Evidence</BaseButton>
         </div>
@@ -75,7 +119,23 @@
         <p><strong>Calculated risk level:</strong> {{ capStore.selectedCap.riskAssessment.calculatedRiskLevel || '-' }}</p>
         <p><strong>Tolerability level:</strong> {{ capStore.selectedCap.riskAssessment.tolerabilityLevel || '-' }}</p>
         <p><strong>Justification:</strong> {{ capStore.selectedCap.riskAssessment.justification || '-' }}</p>
-        <div class="evidence-upload">
+        <div v-if="capStore.selectedCap.riskAssessment.evidence?.length" class="evidence-list">
+          <p class="evidence-list-title"><strong>Attachments</strong></p>
+          <ul>
+            <li v-for="item in capStore.selectedCap.riskAssessment.evidence" :key="item.nodeId">
+              <span class="evidence-name">{{ item.name }}</span>
+              <BaseButton variant="ghost" size="sm" @click="viewEvidence(item)">View</BaseButton>
+              <BaseButton
+                v-if="isCapEditableStatus(capStore.selectedCap.acceptanceStatus)"
+                variant="ghost"
+                size="sm"
+                :disabled="capStore.loading"
+                @click="confirmRemoveEvidence(item)"
+              >Remove</BaseButton>
+            </li>
+          </ul>
+        </div>
+        <div v-if="isCapEditableStatus(capStore.selectedCap.acceptanceStatus)" class="evidence-upload">
           <input type="file" @change="onEvidenceFileChange($event, 'riskDetail')" />
           <BaseButton variant="ghost" size="sm" :disabled="!riskDetailEvidenceFile || capStore.loading" @click="uploadDetailEvidence('risk-assessment')">Upload Risk Assessment Evidence</BaseButton>
         </div>
@@ -103,7 +163,7 @@
               <td>{{ item.description }}</td>
               <td>{{ item.priority || '-' }}</td>
               <td>{{ item.responsiblePerson }}</td>
-              <td>{{ item.deadline }}</td>
+              <td>{{ formatDate(item.deadline) }}</td>
               <td>
                 <select v-model="item.itemStatus">
                   <option value="Open">Open</option>
@@ -131,7 +191,7 @@
         <h4>Effectiveness Verification</h4>
         <p><strong>Method:</strong> {{ capStore.selectedCap.effectivenessVerification.method || '-' }}</p>
         <p><strong>Indicators:</strong> {{ capStore.selectedCap.effectivenessVerification.indicators || '-' }}</p>
-        <p><strong>Projected verification date:</strong> {{ capStore.selectedCap.effectivenessVerification.projectedVerificationDate || '-' }}</p>
+        <p><strong>Projected verification date:</strong> {{ formatDate(capStore.selectedCap.effectivenessVerification.projectedVerificationDate) || '-' }}</p>
       </div>
     </section>
 
@@ -141,11 +201,11 @@
     </div>
 
     <div v-if="showSubmit" class="card cap-submit-panel">
-      <h3>Submit CAP</h3>
+      <h3>{{ panelHeading }}</h3>
       <div class="form-grid">
         <div class="form-field">
           <label for="findingId">Finding ID</label>
-          <input id="findingId" v-model="capForm.findingId" type="text" />
+          <input id="findingId" v-model="capForm.findingId" type="text" :disabled="editMode.type !== 'new'" />
         </div>
         <div class="form-field">
           <label for="dueDate">Due Date</label>
@@ -156,72 +216,96 @@
         </div>
       </div>
 
-      <div class="section-card">
-        <h4 class="section-title">1. Root Cause Analysis</h4>
-        <div class="form-grid">
-          <div class="form-field">
-            <label for="rcaMethod">Method used</label>
-            <select id="rcaMethod" v-model="capForm.rootCauseAnalysis.method">
-              <option v-for="method in rcaMethods" :key="method" :value="method">{{ method }}</option>
-            </select>
-          </div>
-          <div v-if="capForm.rootCauseAnalysis.method === 'Other'" class="form-field">
-            <label for="rcaOtherMethodDescription">Other method description</label>
-            <input id="rcaOtherMethodDescription" v-model="capForm.rootCauseAnalysis.otherMethodDescription" type="text" />
-          </div>
-          <div class="form-field">
-            <label for="rcaMainCategory">Main category</label>
-            <input id="rcaMainCategory" v-model="capForm.rootCauseAnalysis.mainCategory" type="text" />
-          </div>
-          <div class="form-field field-span-2">
-            <label for="rootCause">Root cause</label>
-            <textarea id="rootCause" v-model="capForm.rootCauseAnalysis.rootCause" rows="2" />
-          </div>
-          <div class="form-field field-span-2">
-            <label for="contributingFactors">Contributing factors</label>
-            <textarea id="contributingFactors" v-model="capForm.rootCauseAnalysis.contributingFactors" rows="2" />
-          </div>
-          <div class="form-field">
-            <label for="rcaEvidence">Evidence of RCA</label>
-            <input id="rcaEvidence" type="file" @change="onEvidenceFileChange($event, 'rca')" />
+      <div class="split-grid">
+        <div class="section-card">
+          <h4 class="section-title">1. Root Cause Analysis</h4>
+          <div class="form-grid">
+            <div class="form-field">
+              <label for="rcaMethod">Method used</label>
+              <select id="rcaMethod" v-model="capForm.rootCauseAnalysis.method">
+                <option v-for="method in rcaMethods" :key="method" :value="method">{{ method }}</option>
+              </select>
+            </div>
+            <div v-if="capForm.rootCauseAnalysis.method === 'Other'" class="form-field">
+              <label for="rcaOtherMethodDescription">Other method description</label>
+              <input id="rcaOtherMethodDescription" v-model="capForm.rootCauseAnalysis.otherMethodDescription" type="text" />
+            </div>
+            <div class="form-field">
+              <label for="rcaMainCategory">Main category</label>
+              <input id="rcaMainCategory" v-model="capForm.rootCauseAnalysis.mainCategory" type="text" />
+            </div>
+            <div class="form-field field-span-2">
+              <label for="rootCause">Root cause</label>
+              <textarea id="rootCause" v-model="capForm.rootCauseAnalysis.rootCause" rows="2" />
+            </div>
+            <div class="form-field field-span-2">
+              <label for="contributingFactors">Contributing factors</label>
+              <textarea id="contributingFactors" v-model="capForm.rootCauseAnalysis.contributingFactors" rows="2" />
+            </div>
+            <div class="form-field" v-if="editMode.type !== 'returned'">
+              <label for="rcaEvidence">Evidence of RCA</label>
+              <input id="rcaEvidence" type="file" multiple @change="onEvidenceFileChange($event, 'rca')" />
+              <div v-if="rcaEvidenceFiles.length" class="evidence-list">
+                <ul>
+                  <li v-for="(file, index) in rcaEvidenceFiles" :key="`${file.name}-${index}`">
+                    <span class="evidence-name">{{ file.name }}</span>
+                    <BaseButton variant="ghost" size="sm" @click="removeStagedEvidence('rca', index)">Remove</BaseButton>
+                  </li>
+                </ul>
+              </div>
+            </div>
+            <div class="form-field field-span-2" v-else>
+              <p class="helper-text">Evidence can be attached from the CAP Detail view below.</p>
+            </div>
           </div>
         </div>
-      </div>
 
-      <div class="section-card">
-        <h4 class="section-title">2. Risk Assessment</h4>
-        <div class="form-grid">
-          <div class="form-field">
-            <label for="raHazard">Identified hazard</label>
-            <input id="raHazard" v-model="capForm.riskAssessment.hazard" type="text" />
-          </div>
-          <div class="form-field">
-            <label for="raConsequence">Potential consequence</label>
-            <input id="raConsequence" v-model="capForm.riskAssessment.consequence" type="text" />
-          </div>
-          <div class="form-field">
-            <label for="raProbability">Probability</label>
-            <input id="raProbability" v-model="capForm.riskAssessment.probability" type="text" />
-          </div>
-          <div class="form-field">
-            <label for="raSeverity">Severity</label>
-            <input id="raSeverity" v-model="capForm.riskAssessment.severity" type="text" />
-          </div>
-          <div class="form-field">
-            <label for="raCalculatedRiskLevel">Calculated risk level</label>
-            <input id="raCalculatedRiskLevel" v-model="capForm.riskAssessment.calculatedRiskLevel" type="text" />
-          </div>
-          <div class="form-field">
-            <label for="raTolerabilityLevel">Tolerability level</label>
-            <input id="raTolerabilityLevel" v-model="capForm.riskAssessment.tolerabilityLevel" type="text" />
-          </div>
-          <div class="form-field field-span-2">
-            <label for="raJustification">Justification</label>
-            <textarea id="raJustification" v-model="capForm.riskAssessment.justification" rows="2" />
-          </div>
-          <div class="form-field">
-            <label for="raEvidence">Evidence</label>
-            <input id="raEvidence" type="file" @change="onEvidenceFileChange($event, 'risk')" />
+        <div class="section-card">
+          <h4 class="section-title">2. Risk Assessment</h4>
+          <div class="form-grid">
+            <div class="form-field">
+              <label for="raHazard">Identified hazard</label>
+              <input id="raHazard" v-model="capForm.riskAssessment.hazard" type="text" />
+            </div>
+            <div class="form-field">
+              <label for="raConsequence">Potential consequence</label>
+              <input id="raConsequence" v-model="capForm.riskAssessment.consequence" type="text" />
+            </div>
+            <div class="form-field">
+              <label for="raProbability">Probability</label>
+              <input id="raProbability" v-model="capForm.riskAssessment.probability" type="text" />
+            </div>
+            <div class="form-field">
+              <label for="raSeverity">Severity</label>
+              <input id="raSeverity" v-model="capForm.riskAssessment.severity" type="text" />
+            </div>
+            <div class="form-field">
+              <label for="raCalculatedRiskLevel">Calculated risk level</label>
+              <input id="raCalculatedRiskLevel" v-model="capForm.riskAssessment.calculatedRiskLevel" type="text" />
+            </div>
+            <div class="form-field">
+              <label for="raTolerabilityLevel">Tolerability level</label>
+              <input id="raTolerabilityLevel" v-model="capForm.riskAssessment.tolerabilityLevel" type="text" />
+            </div>
+            <div class="form-field field-span-2">
+              <label for="raJustification">Justification</label>
+              <textarea id="raJustification" v-model="capForm.riskAssessment.justification" rows="2" />
+            </div>
+            <div class="form-field" v-if="editMode.type !== 'returned'">
+              <label for="raEvidence">Evidence</label>
+              <input id="raEvidence" type="file" multiple @change="onEvidenceFileChange($event, 'risk')" />
+              <div v-if="riskEvidenceFiles.length" class="evidence-list">
+                <ul>
+                  <li v-for="(file, index) in riskEvidenceFiles" :key="`${file.name}-${index}`">
+                    <span class="evidence-name">{{ file.name }}</span>
+                    <BaseButton variant="ghost" size="sm" @click="removeStagedEvidence('risk', index)">Remove</BaseButton>
+                  </li>
+                </ul>
+              </div>
+            </div>
+            <div class="form-field field-span-2" v-else>
+              <p class="helper-text">Evidence can be attached from the CAP Detail view below.</p>
+            </div>
           </div>
         </div>
       </div>
@@ -253,48 +337,55 @@
         </div>
       </div>
 
-      <div class="section-card">
-        <h4 class="section-title">4. Expected Residual Risk</h4>
-        <div class="form-grid">
-          <div class="form-field">
-            <label for="residualProbability">Probability</label>
-            <input id="residualProbability" v-model="capForm.residualRisk.probability" type="text" />
+      <div class="split-grid">
+        <div class="section-card">
+          <h4 class="section-title">4. Expected Residual Risk</h4>
+          <div class="form-grid">
+            <div class="form-field">
+              <label for="residualProbability">Probability</label>
+              <input id="residualProbability" v-model="capForm.residualRisk.probability" type="text" />
+            </div>
+            <div class="form-field">
+              <label for="residualSeverity">Severity</label>
+              <input id="residualSeverity" v-model="capForm.residualRisk.severity" type="text" />
+            </div>
+            <div class="form-field field-span-2">
+              <label for="residualRiskLevel">Residual risk level</label>
+              <input id="residualRiskLevel" v-model="capForm.residualRisk.riskLevel" type="text" />
+            </div>
+            <div class="form-field field-span-2">
+              <label for="residualJustification">Justification</label>
+              <textarea id="residualJustification" v-model="capForm.residualRisk.justification" rows="2" />
+            </div>
           </div>
-          <div class="form-field">
-            <label for="residualSeverity">Severity</label>
-            <input id="residualSeverity" v-model="capForm.residualRisk.severity" type="text" />
-          </div>
-          <div class="form-field field-span-2">
-            <label for="residualRiskLevel">Residual risk level</label>
-            <input id="residualRiskLevel" v-model="capForm.residualRisk.riskLevel" type="text" />
-          </div>
-          <div class="form-field field-span-2">
-            <label for="residualJustification">Justification</label>
-            <textarea id="residualJustification" v-model="capForm.residualRisk.justification" rows="2" />
+        </div>
+
+        <div class="section-card">
+          <h4 class="section-title">5. Effectiveness Verification</h4>
+          <div class="form-grid">
+            <div class="form-field">
+              <label for="verificationMethod">Method</label>
+              <input id="verificationMethod" v-model="capForm.effectivenessVerification.method" type="text" />
+            </div>
+            <div class="form-field">
+              <label for="verificationIndicators">Indicator(s)</label>
+              <textarea id="verificationIndicators" v-model="capForm.effectivenessVerification.indicators" rows="2" />
+            </div>
+            <div class="form-field">
+              <label for="projectedVerificationDate">Projected date of verification</label>
+              <input id="projectedVerificationDate" v-model="capForm.effectivenessVerification.projectedVerificationDate" type="date" />
+            </div>
           </div>
         </div>
       </div>
 
-      <div class="section-card">
-        <h4 class="section-title">5. Effectiveness Verification</h4>
-        <div class="form-grid">
-          <div class="form-field">
-            <label for="verificationMethod">Method</label>
-            <input id="verificationMethod" v-model="capForm.effectivenessVerification.method" type="text" />
-          </div>
-          <div class="form-field">
-            <label for="verificationIndicators">Indicator(s)</label>
-            <textarea id="verificationIndicators" v-model="capForm.effectivenessVerification.indicators" rows="2" />
-          </div>
-          <div class="form-field">
-            <label for="projectedVerificationDate">Projected date of verification</label>
-            <input id="projectedVerificationDate" v-model="capForm.effectivenessVerification.projectedVerificationDate" type="date" />
-          </div>
-        </div>
+      <div class="form-actions" v-if="editMode.type === 'returned'">
+        <BaseButton variant="secondary" @click="saveReturnedChangesAction" :disabled="capStore.loading">Save Changes</BaseButton>
+        <BaseButton variant="primary" @click="resubmitReturnedAction" :disabled="capStore.loading">Resubmit for Review</BaseButton>
       </div>
-
-      <div class="form-actions">
-        <BaseButton variant="primary" @click="submitCap" :disabled="capStore.loading">Submit CAP</BaseButton>
+      <div class="form-actions" v-else>
+        <BaseButton variant="secondary" @click="saveDraftAction" :disabled="capStore.loading">Save Draft</BaseButton>
+        <BaseButton variant="primary" @click="submitForReviewAction" :disabled="capStore.loading">Submit for Review</BaseButton>
       </div>
     </div>
 
@@ -308,7 +399,7 @@
         <select id="acceptanceStatus" v-model="reviewForm.acceptanceStatus">
           <option value="Accepted">Accepted</option>
           <option value="Rejected">Rejected</option>
-          <option value="Returned for Revision">Returned for Revision</option>
+          <option value="Returned">Returned for Revision</option>
         </select>
       </div>
       <BaseButton variant="primary" @click="reviewCap" :disabled="capStore.loading">Apply Review</BaseButton>
@@ -316,17 +407,38 @@
 
     <p v-if="capStore.error" class="error-message">{{ capStore.error }}</p>
     <p v-if="message" class="success-message">{{ message }}</p>
+
+    <ModalWindow
+      :show="showNoEvidenceConfirm"
+      titulo="No evidence attached"
+      explanation="No RCA or Risk Assessment evidence file is attached to this submission. Evidence can still be added later from the CAP Detail view, but the CAP will already be visible for review in the meantime."
+      accion="submit this CAP without evidence"
+      @confirm="confirmSubmitWithoutEvidence"
+      @cancel="cancelSubmitWithoutEvidence"
+    />
+
+    <ModalWindow
+      :show="Boolean(evidenceToRemove)"
+      titulo="Remove evidence"
+      :explanation="`This will permanently remove '${evidenceToRemove?.name || ''}' from this CAP.`"
+      accion="remove this evidence file"
+      @confirm="removeEvidenceConfirmed"
+      @cancel="cancelRemoveEvidence"
+    />
   </BaseManager>
 </template>
 
 <script setup>
-import { reactive, ref, onMounted } from 'vue';
+import { reactive, ref, computed, onMounted } from 'vue';
 import { useRoute } from 'vue-router';
 import BaseManager from '@/components/base/BaseManager.vue';
 import BaseButton from '@/components/base/BaseButton.vue';
 import ScopePicker from '@/components/common/ScopePicker.vue';
+import ModalWindow from '@/components/common/ModalWindow.vue';
 import { useCapStore } from '@/stores/capStore';
 import { useAuthStore } from '@/stores/authStore';
+import { formatDate } from '@/utils/formatDate';
+import { apiCapEvidenceContentUrl } from '@/services/apiServices';
 
 const route = useRoute();
 const capStore = useCapStore();
@@ -335,6 +447,28 @@ const authStore = useAuthStore();
 const message = ref('');
 const showSubmit = ref(false);
 const showReview = ref(false);
+
+// Editing a CAP has two entirely different mechanisms depending on where
+// it is in its lifecycle: a Draft is a Postgres-only row (never an Alfresco
+// node), while a Returned CAP is a real, already-versioned Alfresco node
+// being revised in place. { type: 'new' | 'draft' | 'returned', id }
+const editMode = ref({ type: 'new' });
+const showNoEvidenceConfirm = ref(false);
+const evidenceToRemove = ref(null);
+
+function isCapEditableStatus(status) {
+  return status === 'Returned';
+}
+
+const panelHeading = computed(() => {
+  if (editMode.value.type === 'returned') {
+    return `Edit CAP: ${editMode.value.capId}`;
+  }
+  if (editMode.value.type === 'draft') {
+    return 'Edit Draft CAP';
+  }
+  return 'Submit CAP';
+});
 
 const rcaMethods = ['5 Whys', 'Fishbone', 'BowTie', 'TapRooT', 'Barrier Analysis', 'Other'];
 const actionPriorities = ['High', 'Medium', 'Low'];
@@ -381,21 +515,48 @@ const capForm = reactive({
   },
 });
 
-const rcaEvidenceFile = ref(null);
-const riskEvidenceFile = ref(null);
+const rcaEvidenceFiles = ref([]);
+const riskEvidenceFiles = ref([]);
 const rcaDetailEvidenceFile = ref(null);
 const riskDetailEvidenceFile = ref(null);
 
 function onEvidenceFileChange(event, target) {
-  const file = event.target.files?.[0] || null;
+  const selectedFiles = Array.from(event.target.files || []);
   if (target === 'rca') {
-    rcaEvidenceFile.value = file;
+    rcaEvidenceFiles.value = [...rcaEvidenceFiles.value, ...selectedFiles];
   } else if (target === 'risk') {
-    riskEvidenceFile.value = file;
+    riskEvidenceFiles.value = [...riskEvidenceFiles.value, ...selectedFiles];
   } else if (target === 'rcaDetail') {
-    rcaDetailEvidenceFile.value = file;
+    rcaDetailEvidenceFile.value = selectedFiles[0] || null;
   } else if (target === 'riskDetail') {
-    riskDetailEvidenceFile.value = file;
+    riskDetailEvidenceFile.value = selectedFiles[0] || null;
+  }
+  // Clear the input so choosing the same file again still fires 'change'
+  // (each selection is appended to the staged list above, not replaced).
+  event.target.value = '';
+}
+
+function removeStagedEvidence(section, index) {
+  if (section === 'rca') {
+    rcaEvidenceFiles.value = rcaEvidenceFiles.value.filter((_, i) => i !== index);
+  } else if (section === 'risk') {
+    riskEvidenceFiles.value = riskEvidenceFiles.value.filter((_, i) => i !== index);
+  }
+}
+
+function hasSelectedEvidence() {
+  return Boolean(rcaEvidenceFiles.value.length || riskEvidenceFiles.value.length);
+}
+
+async function uploadPendingEvidence(capId) {
+  if (!capId) {
+    return;
+  }
+  for (const file of rcaEvidenceFiles.value) {
+    await capStore.uploadCapEvidence({ capId, section: 'rca', file, csrfToken: authStore.csrfToken });
+  }
+  for (const file of riskEvidenceFiles.value) {
+    await capStore.uploadCapEvidence({ capId, section: 'risk-assessment', file, csrfToken: authStore.csrfToken });
   }
 }
 
@@ -423,10 +584,10 @@ const capScopePresets = [
 ];
 
 const capAcceptanceStatuses = [
-  'Pending Review',
+  'Pending review',
   'Accepted',
   'Rejected',
-  'Returned for Revision',
+  'Returned',
 ];
 
 let scope = reactive({
@@ -443,7 +604,7 @@ function normalizeCapScope(currentScope) {
 
   switch (resolved.preset) {
     case 'pending-caps':
-      resolved.acceptanceStatus = 'Pending Review';
+      resolved.acceptanceStatus = 'Pending review';
       break;
     case 'accepted-caps':
       resolved.acceptanceStatus = 'Accepted';
@@ -452,7 +613,7 @@ function normalizeCapScope(currentScope) {
       resolved.acceptanceStatus = 'Rejected';
       break;
     case 'returned-caps':
-      resolved.acceptanceStatus = 'Returned for Revision';
+      resolved.acceptanceStatus = 'Returned';
       break;
     case 'all-caps':
       resolved.acceptanceStatus = '';
@@ -475,53 +636,189 @@ async function loadCaps() {
   await capStore.fetchCaps();
 }
 
-async function submitCap() {
+function resetForm() {
+  capForm.findingId = '';
+  capForm.dueDate = '';
+  capForm.rootCauseAnalysis = { method: '5 Whys', otherMethodDescription: '', mainCategory: '', rootCause: '', contributingFactors: '' };
+  capForm.riskAssessment = { hazard: '', consequence: '', probability: '', severity: '', calculatedRiskLevel: '', tolerabilityLevel: '', justification: '' };
+  capForm.correctiveActions = [emptyCorrectiveAction()];
+  capForm.residualRisk = { probability: '', severity: '', riskLevel: '', justification: '' };
+  capForm.effectivenessVerification = { method: '', indicators: '', projectedVerificationDate: '' };
+  rcaEvidenceFiles.value = [];
+  riskEvidenceFiles.value = [];
+  editMode.value = { type: 'new' };
+}
+
+function buildCapPayload() {
+  return {
+    dueDate: capForm.dueDate,
+    rootCauseAnalysis: { ...capForm.rootCauseAnalysis },
+    riskAssessment: { ...capForm.riskAssessment },
+    correctiveActions: capForm.correctiveActions.map((item) => ({ ...item })),
+    residualRisk: { ...capForm.residualRisk },
+    effectivenessVerification: { ...capForm.effectivenessVerification },
+  };
+}
+
+// "new"/"draft" modes: Save Draft persists to Postgres only, never Alfresco.
+async function saveDraftAction() {
   message.value = '';
   try {
-    const { cap } = await capStore.submitCap({
+    const draft = await capStore.saveDraft({
+      draftId: editMode.value.type === 'draft' ? editMode.value.draftId : null,
       findingId: capForm.findingId,
-      payload: {
-        dueDate: capForm.dueDate,
-        rootCauseAnalysis: { ...capForm.rootCauseAnalysis },
-        riskAssessment: { ...capForm.riskAssessment },
-        correctiveActions: capForm.correctiveActions.map((item) => ({ ...item })),
-        residualRisk: { ...capForm.residualRisk },
-        effectivenessVerification: { ...capForm.effectivenessVerification },
-      },
+      payload: buildCapPayload(),
       csrfToken: authStore.csrfToken,
     });
+    editMode.value = { type: 'draft', draftId: draft?.draftId };
+    message.value = hasSelectedEvidence()
+      ? 'Draft saved. Note: selected evidence file(s) are not saved with drafts — you will need to re-attach them when you submit for review.'
+      : 'Draft saved.';
+    await capStore.fetchDrafts();
+  } catch (error) {
+    console.error('Draft save failed:', error);
+  }
+}
 
-    if (rcaEvidenceFile.value && cap?.capId) {
-      await capStore.uploadCapEvidence({
-        capId: cap.capId,
-        section: 'rca',
-        file: rcaEvidenceFile.value,
+// "new"/"draft" modes: Submit for Review creates the real Alfresco CAP.
+// From "new" this is today's unchanged one-shot create. From "draft" the
+// in-progress form is saved first so no edits are lost, then promoted.
+// Evidence (if any) uploads immediately after, in the same action, so the
+// CAP never sits reviewable-but-evidence-less for longer than necessary.
+async function submitForReviewAction() {
+  if (!hasSelectedEvidence()) {
+    showNoEvidenceConfirm.value = true;
+    return;
+  }
+  await performSubmitForReview();
+}
+
+async function confirmSubmitWithoutEvidence() {
+  showNoEvidenceConfirm.value = false;
+  await performSubmitForReview();
+}
+
+function cancelSubmitWithoutEvidence() {
+  showNoEvidenceConfirm.value = false;
+}
+
+async function performSubmitForReview() {
+  message.value = '';
+  try {
+    let capId;
+    if (editMode.value.type === 'draft') {
+      await capStore.saveDraft({
+        draftId: editMode.value.draftId,
+        payload: buildCapPayload(),
         csrfToken: authStore.csrfToken,
       });
-    }
-    if (riskEvidenceFile.value && cap?.capId) {
-      await capStore.uploadCapEvidence({
-        capId: cap.capId,
-        section: 'risk-assessment',
-        file: riskEvidenceFile.value,
+      const { cap } = await capStore.submitDraft(editMode.value.draftId, authStore.csrfToken);
+      capId = cap?.capId;
+    } else {
+      const { cap } = await capStore.submitCap({
+        findingId: capForm.findingId,
+        payload: buildCapPayload(),
         csrfToken: authStore.csrfToken,
       });
+      capId = cap?.capId;
     }
+    await uploadPendingEvidence(capId);
 
     message.value = 'CAP submitted successfully.';
-    capForm.findingId = '';
-    capForm.dueDate = '';
-    capForm.rootCauseAnalysis = { method: '5 Whys', otherMethodDescription: '', mainCategory: '', rootCause: '', contributingFactors: '' };
-    capForm.riskAssessment = { hazard: '', consequence: '', probability: '', severity: '', calculatedRiskLevel: '', tolerabilityLevel: '', justification: '' };
-    capForm.correctiveActions = [emptyCorrectiveAction()];
-    capForm.residualRisk = { probability: '', severity: '', riskLevel: '', justification: '' };
-    capForm.effectivenessVerification = { method: '', indicators: '', projectedVerificationDate: '' };
-    rcaEvidenceFile.value = null;
-    riskEvidenceFile.value = null;
+    resetForm();
     await loadCaps();
+    await capStore.fetchDrafts();
   } catch (error) {
     // Error is already set in capStore.error
     console.error('CAP submission failed:', error);
+  }
+}
+
+// "returned" mode: Save Changes edits an already-versioned Alfresco CAP in
+// place (status stays Returned) without resubmitting it for review.
+async function saveReturnedChangesAction() {
+  message.value = '';
+  try {
+    await capStore.updateCap({
+      capId: editMode.value.capId,
+      payload: buildCapPayload(),
+      csrfToken: authStore.csrfToken,
+    });
+    message.value = 'CAP changes saved.';
+    await viewCap(editMode.value.capId);
+    await loadCaps();
+  } catch (error) {
+    console.error('CAP update failed:', error);
+  }
+}
+
+// "returned" mode: Resubmit for Review saves and flips status back to
+// Pending review, same side effects as a fresh submission.
+async function resubmitReturnedAction() {
+  message.value = '';
+  try {
+    await capStore.updateCap({
+      capId: editMode.value.capId,
+      payload: { ...buildCapPayload(), resubmit: true },
+      csrfToken: authStore.csrfToken,
+    });
+    message.value = 'CAP resubmitted for review.';
+    resetForm();
+    await loadCaps();
+  } catch (error) {
+    console.error('CAP resubmit failed:', error);
+  }
+}
+
+async function editCap(cap) {
+  message.value = '';
+  await capStore.fetchCapDetail(cap.capId);
+  const selected = capStore.selectedCap;
+  if (!selected) {
+    return;
+  }
+  capForm.findingId = selected.findingId || '';
+  capForm.dueDate = selected.dueDate || '';
+  capForm.rootCauseAnalysis = { method: '5 Whys', otherMethodDescription: '', mainCategory: '', rootCause: '', contributingFactors: '', ...selected.rootCauseAnalysis };
+  capForm.riskAssessment = { hazard: '', consequence: '', probability: '', severity: '', calculatedRiskLevel: '', tolerabilityLevel: '', justification: '', ...selected.riskAssessment };
+  capForm.correctiveActions = selected.correctiveActions?.length
+    ? selected.correctiveActions.map((item) => ({ ...item }))
+    : [emptyCorrectiveAction()];
+  capForm.residualRisk = { probability: '', severity: '', riskLevel: '', justification: '', ...selected.residualRisk };
+  capForm.effectivenessVerification = { method: '', indicators: '', projectedVerificationDate: '', ...selected.effectivenessVerification };
+  editMode.value = { type: 'returned', capId: cap.capId };
+  showSubmit.value = true;
+  showReview.value = false;
+}
+
+function editDraft(draft) {
+  message.value = '';
+  const payload = draft.payload || {};
+  capForm.findingId = draft.findingId || '';
+  capForm.dueDate = payload.dueDate || '';
+  capForm.rootCauseAnalysis = { method: '5 Whys', otherMethodDescription: '', mainCategory: '', rootCause: '', contributingFactors: '', ...payload.rootCauseAnalysis };
+  capForm.riskAssessment = { hazard: '', consequence: '', probability: '', severity: '', calculatedRiskLevel: '', tolerabilityLevel: '', justification: '', ...payload.riskAssessment };
+  capForm.correctiveActions = payload.correctiveActions?.length
+    ? payload.correctiveActions.map((item) => ({ ...item }))
+    : [emptyCorrectiveAction()];
+  capForm.residualRisk = { probability: '', severity: '', riskLevel: '', justification: '', ...payload.residualRisk };
+  capForm.effectivenessVerification = { method: '', indicators: '', projectedVerificationDate: '', ...payload.effectivenessVerification };
+  editMode.value = { type: 'draft', draftId: draft.draftId };
+  showSubmit.value = true;
+  showReview.value = false;
+}
+
+async function deleteDraftAction(draftId) {
+  message.value = '';
+  try {
+    await capStore.deleteDraft(draftId, authStore.csrfToken);
+    if (editMode.value.type === 'draft' && editMode.value.draftId === draftId) {
+      resetForm();
+    }
+    message.value = 'Draft discarded.';
+    await capStore.fetchDrafts();
+  } catch (error) {
+    console.error('Draft delete failed:', error);
   }
 }
 
@@ -570,6 +867,39 @@ async function uploadDetailEvidence(section) {
   }
 }
 
+function viewEvidence(item) {
+  window.open(apiCapEvidenceContentUrl(capStore.selectedCap.capId, item.nodeId), '_blank', 'noopener');
+}
+
+function confirmRemoveEvidence(item) {
+  evidenceToRemove.value = item;
+}
+
+function cancelRemoveEvidence() {
+  evidenceToRemove.value = null;
+}
+
+async function removeEvidenceConfirmed() {
+  const item = evidenceToRemove.value;
+  if (!item) {
+    return;
+  }
+  message.value = '';
+  try {
+    await capStore.deleteCapEvidence({
+      capId: capStore.selectedCap.capId,
+      evidenceNodeId: item.nodeId,
+      csrfToken: authStore.csrfToken,
+    });
+    message.value = 'Evidence removed.';
+    await viewCap(capStore.selectedCap.capId);
+  } catch (error) {
+    console.error('Evidence removal failed:', error);
+  } finally {
+    evidenceToRemove.value = null;
+  }
+}
+
 async function reviewCap() {
   message.value = '';
   try {
@@ -591,12 +921,17 @@ async function viewCap(capId) {
   await capStore.fetchCapDetail(capId);
 }
 
+function closeCapDetail() {
+  capStore.clearSelectedCap();
+}
+
 onMounted(async () => {
   const findingId = String(route.query?.findingId || '').trim();
   if (findingId) {
     capForm.findingId = findingId;
   }
   await loadCaps();
+  await capStore.fetchDrafts();
 });
 </script>
 
@@ -726,6 +1061,41 @@ onMounted(async () => {
   margin-top: var(--space-2);
 }
 
+.evidence-list {
+  margin-top: var(--space-2);
+}
+
+.evidence-list-title {
+  margin: 0 0 var(--space-1);
+  font-size: var(--text-sm);
+  color: var(--color-primary-700);
+}
+
+.evidence-list ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.evidence-list li {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  background: var(--color-gray-50);
+}
+
+.evidence-name {
+  flex: 1;
+  font-size: var(--text-sm);
+  overflow-wrap: anywhere;
+}
+
 .action-item-card {
   border-top: 1px dashed var(--border-color);
   padding-top: var(--space-3);
@@ -764,6 +1134,10 @@ onMounted(async () => {
 }
 
 @media (max-width: 768px) {
+  .split-grid {
+    grid-template-columns: 1fr;
+  }
+
   .form-grid {
     grid-template-columns: 1fr;
   }

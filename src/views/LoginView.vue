@@ -47,7 +47,9 @@ const message = computed(() => {
 async function onSubmit() {
   try {
     await authStore.login(username.value, password.value);
-    const redirectTarget = typeof route.query.redirect === 'string' ? route.query.redirect : '/site-visit';
+    // '/' resolves the role-aware landing page (see HomeView.vue) when no
+    // explicit redirect target was captured by the auth guard.
+    const redirectTarget = typeof route.query.redirect === 'string' ? route.query.redirect : '/';
     await router.push(redirectTarget);
   } catch {
     // Error state is already captured by auth store.
