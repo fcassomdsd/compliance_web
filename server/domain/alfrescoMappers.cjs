@@ -14,6 +14,11 @@ function mapFindingNode(node) {
     riskClassification: nodeProperty(node, 'vso:riskClassification'),
     submissionDeadline: nodeProperty(node, 'vso:submissionDeadline'),
     resolutionDeadline: nodeProperty(node, 'vso:resolutionDeadline'),
+    deadlineExtensionStatus: nodeProperty(node, 'vso:deadlineExtensionStatus'),
+    requestedResolutionDeadline: nodeProperty(node, 'vso:requestedResolutionDeadline'),
+    deadlineExtensionReason: nodeProperty(node, 'vso:deadlineExtensionReason'),
+    deadlineExtensionRequestedDate: nodeProperty(node, 'vso:deadlineExtensionRequestedDate'),
+    deadlineExtensionDecisionDate: nodeProperty(node, 'vso:deadlineExtensionDecisionDate'),
     findingClosureDate: nodeProperty(node, 'vso:findingClosureDate'),
     // vso:openedDate was renamed to vso:dateIssued in the Alfresco model;
     // dateIssued is the canonical field going forward (see CLAUDE.md).

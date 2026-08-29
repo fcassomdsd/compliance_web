@@ -204,6 +204,29 @@ function canReviewClosure(findingStatus) {
   return findingStatus === FINDING_STATUS.PENDING_CLOSURE_APPROVAL;
 }
 
+const DEADLINE_EXTENSION_STATUS = Object.freeze({
+  REQUESTED: 'Requested',
+  ACCEPTED: 'Accepted',
+  REJECTED: 'Rejected',
+});
+
+// A new extension request may only be submitted while there's no pending
+// one — i.e. never requested yet, or the last one already reached a
+// terminal state (Accepted/Rejected).
+function canRequestDeadlineExtension(deadlineExtensionStatus) {
+  return !deadlineExtensionStatus
+    || deadlineExtensionStatus === DEADLINE_EXTENSION_STATUS.ACCEPTED
+    || deadlineExtensionStatus === DEADLINE_EXTENSION_STATUS.REJECTED;
+}
+
+function canReviewDeadlineExtension(deadlineExtensionStatus) {
+  return deadlineExtensionStatus === DEADLINE_EXTENSION_STATUS.REQUESTED;
+}
+
+function isValidDeadlineExtensionDecision(status) {
+  return status === DEADLINE_EXTENSION_STATUS.ACCEPTED || status === DEADLINE_EXTENSION_STATUS.REJECTED;
+}
+
 // A CAP's content (RCA, risk assessment, action items, residual risk,
 // effectiveness verification) can only be edited in place while it's
 // Returned for revision. Pending-review/Accepted/Rejected CAPs are
@@ -233,4 +256,8 @@ module.exports = {
   CLOSURE_VERIFICATION_FOLLOW_UP_TYPE,
   isValidClosureRequest,
   canReviewClosure,
+  DEADLINE_EXTENSION_STATUS,
+  canRequestDeadlineExtension,
+  canReviewDeadlineExtension,
+  isValidDeadlineExtensionDecision,
 };

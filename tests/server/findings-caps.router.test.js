@@ -787,6 +787,123 @@ describe('Findings and CAP API', () => {
     expect(response.status).toBe(403);
   });
 
+  it('creates a deadline extension request', async () => {
+    const { app, fixture } = await buildApp({ roles: ['cap_entry'] });
+
+    const response = await request(app)
+      .post('/api/findings/MDPP001-AYVIS-01/deadline-extension-requests')
+      .set('Cookie', 'compliance_session_id=session-1')
+      .set('x-csrf-token', 'csrf-token-1')
+      .send({ requestedResolutionDeadline: '2026-06-01', reason: 'Awaiting parts' });
+
+    expect(response.status).toBe(201);
+    expect(response.body.finding.deadlineExtensionStatus).toBe('Requested');
+    expect(response.body.finding.requestedResolutionDeadline).toBe('2026-06-01');
+    expect(fixture.findingNode.properties['vso:deadlineExtensionStatus']).toBe('Requested');
+    expect(fixture.findingNode.properties['vso:deadlineExtensionRequestedDate']).toBeTruthy();
+  });
+
+  it('rejects a deadline extension request with an invalid date', async () => {
+    const { app } = await buildApp({ roles: ['cap_entry'] });
+
+    const response = await request(app)
+      .post('/api/findings/MDPP001-AYVIS-01/deadline-extension-requests')
+      .set('Cookie', 'compliance_session_id=session-1')
+      .set('x-csrf-token', 'csrf-token-1')
+      .send({ requestedResolutionDeadline: 'not-a-date' });
+
+    expect(response.status).toBe(400);
+    expect(response.body.code).toBe('DEADLINE_EXTENSION_BAD_REQUEST');
+  });
+
+  it('rejects a deadline extension request that is not later than the current deadline', async () => {
+    const { app, fixture } = await buildApp({ roles: ['cap_entry'] });
+    fixture.findingNode.properties['vso:resolutionDeadline'] = '2026-06-01';
+
+    const response = await request(app)
+      .post('/api/findings/MDPP001-AYVIS-01/deadline-extension-requests')
+      .set('Cookie', 'compliance_session_id=session-1')
+      .set('x-csrf-token', 'csrf-token-1')
+      .send({ requestedResolutionDeadline: '2026-05-01' });
+
+    expect(response.status).toBe(400);
+    expect(response.body.code).toBe('DEADLINE_EXTENSION_NOT_LATER');
+  });
+
+  it('rejects a new deadline extension request while one is already pending', async () => {
+    const { app, fixture } = await buildApp({ roles: ['cap_entry'] });
+    fixture.findingNode.properties['vso:deadlineExtensionStatus'] = 'Requested';
+
+    const response = await request(app)
+      .post('/api/findings/MDPP001-AYVIS-01/deadline-extension-requests')
+      .set('Cookie', 'compliance_session_id=session-1')
+      .set('x-csrf-token', 'csrf-token-1')
+      .send({ requestedResolutionDeadline: '2026-06-01' });
+
+    expect(response.status).toBe(409);
+    expect(response.body.code).toBe('DEADLINE_EXTENSION_ALREADY_PENDING');
+  });
+
+  it('rejects deadline extension requests from roles other than cap_entry/admin', async () => {
+    const { app } = await buildApp({ roles: ['inspector'] });
+
+    const response = await request(app)
+      .post('/api/findings/MDPP001-AYVIS-01/deadline-extension-requests')
+      .set('Cookie', 'compliance_session_id=session-1')
+      .set('x-csrf-token', 'csrf-token-1')
+      .send({ requestedResolutionDeadline: '2026-06-01' });
+
+    expect(response.status).toBe(403);
+  });
+
+  it('accepts a deadline extension request and updates the resolution deadline', async () => {
+    const { app, fixture } = await buildApp({ roles: ['inspector'] });
+    fixture.findingNode.properties['vso:deadlineExtensionStatus'] = 'Requested';
+    fixture.findingNode.properties['vso:requestedResolutionDeadline'] = '2026-06-01';
+
+    const response = await request(app)
+      .patch('/api/findings/MDPP001-AYVIS-01/deadline-extension-review')
+      .set('Cookie', 'compliance_session_id=session-1')
+      .set('x-csrf-token', 'csrf-token-1')
+      .send({ decision: 'Accepted' });
+
+    expect(response.status).toBe(200);
+    expect(response.body.finding.deadlineExtensionStatus).toBe('Accepted');
+    expect(response.body.finding.resolutionDeadline).toBe('2026-06-01');
+    expect(fixture.findingNode.properties['vso:resolutionDeadline']).toBe('2026-06-01');
+    expect(fixture.findingNode.properties['vso:deadlineExtensionDecisionDate']).toBeTruthy();
+  });
+
+  it('rejects a deadline extension request without changing the resolution deadline', async () => {
+    const { app, fixture } = await buildApp({ roles: ['inspector'] });
+    fixture.findingNode.properties['vso:resolutionDeadline'] = '2026-05-01';
+    fixture.findingNode.properties['vso:deadlineExtensionStatus'] = 'Requested';
+    fixture.findingNode.properties['vso:requestedResolutionDeadline'] = '2026-06-01';
+
+    const response = await request(app)
+      .patch('/api/findings/MDPP001-AYVIS-01/deadline-extension-review')
+      .set('Cookie', 'compliance_session_id=session-1')
+      .set('x-csrf-token', 'csrf-token-1')
+      .send({ decision: 'Rejected' });
+
+    expect(response.status).toBe(200);
+    expect(response.body.finding.deadlineExtensionStatus).toBe('Rejected');
+    expect(fixture.findingNode.properties['vso:resolutionDeadline']).toBe('2026-05-01');
+  });
+
+  it('rejects reviewing a deadline extension that is not pending', async () => {
+    const { app } = await buildApp({ roles: ['inspector'] });
+
+    const response = await request(app)
+      .patch('/api/findings/MDPP001-AYVIS-01/deadline-extension-review')
+      .set('Cookie', 'compliance_session_id=session-1')
+      .set('x-csrf-token', 'csrf-token-1')
+      .send({ decision: 'Accepted' });
+
+    expect(response.status).toBe(409);
+    expect(response.body.code).toBe('DEADLINE_EXTENSION_NOT_REVIEWABLE');
+  });
+
   it('returns follow-ups using finding-first scope with status semantics and paging metadata', async () => {
     const { app, fixture } = await buildApp({ roles: ['inspector'] });
 

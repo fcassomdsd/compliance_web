@@ -6,6 +6,12 @@ const { parseFollowUpId, buildFollowUpIdFromFinding } = require('../domain/idFor
 const { FINDING_STATUS } = require('../domain/statusRules.cjs');
 const { computeEffectiveFindingStatus } = require('../domain/statusRules.cjs');
 const { isValidClosureRequest, canReviewClosure } = require('../domain/statusRules.cjs');
+const {
+  canRequestDeadlineExtension,
+  canReviewDeadlineExtension,
+  isValidDeadlineExtensionDecision,
+  parseIsoDate,
+} = require('../domain/statusRules.cjs');
 
 const FINDINGS_LIBRARY_PATH = "Sites/vigilancia-de-la-so/documentLibrary/Vigilancia/Hallazgos";
 
@@ -612,6 +618,106 @@ function createFindingsRouter({ auth, alfrescoClient, now = () => new Date() }) 
         });
       } catch (error) {
         return res.status(502).json(buildError('CLOSURE_REVIEW_FAILED', error.message));
+      }
+    }
+  );
+
+  router.post(
+    '/:findingId/deadline-extension-requests',
+    auth.authenticate,
+    auth.authorize(['cap_entry', 'admin']),
+    auth.requireCsrf(),
+    async (req, res) => {
+      try {
+        const requestedResolutionDeadline = String(req.body?.requestedResolutionDeadline || '').trim();
+        const parsedRequested = parseIsoDate(requestedResolutionDeadline);
+        if (!parsedRequested) {
+          return res.status(400).json(buildError('DEADLINE_EXTENSION_BAD_REQUEST', 'requestedResolutionDeadline must be a valid date'));
+        }
+
+        const findingNode = await alfrescoClient.searchFindingByBusinessId({
+          ticket: req.auth.ticket,
+          findingId: req.params.findingId,
+        });
+        if (!findingNode) {
+          return res.status(404).json(buildError('FINDING_NOT_FOUND', 'Finding not found'));
+        }
+
+        const currentResolutionDeadline = parseIsoDate(findingNode?.properties?.['vso:resolutionDeadline']);
+        if (currentResolutionDeadline && parsedRequested <= currentResolutionDeadline) {
+          return res.status(400).json(buildError('DEADLINE_EXTENSION_NOT_LATER', 'requestedResolutionDeadline must be later than the current resolutionDeadline'));
+        }
+
+        const currentStatus = findingNode?.properties?.['vso:deadlineExtensionStatus'];
+        if (!canRequestDeadlineExtension(currentStatus)) {
+          return res.status(409).json(buildError('DEADLINE_EXTENSION_ALREADY_PENDING', 'A deadline extension request is already pending for this finding'));
+        }
+
+        const reason = String(req.body?.reason || '').trim();
+        const updatedFinding = await alfrescoClient.updateNodeProperties({
+          ticket: req.auth.ticket,
+          nodeId: findingNode.id,
+          properties: {
+            'vso:deadlineExtensionStatus': 'Requested',
+            'vso:requestedResolutionDeadline': requestedResolutionDeadline,
+            'vso:deadlineExtensionReason': reason || null,
+            'vso:deadlineExtensionRequestedDate': toDateOnly(now()),
+          },
+        });
+
+        return res.status(201).json({
+          finding: mapFindingNode(updatedFinding),
+        });
+      } catch (error) {
+        return res.status(502).json(buildError('DEADLINE_EXTENSION_REQUEST_FAILED', error.message));
+      }
+    }
+  );
+
+  router.patch(
+    '/:findingId/deadline-extension-review',
+    auth.authenticate,
+    auth.authorize(['inspector', 'admin']),
+    auth.requireCsrf(),
+    async (req, res) => {
+      try {
+        const decision = req.body?.decision;
+        if (!isValidDeadlineExtensionDecision(decision)) {
+          return res.status(400).json(buildError('DEADLINE_EXTENSION_BAD_DECISION', 'decision must be "Accepted" or "Rejected"'));
+        }
+
+        const findingNode = await alfrescoClient.searchFindingByBusinessId({
+          ticket: req.auth.ticket,
+          findingId: req.params.findingId,
+        });
+        if (!findingNode) {
+          return res.status(404).json(buildError('FINDING_NOT_FOUND', 'Finding not found'));
+        }
+
+        const currentStatus = findingNode?.properties?.['vso:deadlineExtensionStatus'];
+        if (!canReviewDeadlineExtension(currentStatus)) {
+          return res.status(409).json(buildError('DEADLINE_EXTENSION_NOT_REVIEWABLE', 'Only a Requested deadline extension can be reviewed'));
+        }
+
+        const properties = {
+          'vso:deadlineExtensionStatus': decision,
+          'vso:deadlineExtensionDecisionDate': toDateOnly(now()),
+        };
+        if (decision === 'Accepted') {
+          properties['vso:resolutionDeadline'] = findingNode?.properties?.['vso:requestedResolutionDeadline'];
+        }
+
+        const updatedFinding = await alfrescoClient.updateNodeProperties({
+          ticket: req.auth.ticket,
+          nodeId: findingNode.id,
+          properties,
+        });
+
+        return res.status(200).json({
+          finding: mapFindingNode(updatedFinding),
+        });
+      } catch (error) {
+        return res.status(502).json(buildError('DEADLINE_EXTENSION_REVIEW_FAILED', error.message));
       }
     }
   );
