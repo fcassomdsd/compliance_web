@@ -27,6 +27,11 @@ Pseudo-rule:
 | /api/findings | findingsApi | true | inspector, planner, cap_entry, admin | Findings list and filters |
 | /api/findings/:findingId | findingDetailApi | true | inspector, planner, cap_entry, admin | Finding detail |
 | /api/findings/:findingId/caps | capSubmitApi | true | cap_entry, admin | CAP submission |
+| /api/findings/:findingId/review | findingReviewApi | true | inspector, admin | Confirm a finding (optionally correcting description/severity/classification), only from Pending Review; PATCH |
+| /api/findings/:findingId/closure-review | findingClosureReviewApi | true | inspector, admin | Approve/reject a pending finding closure (only from Pending Closure Approval; PATCH) |
+| /api/findings/:findingId/deadline-extension-requests | deadlineExtensionRequestApi | true | cap_entry, admin | Request a resolution-deadline extension (POST) |
+| /api/findings/:findingId/deadline-extension-review | deadlineExtensionReviewApi | true | inspector, admin | Accept/reject a pending deadline extension request (only from Requested; PATCH) |
+| /api/findings/:findingId/follow-ups/:followUpId/evidence-review | followUpEvidenceReviewApi | true | inspector, admin | Mark a follow-up's evidence Adequate/Inadequate (only from Pending Review; PATCH). A follow-up cannot affect findingStatus until this is Adequate |
 | /api/caps | capsApi | true | inspector, planner, cap_entry, admin | CAP list and filters |
 | /api/caps/:capId | capDetailApi | true | inspector, planner, cap_entry, admin | CAP detail |
 | /api/caps/:capId | capUpdateApi | true | cap_entry, admin | CAP content edit (Returned CAPs only; PATCH) |

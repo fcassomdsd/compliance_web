@@ -5,6 +5,19 @@ const { mapFindingNode, mapFollowUpReportNode, getFollowUpReportsForFinding } = 
 const { parseFollowUpId, buildFollowUpIdFromFinding } = require('../domain/idFormats.cjs');
 const { FINDING_STATUS } = require('../domain/statusRules.cjs');
 const { computeEffectiveFindingStatus } = require('../domain/statusRules.cjs');
+const { isValidClosureRequest, canReviewClosure } = require('../domain/statusRules.cjs');
+const {
+  canRequestDeadlineExtension,
+  canReviewDeadlineExtension,
+  isValidDeadlineExtensionDecision,
+  parseIsoDate,
+} = require('../domain/statusRules.cjs');
+const {
+  canReviewEvidence,
+  isValidEvidenceReviewDecision,
+  resolveFindingStatusFromFollowUp,
+} = require('../domain/statusRules.cjs');
+const { canReviewFinding } = require('../domain/statusRules.cjs');
 
 const FINDINGS_LIBRARY_PATH = "Sites/vigilancia-de-la-so/documentLibrary/Vigilancia/Hallazgos";
 
@@ -149,18 +162,6 @@ function readLegacyInheritedCapId(node) {
   return node?.properties?.['vso:inheritedCapId'] || null;
 }
 
-function resolveFindingStatusFromFollowUp({ report }) {
-  const percentComplete = Number(report.percentComplete || 0);
-  const closed = Boolean(report.findingClosed) && Boolean(report.effectivenessConfirmed);
-  if (closed) {
-    return FINDING_STATUS.CLOSED;
-  }
-  if (percentComplete >= 100) {
-    return FINDING_STATUS.PENDING_CLOSURE_REVIEW;
-  }
-  return FINDING_STATUS.IN_PROGRESS;
-}
-
 function toDateOnly(now = new Date()) {
   return now.toISOString().slice(0, 10);
 }
@@ -173,9 +174,13 @@ function findingIdFromFollowUpId(followUpId) {
   return `${parsed.compactInspectionId}-${parsed.specialtyCode}-${String(parsed.findingSequence).padStart(2, '0')}`;
 }
 
-function applyFindingFilters({ findings, status, capOverdueOnly, solutionOverdueOnly }) {
+function applyFindingFilters({ findings, status, capOverdueOnly, solutionOverdueOnly, reviewStatus }) {
   return findings.filter((finding) => {
     if (status && finding.effectiveStatus !== status && finding.storedStatus !== status) {
+      return false;
+    }
+
+    if (reviewStatus && finding.findingReviewStatus !== reviewStatus) {
       return false;
     }
 
@@ -241,6 +246,7 @@ function createFindingsRouter({ auth, alfrescoClient, now = () => new Date() }) 
           status: req.query?.status,
           capOverdueOnly: req.query?.capOverdueOnly,
           solutionOverdueOnly: req.query?.solutionOverdueOnly,
+          reviewStatus: req.query?.reviewStatus,
         });
 
         return res.status(200).json({
@@ -434,6 +440,13 @@ function createFindingsRouter({ auth, alfrescoClient, now = () => new Date() }) 
           return res.status(400).json(buildError('FOLLOW_UP_BAD_REQUEST', 'percentComplete must be between 0 and 100'));
         }
 
+        if (!isValidClosureRequest({ followUpType, findingClosed, effectivenessConfirmed })) {
+          return res.status(400).json(buildError(
+            'FOLLOW_UP_INVALID_CLOSURE',
+            'Closing a finding requires followUpType "Closure Verification" and effectivenessConfirmed=true'
+          ));
+        }
+
         const existingFollowUps = await alfrescoClient.listChildrenByType({
           ticket: req.auth.ticket,
           parentNodeId: finding.nodeId,
@@ -489,6 +502,10 @@ function createFindingsRouter({ auth, alfrescoClient, now = () => new Date() }) 
             ...(followUpClosureDate ? { 'vso:followUpClosureDate': followUpClosureDate } : {}),
             ...(closureVerificationMethod ? { 'vso:closureVerificationMethod': closureVerificationMethod } : {}),
             'vso:effectivenessConfirmed': effectivenessConfirmed,
+            // Evidence must be reviewed and confirmed Adequate before it can
+            // affect vso:findingStatus (see PATCH .../evidence-review below)
+            // — submitting a follow-up never changes the finding's status.
+            'vso:evidenceReviewStatus': 'Pending Review',
             'vso:inspectionId': finding.inspectionId,
             'vso:locationId': finding.locationId,
             ...(finding.locationCode ? { 'vso:locationCode': finding.locationCode } : {}),
@@ -509,29 +526,6 @@ function createFindingsRouter({ auth, alfrescoClient, now = () => new Date() }) 
             assocType: 'vso:relatedCorrectiveAction',
           });
         }
-
-        const nextFindingStatus = resolveFindingStatusFromFollowUp({
-          report: {
-            findingClosed,
-            effectivenessConfirmed,
-            percentComplete,
-          },
-        });
-
-        const statusProperties = {
-          'vso:findingStatus': nextFindingStatus,
-          'vso:lastStatusChange': toDateOnly(now()),
-        };
-
-        if (nextFindingStatus === FINDING_STATUS.CLOSED) {
-          statusProperties['vso:findingClosureDate'] = followUpClosureDate || toDateOnly(now());
-        }
-
-        await alfrescoClient.updateNodeProperties({
-          ticket: req.auth.ticket,
-          nodeId: finding.nodeId,
-          properties: statusProperties,
-        });
 
         return res.status(201).json({
           followUpReport: {
@@ -555,6 +549,288 @@ function createFindingsRouter({ auth, alfrescoClient, now = () => new Date() }) 
         }
 
         return res.status(502).json(buildError('FOLLOW_UP_CREATE_FAILED', upstreamDetail));
+      }
+    }
+  );
+
+  router.patch(
+    '/:findingId/follow-ups/:followUpId/evidence-review',
+    auth.authenticate,
+    auth.authorize(['inspector', 'admin']),
+    auth.requireCsrf(),
+    async (req, res) => {
+      try {
+        const decision = req.body?.decision;
+        if (!isValidEvidenceReviewDecision(decision)) {
+          return res.status(400).json(buildError('EVIDENCE_REVIEW_BAD_DECISION', 'decision must be "Adequate" or "Inadequate"'));
+        }
+
+        const findingNode = await alfrescoClient.searchFindingByBusinessId({
+          ticket: req.auth.ticket,
+          findingId: req.params.findingId,
+        });
+        if (!findingNode) {
+          return res.status(404).json(buildError('FINDING_NOT_FOUND', 'Finding not found'));
+        }
+
+        const followUpNodes = await alfrescoClient.listChildrenByType({
+          ticket: req.auth.ticket,
+          parentNodeId: findingNode.id,
+          nodeType: 'vso:followUpReport',
+        });
+        const followUpNode = followUpNodes.find(
+          (entry) => entry?.properties?.['vso:followUpId'] === req.params.followUpId
+        );
+        if (!followUpNode) {
+          return res.status(404).json(buildError('FOLLOW_UP_NOT_FOUND', 'Follow-up report not found'));
+        }
+
+        const currentEvidenceReviewStatus = followUpNode?.properties?.['vso:evidenceReviewStatus'];
+        if (!canReviewEvidence(currentEvidenceReviewStatus)) {
+          return res.status(409).json(buildError('EVIDENCE_NOT_REVIEWABLE', 'Only evidence in Pending Review status can be reviewed'));
+        }
+
+        const notes = String(req.body?.notes || '').trim();
+        const updatedFollowUp = await alfrescoClient.updateNodeProperties({
+          ticket: req.auth.ticket,
+          nodeId: followUpNode.id,
+          properties: {
+            'vso:evidenceReviewStatus': decision,
+            'vso:evidenceReviewNotes': notes || null,
+            'vso:evidenceReviewDate': toDateOnly(now()),
+          },
+        });
+
+        let updatedFinding = findingNode;
+        if (decision === 'Adequate') {
+          const nextFindingStatus = resolveFindingStatusFromFollowUp({
+            followUpType: followUpNode?.properties?.['vso:followUpType'],
+            effectivenessConfirmed: followUpNode?.properties?.['vso:effectivenessConfirmed'],
+            percentComplete: followUpNode?.properties?.['vso:percentComplete'],
+          });
+
+          updatedFinding = await alfrescoClient.updateNodeProperties({
+            ticket: req.auth.ticket,
+            nodeId: findingNode.id,
+            properties: {
+              'vso:findingStatus': nextFindingStatus,
+              'vso:lastStatusChange': toDateOnly(now()),
+            },
+          });
+        }
+
+        return res.status(200).json({
+          followUpReport: mapFollowUpReportNode(updatedFollowUp),
+          finding: mapFindingNode(updatedFinding),
+        });
+      } catch (error) {
+        return res.status(502).json(buildError('EVIDENCE_REVIEW_FAILED', error.message));
+      }
+    }
+  );
+
+  router.patch(
+    '/:findingId/review',
+    auth.authenticate,
+    auth.authorize(['inspector', 'admin']),
+    auth.requireCsrf(),
+    async (req, res) => {
+      try {
+        const findingNode = await alfrescoClient.searchFindingByBusinessId({
+          ticket: req.auth.ticket,
+          findingId: req.params.findingId,
+        });
+        if (!findingNode) {
+          return res.status(404).json(buildError('FINDING_NOT_FOUND', 'Finding not found'));
+        }
+
+        const currentReviewStatus = findingNode?.properties?.['vso:findingReviewStatus'];
+        if (!canReviewFinding(currentReviewStatus)) {
+          return res.status(409).json(buildError('FINDING_ALREADY_REVIEWED', 'This finding has already been reviewed'));
+        }
+
+        // Fields a reviewer may correct before confirming — the content a
+        // field inspector formulated directly, not identifiers, dates, or
+        // the findingStatus/findingReviewStatus lifecycle fields themselves.
+        const EDITABLE_FIELDS = {
+          description: 'vso:description',
+          findingLevel: 'vso:findingLevel',
+          findingSeverity: 'vso:findingSeverity',
+          riskClassification: 'vso:riskClassification',
+          targetResidualRisk: 'vso:targetResidualRisk',
+          requirementBreached: 'vso:requirementBreached',
+        };
+
+        const edits = {};
+        for (const [bodyKey, alfrescoKey] of Object.entries(EDITABLE_FIELDS)) {
+          if (req.body?.[bodyKey] !== undefined) {
+            edits[alfrescoKey] = req.body[bodyKey];
+          }
+        }
+
+        const updatedFinding = await alfrescoClient.updateNodeProperties({
+          ticket: req.auth.ticket,
+          nodeId: findingNode.id,
+          properties: {
+            ...edits,
+            'vso:findingReviewStatus': 'Confirmed',
+            'vso:findingReviewDate': toDateOnly(now()),
+          },
+        });
+
+        return res.status(200).json({
+          finding: mapFindingNode(updatedFinding),
+        });
+      } catch (error) {
+        return res.status(502).json(buildError('FINDING_REVIEW_FAILED', error.message));
+      }
+    }
+  );
+
+  router.patch(
+    '/:findingId/closure-review',
+    auth.authenticate,
+    auth.authorize(['inspector', 'admin']),
+    auth.requireCsrf(),
+    async (req, res) => {
+      try {
+        const decision = req.body?.decision;
+        if (decision !== 'approve' && decision !== 'reject') {
+          return res.status(400).json(buildError('CLOSURE_REVIEW_BAD_DECISION', 'decision must be "approve" or "reject"'));
+        }
+
+        const findingNode = await alfrescoClient.searchFindingByBusinessId({
+          ticket: req.auth.ticket,
+          findingId: req.params.findingId,
+        });
+        if (!findingNode) {
+          return res.status(404).json(buildError('FINDING_NOT_FOUND', 'Finding not found'));
+        }
+
+        const currentStatus = findingNode?.properties?.['vso:findingStatus'];
+        if (!canReviewClosure(currentStatus)) {
+          return res.status(409).json(buildError('FINDING_NOT_REVIEWABLE', 'Only findings in Pending Closure Approval status can be reviewed'));
+        }
+
+        const statusProperties = {
+          'vso:findingStatus': decision === 'approve' ? FINDING_STATUS.CLOSED : FINDING_STATUS.IN_PROGRESS,
+          'vso:lastStatusChange': toDateOnly(now()),
+        };
+        if (decision === 'approve') {
+          statusProperties['vso:findingClosureDate'] = toDateOnly(now());
+        }
+
+        const updatedFinding = await alfrescoClient.updateNodeProperties({
+          ticket: req.auth.ticket,
+          nodeId: findingNode.id,
+          properties: statusProperties,
+        });
+
+        return res.status(200).json({
+          finding: mapFindingNode(updatedFinding),
+        });
+      } catch (error) {
+        return res.status(502).json(buildError('CLOSURE_REVIEW_FAILED', error.message));
+      }
+    }
+  );
+
+  router.post(
+    '/:findingId/deadline-extension-requests',
+    auth.authenticate,
+    auth.authorize(['cap_entry', 'admin']),
+    auth.requireCsrf(),
+    async (req, res) => {
+      try {
+        const requestedResolutionDeadline = String(req.body?.requestedResolutionDeadline || '').trim();
+        const parsedRequested = parseIsoDate(requestedResolutionDeadline);
+        if (!parsedRequested) {
+          return res.status(400).json(buildError('DEADLINE_EXTENSION_BAD_REQUEST', 'requestedResolutionDeadline must be a valid date'));
+        }
+
+        const findingNode = await alfrescoClient.searchFindingByBusinessId({
+          ticket: req.auth.ticket,
+          findingId: req.params.findingId,
+        });
+        if (!findingNode) {
+          return res.status(404).json(buildError('FINDING_NOT_FOUND', 'Finding not found'));
+        }
+
+        const currentResolutionDeadline = parseIsoDate(findingNode?.properties?.['vso:resolutionDeadline']);
+        if (currentResolutionDeadline && parsedRequested <= currentResolutionDeadline) {
+          return res.status(400).json(buildError('DEADLINE_EXTENSION_NOT_LATER', 'requestedResolutionDeadline must be later than the current resolutionDeadline'));
+        }
+
+        const currentStatus = findingNode?.properties?.['vso:deadlineExtensionStatus'];
+        if (!canRequestDeadlineExtension(currentStatus)) {
+          return res.status(409).json(buildError('DEADLINE_EXTENSION_ALREADY_PENDING', 'A deadline extension request is already pending for this finding'));
+        }
+
+        const reason = String(req.body?.reason || '').trim();
+        const updatedFinding = await alfrescoClient.updateNodeProperties({
+          ticket: req.auth.ticket,
+          nodeId: findingNode.id,
+          properties: {
+            'vso:deadlineExtensionStatus': 'Requested',
+            'vso:requestedResolutionDeadline': requestedResolutionDeadline,
+            'vso:deadlineExtensionReason': reason || null,
+            'vso:deadlineExtensionRequestedDate': toDateOnly(now()),
+          },
+        });
+
+        return res.status(201).json({
+          finding: mapFindingNode(updatedFinding),
+        });
+      } catch (error) {
+        return res.status(502).json(buildError('DEADLINE_EXTENSION_REQUEST_FAILED', error.message));
+      }
+    }
+  );
+
+  router.patch(
+    '/:findingId/deadline-extension-review',
+    auth.authenticate,
+    auth.authorize(['inspector', 'admin']),
+    auth.requireCsrf(),
+    async (req, res) => {
+      try {
+        const decision = req.body?.decision;
+        if (!isValidDeadlineExtensionDecision(decision)) {
+          return res.status(400).json(buildError('DEADLINE_EXTENSION_BAD_DECISION', 'decision must be "Accepted" or "Rejected"'));
+        }
+
+        const findingNode = await alfrescoClient.searchFindingByBusinessId({
+          ticket: req.auth.ticket,
+          findingId: req.params.findingId,
+        });
+        if (!findingNode) {
+          return res.status(404).json(buildError('FINDING_NOT_FOUND', 'Finding not found'));
+        }
+
+        const currentStatus = findingNode?.properties?.['vso:deadlineExtensionStatus'];
+        if (!canReviewDeadlineExtension(currentStatus)) {
+          return res.status(409).json(buildError('DEADLINE_EXTENSION_NOT_REVIEWABLE', 'Only a Requested deadline extension can be reviewed'));
+        }
+
+        const properties = {
+          'vso:deadlineExtensionStatus': decision,
+          'vso:deadlineExtensionDecisionDate': toDateOnly(now()),
+        };
+        if (decision === 'Accepted') {
+          properties['vso:resolutionDeadline'] = findingNode?.properties?.['vso:requestedResolutionDeadline'];
+        }
+
+        const updatedFinding = await alfrescoClient.updateNodeProperties({
+          ticket: req.auth.ticket,
+          nodeId: findingNode.id,
+          properties,
+        });
+
+        return res.status(200).json({
+          finding: mapFindingNode(updatedFinding),
+        });
+      } catch (error) {
+        return res.status(502).json(buildError('DEADLINE_EXTENSION_REVIEW_FAILED', error.message));
       }
     }
   );
