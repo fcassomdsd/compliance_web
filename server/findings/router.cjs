@@ -5,6 +5,7 @@ const { mapFindingNode, mapFollowUpReportNode, getFollowUpReportsForFinding } = 
 const { parseFollowUpId, buildFollowUpIdFromFinding } = require('../domain/idFormats.cjs');
 const { FINDING_STATUS } = require('../domain/statusRules.cjs');
 const { computeEffectiveFindingStatus } = require('../domain/statusRules.cjs');
+const { isValidClosureRequest, canReviewClosure } = require('../domain/statusRules.cjs');
 
 const FINDINGS_LIBRARY_PATH = "Sites/vigilancia-de-la-so/documentLibrary/Vigilancia/Hallazgos";
 
@@ -151,9 +152,13 @@ function readLegacyInheritedCapId(node) {
 
 function resolveFindingStatusFromFollowUp({ report }) {
   const percentComplete = Number(report.percentComplete || 0);
-  const closed = Boolean(report.findingClosed) && Boolean(report.effectivenessConfirmed);
-  if (closed) {
-    return FINDING_STATUS.CLOSED;
+  const closureRequested = Boolean(report.findingClosed) && Boolean(report.effectivenessConfirmed)
+    && report.followUpType === 'Closure Verification';
+  if (closureRequested) {
+    // Closing a finding is a two-step gate: this only marks it awaiting a
+    // separate reviewer's approval (PATCH /:findingId/closure-review), it
+    // never closes the finding directly. See CLAUDE.md's closure gate rule.
+    return FINDING_STATUS.PENDING_CLOSURE_APPROVAL;
   }
   if (percentComplete >= 100) {
     return FINDING_STATUS.PENDING_CLOSURE_REVIEW;
@@ -434,6 +439,13 @@ function createFindingsRouter({ auth, alfrescoClient, now = () => new Date() }) 
           return res.status(400).json(buildError('FOLLOW_UP_BAD_REQUEST', 'percentComplete must be between 0 and 100'));
         }
 
+        if (!isValidClosureRequest({ followUpType, findingClosed, effectivenessConfirmed })) {
+          return res.status(400).json(buildError(
+            'FOLLOW_UP_INVALID_CLOSURE',
+            'Closing a finding requires followUpType "Closure Verification" and effectivenessConfirmed=true'
+          ));
+        }
+
         const existingFollowUps = await alfrescoClient.listChildrenByType({
           ticket: req.auth.ticket,
           parentNodeId: finding.nodeId,
@@ -515,6 +527,7 @@ function createFindingsRouter({ auth, alfrescoClient, now = () => new Date() }) 
             findingClosed,
             effectivenessConfirmed,
             percentComplete,
+            followUpType,
           },
         });
 
@@ -522,10 +535,6 @@ function createFindingsRouter({ auth, alfrescoClient, now = () => new Date() }) 
           'vso:findingStatus': nextFindingStatus,
           'vso:lastStatusChange': toDateOnly(now()),
         };
-
-        if (nextFindingStatus === FINDING_STATUS.CLOSED) {
-          statusProperties['vso:findingClosureDate'] = followUpClosureDate || toDateOnly(now());
-        }
 
         await alfrescoClient.updateNodeProperties({
           ticket: req.auth.ticket,
@@ -555,6 +564,54 @@ function createFindingsRouter({ auth, alfrescoClient, now = () => new Date() }) 
         }
 
         return res.status(502).json(buildError('FOLLOW_UP_CREATE_FAILED', upstreamDetail));
+      }
+    }
+  );
+
+  router.patch(
+    '/:findingId/closure-review',
+    auth.authenticate,
+    auth.authorize(['inspector', 'admin']),
+    auth.requireCsrf(),
+    async (req, res) => {
+      try {
+        const decision = req.body?.decision;
+        if (decision !== 'approve' && decision !== 'reject') {
+          return res.status(400).json(buildError('CLOSURE_REVIEW_BAD_DECISION', 'decision must be "approve" or "reject"'));
+        }
+
+        const findingNode = await alfrescoClient.searchFindingByBusinessId({
+          ticket: req.auth.ticket,
+          findingId: req.params.findingId,
+        });
+        if (!findingNode) {
+          return res.status(404).json(buildError('FINDING_NOT_FOUND', 'Finding not found'));
+        }
+
+        const currentStatus = findingNode?.properties?.['vso:findingStatus'];
+        if (!canReviewClosure(currentStatus)) {
+          return res.status(409).json(buildError('FINDING_NOT_REVIEWABLE', 'Only findings in Pending Closure Approval status can be reviewed'));
+        }
+
+        const statusProperties = {
+          'vso:findingStatus': decision === 'approve' ? FINDING_STATUS.CLOSED : FINDING_STATUS.IN_PROGRESS,
+          'vso:lastStatusChange': toDateOnly(now()),
+        };
+        if (decision === 'approve') {
+          statusProperties['vso:findingClosureDate'] = toDateOnly(now());
+        }
+
+        const updatedFinding = await alfrescoClient.updateNodeProperties({
+          ticket: req.auth.ticket,
+          nodeId: findingNode.id,
+          properties: statusProperties,
+        });
+
+        return res.status(200).json({
+          finding: mapFindingNode(updatedFinding),
+        });
+      } catch (error) {
+        return res.status(502).json(buildError('CLOSURE_REVIEW_FAILED', error.message));
       }
     }
   );

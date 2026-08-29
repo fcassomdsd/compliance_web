@@ -4,6 +4,7 @@ const FINDING_STATUS = Object.freeze({
   CAP_ACCEPTED: 'CAP Accepted',
   IN_PROGRESS: 'In Progress',
   PENDING_CLOSURE_REVIEW: 'Pending Closure Review',
+  PENDING_CLOSURE_APPROVAL: 'Pending Closure Approval',
   CLOSED: 'Closed',
   // Legacy value kept only for backward-compatible comparisons against
   // previously-persisted data. No longer assigned by computeEffectiveFindingStatus().
@@ -187,6 +188,22 @@ function isValidCapAcceptanceStatus(status) {
   return Object.values(CAP_ACCEPTANCE_STATUS).includes(status);
 }
 
+const CLOSURE_VERIFICATION_FOLLOW_UP_TYPE = 'Closure Verification';
+
+// A follow-up may only request closure with this exact type/flag combination
+// (see CLAUDE.md's closure gate rule); any other combination attempting
+// closure must be rejected rather than silently downgraded.
+function isValidClosureRequest({ followUpType, findingClosed, effectivenessConfirmed }) {
+  if (!findingClosed) {
+    return true;
+  }
+  return followUpType === CLOSURE_VERIFICATION_FOLLOW_UP_TYPE && effectivenessConfirmed === true;
+}
+
+function canReviewClosure(findingStatus) {
+  return findingStatus === FINDING_STATUS.PENDING_CLOSURE_APPROVAL;
+}
+
 // A CAP's content (RCA, risk assessment, action items, residual risk,
 // effectiveness verification) can only be edited in place while it's
 // Returned for revision. Pending-review/Accepted/Rejected CAPs are
@@ -213,4 +230,7 @@ module.exports = {
   canSubmitCap,
   isValidCapAcceptanceStatus,
   isCapEditable,
+  CLOSURE_VERIFICATION_FOLLOW_UP_TYPE,
+  isValidClosureRequest,
+  canReviewClosure,
 };
