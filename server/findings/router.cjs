@@ -17,6 +17,7 @@ const {
   isValidEvidenceReviewDecision,
   resolveFindingStatusFromFollowUp,
 } = require('../domain/statusRules.cjs');
+const { canReviewFinding } = require('../domain/statusRules.cjs');
 
 const FINDINGS_LIBRARY_PATH = "Sites/vigilancia-de-la-so/documentLibrary/Vigilancia/Hallazgos";
 
@@ -173,9 +174,13 @@ function findingIdFromFollowUpId(followUpId) {
   return `${parsed.compactInspectionId}-${parsed.specialtyCode}-${String(parsed.findingSequence).padStart(2, '0')}`;
 }
 
-function applyFindingFilters({ findings, status, capOverdueOnly, solutionOverdueOnly }) {
+function applyFindingFilters({ findings, status, capOverdueOnly, solutionOverdueOnly, reviewStatus }) {
   return findings.filter((finding) => {
     if (status && finding.effectiveStatus !== status && finding.storedStatus !== status) {
+      return false;
+    }
+
+    if (reviewStatus && finding.findingReviewStatus !== reviewStatus) {
       return false;
     }
 
@@ -241,6 +246,7 @@ function createFindingsRouter({ auth, alfrescoClient, now = () => new Date() }) 
           status: req.query?.status,
           capOverdueOnly: req.query?.capOverdueOnly,
           solutionOverdueOnly: req.query?.solutionOverdueOnly,
+          reviewStatus: req.query?.reviewStatus,
         });
 
         return res.status(200).json({
@@ -619,6 +625,64 @@ function createFindingsRouter({ auth, alfrescoClient, now = () => new Date() }) 
         });
       } catch (error) {
         return res.status(502).json(buildError('EVIDENCE_REVIEW_FAILED', error.message));
+      }
+    }
+  );
+
+  router.patch(
+    '/:findingId/review',
+    auth.authenticate,
+    auth.authorize(['inspector', 'admin']),
+    auth.requireCsrf(),
+    async (req, res) => {
+      try {
+        const findingNode = await alfrescoClient.searchFindingByBusinessId({
+          ticket: req.auth.ticket,
+          findingId: req.params.findingId,
+        });
+        if (!findingNode) {
+          return res.status(404).json(buildError('FINDING_NOT_FOUND', 'Finding not found'));
+        }
+
+        const currentReviewStatus = findingNode?.properties?.['vso:findingReviewStatus'];
+        if (!canReviewFinding(currentReviewStatus)) {
+          return res.status(409).json(buildError('FINDING_ALREADY_REVIEWED', 'This finding has already been reviewed'));
+        }
+
+        // Fields a reviewer may correct before confirming — the content a
+        // field inspector formulated directly, not identifiers, dates, or
+        // the findingStatus/findingReviewStatus lifecycle fields themselves.
+        const EDITABLE_FIELDS = {
+          description: 'vso:description',
+          findingLevel: 'vso:findingLevel',
+          findingSeverity: 'vso:findingSeverity',
+          riskClassification: 'vso:riskClassification',
+          targetResidualRisk: 'vso:targetResidualRisk',
+          requirementBreached: 'vso:requirementBreached',
+        };
+
+        const edits = {};
+        for (const [bodyKey, alfrescoKey] of Object.entries(EDITABLE_FIELDS)) {
+          if (req.body?.[bodyKey] !== undefined) {
+            edits[alfrescoKey] = req.body[bodyKey];
+          }
+        }
+
+        const updatedFinding = await alfrescoClient.updateNodeProperties({
+          ticket: req.auth.ticket,
+          nodeId: findingNode.id,
+          properties: {
+            ...edits,
+            'vso:findingReviewStatus': 'Confirmed',
+            'vso:findingReviewDate': toDateOnly(now()),
+          },
+        });
+
+        return res.status(200).json({
+          finding: mapFindingNode(updatedFinding),
+        });
+      } catch (error) {
+        return res.status(502).json(buildError('FINDING_REVIEW_FAILED', error.message));
       }
     }
   );

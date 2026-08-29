@@ -243,6 +243,22 @@ function isValidEvidenceReviewDecision(status) {
   return status === EVIDENCE_REVIEW_STATUS.ADEQUATE || status === EVIDENCE_REVIEW_STATUS.INADEQUATE;
 }
 
+const FINDING_REVIEW_STATUS = Object.freeze({
+  PENDING_REVIEW: 'Pending Review',
+  CONFIRMED: 'Confirmed',
+});
+
+// Only findings imported via the canonical path (going forward) carry this
+// property at all; missing is treated as reviewable/confirmed so existing
+// findings from before this field existed aren't retroactively blocked.
+function canReviewFinding(findingReviewStatus) {
+  return !findingReviewStatus || findingReviewStatus === FINDING_REVIEW_STATUS.PENDING_REVIEW;
+}
+
+function isFindingReviewConfirmed(findingReviewStatus) {
+  return !findingReviewStatus || findingReviewStatus === FINDING_REVIEW_STATUS.CONFIRMED;
+}
+
 // A follow-up may only affect vso:findingStatus once its evidence has been
 // confirmed Adequate — never at submission time, and never while still
 // Pending Review or Inadequate. See CLAUDE.md's closure gate rule for the
@@ -295,4 +311,7 @@ module.exports = {
   canReviewEvidence,
   isValidEvidenceReviewDecision,
   resolveFindingStatusFromFollowUp,
+  FINDING_REVIEW_STATUS,
+  canReviewFinding,
+  isFindingReviewConfirmed,
 };

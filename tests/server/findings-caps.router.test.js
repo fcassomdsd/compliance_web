@@ -400,6 +400,20 @@ describe('Findings and CAP API', () => {
     expect(response.body.cap.effectivenessVerification.method).toBe('Follow-up audit');
   });
 
+  it('rejects CAP submission for a finding that has not yet been reviewer-confirmed', async () => {
+    const { app, fixture } = await buildApp({ roles: ['cap_entry'] });
+    fixture.findingNode.properties['vso:findingReviewStatus'] = 'Pending Review';
+
+    const response = await request(app)
+      .post('/api/findings/MDPP001-AYVIS-01/caps')
+      .set('Cookie', 'compliance_session_id=session-1')
+      .set('x-csrf-token', 'csrf-token-1')
+      .send(fullCapPayload());
+
+    expect(response.status).toBe(409);
+    expect(response.body.code).toBe('FINDING_NOT_REVIEWED');
+  });
+
   function fullCapPayload(overrides = {}) {
     return {
       proposedAction: 'New corrective action',
@@ -681,6 +695,84 @@ describe('Findings and CAP API', () => {
       });
 
     expect(response.status).toBe(201);
+  });
+
+  it('confirms a finding as-is with no edits', async () => {
+    const { app, fixture } = await buildApp({ roles: ['inspector'] });
+    fixture.findingNode.properties['vso:findingReviewStatus'] = 'Pending Review';
+
+    const response = await request(app)
+      .patch('/api/findings/MDPP001-AYVIS-01/review')
+      .set('Cookie', 'compliance_session_id=session-1')
+      .set('x-csrf-token', 'csrf-token-1')
+      .send({});
+
+    expect(response.status).toBe(200);
+    expect(response.body.finding.findingReviewStatus).toBe('Confirmed');
+    expect(response.body.finding.description).toBe('Finding description');
+    expect(fixture.findingNode.properties['vso:findingReviewDate']).toBeTruthy();
+  });
+
+  it('confirms a finding while correcting its content', async () => {
+    const { app, fixture } = await buildApp({ roles: ['inspector'] });
+    fixture.findingNode.properties['vso:findingReviewStatus'] = 'Pending Review';
+
+    const response = await request(app)
+      .patch('/api/findings/MDPP001-AYVIS-01/review')
+      .set('Cookie', 'compliance_session_id=session-1')
+      .set('x-csrf-token', 'csrf-token-1')
+      .send({
+        description: 'Corrected description after review',
+        findingSeverity: 'A',
+        riskClassification: 'High',
+      });
+
+    expect(response.status).toBe(200);
+    expect(response.body.finding.findingReviewStatus).toBe('Confirmed');
+    expect(response.body.finding.description).toBe('Corrected description after review');
+    expect(response.body.finding.findingSeverity).toBe('A');
+    expect(response.body.finding.riskClassification).toBe('High');
+    expect(fixture.findingNode.properties['vso:description']).toBe('Corrected description after review');
+  });
+
+  it('rejects reviewing a finding a second time once already confirmed', async () => {
+    const { app, fixture } = await buildApp({ roles: ['inspector'] });
+    fixture.findingNode.properties['vso:findingReviewStatus'] = 'Confirmed';
+
+    const response = await request(app)
+      .patch('/api/findings/MDPP001-AYVIS-01/review')
+      .set('Cookie', 'compliance_session_id=session-1')
+      .set('x-csrf-token', 'csrf-token-1')
+      .send({});
+
+    expect(response.status).toBe(409);
+    expect(response.body.code).toBe('FINDING_ALREADY_REVIEWED');
+  });
+
+  it('rejects finding review from roles other than inspector/admin', async () => {
+    const { app } = await buildApp({ roles: ['cap_entry'] });
+
+    const response = await request(app)
+      .patch('/api/findings/MDPP001-AYVIS-01/review')
+      .set('Cookie', 'compliance_session_id=session-1')
+      .set('x-csrf-token', 'csrf-token-1')
+      .send({});
+
+    expect(response.status).toBe(403);
+  });
+
+  it('filters findings list by reviewStatus', async () => {
+    const { app, fixture } = await buildApp({ roles: ['inspector'] });
+    fixture.findingNode.properties['vso:findingReviewStatus'] = 'Pending Review';
+
+    const response = await request(app)
+      .get('/api/findings')
+      .query({ reviewStatus: 'Pending Review' })
+      .set('Cookie', 'compliance_session_id=session-1');
+
+    expect(response.status).toBe(200);
+    expect(response.body.list).toHaveLength(1);
+    expect(response.body.list[0].findingReviewStatus).toBe('Pending Review');
   });
 
   it('allows inspector review and updates CAP acceptance status', async () => {

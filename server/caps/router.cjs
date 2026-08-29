@@ -28,6 +28,7 @@ const {
   canSubmitCap,
   isValidCapAcceptanceStatus,
   isCapEditable,
+  isFindingReviewConfirmed,
 } = require('../domain/statusRules.cjs');
 
 const RCA_METHODS = ['5 Whys', 'Fishbone', 'BowTie', 'TapRooT', 'Barrier Analysis', 'Other'];
@@ -613,6 +614,9 @@ function createCapsRouter({ auth, alfrescoClient, capDraftRepository, now = () =
         if (!canSubmitCap(statusMeta.effectiveStatus)) {
           return res.status(409).json(buildError('CAP_NOT_ALLOWED', 'CAP can only be submitted for Open or CAP Overdue findings'));
         }
+        if (!isFindingReviewConfirmed(finding.findingReviewStatus)) {
+          return res.status(409).json(buildError('FINDING_NOT_REVIEWED', 'This finding must be confirmed by a reviewer before a CAP can be submitted against it'));
+        }
 
         const capId = req.body?.capId;
         const proposedAction = req.body?.proposedAction;
@@ -829,6 +833,9 @@ function createCapsRouter({ auth, alfrescoClient, capDraftRepository, now = () =
         if (!canSubmitCap(statusMeta.effectiveStatus)) {
           return res.status(409).json(buildError('CAP_NOT_ALLOWED', 'CAP can only be submitted for Open or CAP Overdue findings'));
         }
+        if (!isFindingReviewConfirmed(finding.findingReviewStatus)) {
+          return res.status(409).json(buildError('FINDING_NOT_REVIEWED', 'This finding must be confirmed by a reviewer before a CAP can be submitted against it'));
+        }
 
         const result = await performCapCreate({
           alfrescoClient,
@@ -1003,6 +1010,9 @@ function createCapsRouter({ auth, alfrescoClient, capDraftRepository, now = () =
           const statusMeta = computeEffectiveFindingStatus({ finding, followUpReports, now: now() });
           if (!canSubmitCap(statusMeta.effectiveStatus)) {
             return res.status(409).json(buildError('CAP_NOT_ALLOWED', 'CAP can only be resubmitted while its finding is Open or CAP Overdue'));
+          }
+          if (!isFindingReviewConfirmed(finding.findingReviewStatus)) {
+            return res.status(409).json(buildError('FINDING_NOT_REVIEWED', 'This finding must be confirmed by a reviewer before a CAP can be resubmitted against it'));
           }
         }
 
