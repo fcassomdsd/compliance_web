@@ -11,6 +11,8 @@ const { PgNotificationRepository } = require('./notifications/pgNotificationRepo
 const { createEmailTransport } = require('./notifications/emailTransport.cjs');
 const { createNotificationService } = require('./notifications/notificationService.cjs');
 const { startNotificationSendJob } = require('./jobs/notificationSendJob.cjs');
+const { NodeRedClient } = require('./atrocore/nodeRedClient.cjs');
+const { startSiteVisitSchedulingJob } = require('./jobs/siteVisitSchedulingJob.cjs');
 
 function createEmailTransportOrStub(logger) {
   try {
@@ -90,6 +92,17 @@ async function start() {
     notificationService,
     logger: auditLogger,
     intervalMs: Number(process.env.NOTIFICATION_SEND_INTERVAL_MS || 60 * 1000),
+  });
+
+  const nodeRedClient = new NodeRedClient({ baseUrl: process.env.NODE_RED_BASE_URL });
+  startSiteVisitSchedulingJob({
+    alfrescoClient,
+    nodeRedClient,
+    username: process.env.ALFRESCO_JOB_USERNAME,
+    password: process.env.ALFRESCO_JOB_PASSWORD,
+    notificationService,
+    logger: auditLogger,
+    runHourLocal: Number(process.env.SITE_VISIT_SCHEDULING_JOB_HOUR || 2),
   });
 }
 
