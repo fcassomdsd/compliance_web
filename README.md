@@ -122,6 +122,13 @@ Common optional auth settings:
 - `AUTH_TICKET_ENCRYPTION_KEY` (required in production — server refuses to start without it)
 - `AUTH_LOGIN_RATE_LIMIT_MAX_ATTEMPTS`
 
+Notification settings (see `NOTIFICATIONS_SQL.sql` for the schema):
+
+- `SMTP_HOST` — if unset, email notifications queue as `pending` and fail on every retry attempt until configured; in-app notifications are unaffected.
+- `SMTP_PORT` (default `587`), `SMTP_SECURE` (default `false`), `SMTP_USER`, `SMTP_PASS`, `SMTP_FROM` (default `noreply@compliance.local`)
+- `NOTIFICATION_SEND_INTERVAL_MS` (default `60000`) — how often the retry sweep runs
+- `CASE_ESCALATION_EMAIL` — fixed distribution-list address for case-escalation notifications (finding overdue job); escalation is skipped, not queued, if unset
+
 Auth backend details: [server/README.md](server/README.md)
 
 ## Available Scripts

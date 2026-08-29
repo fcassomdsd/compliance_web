@@ -35,7 +35,38 @@ async function getFollowUpReportsForFindingAndCaps({ alfrescoClient, ticket, fin
   return all;
 }
 
-async function runFindingOverdueSync({ alfrescoClient, username, password, logger = console, now = () => new Date() }) {
+// Per the BPMN's "Plazo vencido" escalation path: any deadline miss (CAP
+// submission or finding resolution) routes to "Solución de Casos de
+// Seguridad". Recipient is a fixed distribution list, not resolved
+// per-user, since no email addresses exist anywhere in this data model.
+async function escalateNewlyOverdueFinding({ finding, effectiveStatus, notificationService, now }) {
+  if (!notificationService) {
+    return;
+  }
+  const escalationEmail = process.env.CASE_ESCALATION_EMAIL;
+  if (!escalationEmail) {
+    return;
+  }
+
+  const deadlineKind = effectiveStatus === FINDING_STATUS.CAP_OVERDUE ? 'CAP submission' : 'finding resolution';
+  await notificationService.notify({
+    eventType: 'case_escalation',
+    channel: 'email',
+    recipient: escalationEmail,
+    subject: `Case escalation required: ${finding.findingId} (${deadlineKind} deadline missed)`,
+    body: [
+      `Finding ${finding.findingId} has missed its ${deadlineKind} deadline and requires case escalation.`,
+      `Provider: ${finding.providerName || finding.providerId || 'unknown'}`,
+      `Location: ${finding.locationName || finding.locationCode || 'unknown'}`,
+      `Status: ${effectiveStatus}`,
+      `Detected: ${now().toISOString()}`,
+    ].join('\n'),
+    context: { findingId: finding.findingId, effectiveStatus },
+    isCritical: true,
+  });
+}
+
+async function runFindingOverdueSync({ alfrescoClient, username, password, notificationService, logger = console, now = () => new Date() }) {
   if (!username || !password) {
     logger.warn('Finding overdue job skipped: ALFRESCO_JOB_USERNAME/ALFRESCO_JOB_PASSWORD not configured');
     return { skipped: true, updated: 0, drift: 0 };
@@ -77,6 +108,13 @@ async function runFindingOverdueSync({ alfrescoClient, username, password, logge
         status.storedStatus !== status.effectiveStatus;
 
       if (isNewlyOverdue) {
+        await escalateNewlyOverdueFinding({
+          finding,
+          effectiveStatus: status.effectiveStatus,
+          notificationService,
+          now,
+        });
+
         await alfrescoClient.updateNodeProperties({
           ticket,
           nodeId: finding.nodeId,
@@ -100,6 +138,7 @@ function startFindingOverdueJob({
   alfrescoClient,
   username,
   password,
+  notificationService,
   logger = console,
   now = () => new Date(),
   runHourLocal = 1,
@@ -110,7 +149,7 @@ function startFindingOverdueJob({
     const waitMs = untilNextRunMs(runHourLocal, now());
     timeoutId = setTimeout(async () => {
       try {
-        await runFindingOverdueSync({ alfrescoClient, username, password, logger, now });
+        await runFindingOverdueSync({ alfrescoClient, username, password, notificationService, logger, now });
       } catch (error) {
         logger.error('Finding overdue sync failed', error);
       } finally {
@@ -128,7 +167,7 @@ function startFindingOverdueJob({
         clearTimeout(timeoutId);
       }
     },
-    runNow: () => runFindingOverdueSync({ alfrescoClient, username, password, logger, now }),
+    runNow: () => runFindingOverdueSync({ alfrescoClient, username, password, notificationService, logger, now }),
   };
 }
 

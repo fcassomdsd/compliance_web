@@ -6,8 +6,9 @@ const { createSessionAuth } = require('./auth/sessionAuth.cjs');
 const { createFindingsRouter } = require('./findings/router.cjs');
 const { createCapsRouter } = require('./caps/router.cjs');
 const { createReportsRouter } = require('./reports/router.cjs');
+const { createNotificationsRouter } = require('./notifications/router.cjs');
 
-function createApp({ config, sessionRepository, alfrescoClient, loginRateLimiter, logger, capDraftRepository, now }) {
+function createApp({ config, sessionRepository, alfrescoClient, loginRateLimiter, logger, capDraftRepository, notificationRepository, now }) {
   const app = express();
   app.use(express.json());
   app.use(cookieParser());
@@ -61,6 +62,16 @@ function createApp({ config, sessionRepository, alfrescoClient, loginRateLimiter
       now,
     })
   );
+
+  if (notificationRepository) {
+    app.use(
+      '/api/notifications',
+      createNotificationsRouter({
+        auth,
+        repository: notificationRepository,
+      })
+    );
+  }
 
   return app;
 }
