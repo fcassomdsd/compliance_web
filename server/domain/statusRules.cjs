@@ -227,6 +227,37 @@ function isValidDeadlineExtensionDecision(status) {
   return status === DEADLINE_EXTENSION_STATUS.ACCEPTED || status === DEADLINE_EXTENSION_STATUS.REJECTED;
 }
 
+const EVIDENCE_REVIEW_STATUS = Object.freeze({
+  PENDING_REVIEW: 'Pending Review',
+  ADEQUATE: 'Adequate',
+  INADEQUATE: 'Inadequate',
+});
+
+// A follow-up's evidence can only be reviewed once, while still pending
+// (missing is treated as pending, for any follow-up predating this field).
+function canReviewEvidence(evidenceReviewStatus) {
+  return !evidenceReviewStatus || evidenceReviewStatus === EVIDENCE_REVIEW_STATUS.PENDING_REVIEW;
+}
+
+function isValidEvidenceReviewDecision(status) {
+  return status === EVIDENCE_REVIEW_STATUS.ADEQUATE || status === EVIDENCE_REVIEW_STATUS.INADEQUATE;
+}
+
+// A follow-up may only affect vso:findingStatus once its evidence has been
+// confirmed Adequate — never at submission time, and never while still
+// Pending Review or Inadequate. See CLAUDE.md's closure gate rule for the
+// followUpType/effectivenessConfirmed condition itself.
+function resolveFindingStatusFromFollowUp({ followUpType, effectivenessConfirmed, percentComplete }) {
+  const closureRequested = followUpType === CLOSURE_VERIFICATION_FOLLOW_UP_TYPE && effectivenessConfirmed === true;
+  if (closureRequested) {
+    return FINDING_STATUS.PENDING_CLOSURE_APPROVAL;
+  }
+  if (Number(percentComplete || 0) >= 100) {
+    return FINDING_STATUS.PENDING_CLOSURE_REVIEW;
+  }
+  return FINDING_STATUS.IN_PROGRESS;
+}
+
 // A CAP's content (RCA, risk assessment, action items, residual risk,
 // effectiveness verification) can only be edited in place while it's
 // Returned for revision. Pending-review/Accepted/Rejected CAPs are
@@ -260,4 +291,8 @@ module.exports = {
   canRequestDeadlineExtension,
   canReviewDeadlineExtension,
   isValidDeadlineExtensionDecision,
+  EVIDENCE_REVIEW_STATUS,
+  canReviewEvidence,
+  isValidEvidenceReviewDecision,
+  resolveFindingStatusFromFollowUp,
 };
