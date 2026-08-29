@@ -47,7 +47,34 @@
 
     <div class="detail-buttons">
       <BaseButton variant="secondary" size="sm" :class="{ 'push-button-active': showForm }" @click="showForm = !showForm">Register Follow-up</BaseButton>
+      <BaseButton variant="secondary" size="sm" :class="{ 'push-button-active': showEvidenceReviewForm }" @click="showEvidenceReviewForm = !showEvidenceReviewForm">Review Evidence</BaseButton>
     </div>
+
+    <section v-if="showEvidenceReviewForm" class="card">
+      <h3>Review Evidence</h3>
+      <div class="form-grid">
+        <div class="form-field">
+          <label for="evidenceReviewFindingId">Finding ID</label>
+          <input id="evidenceReviewFindingId" v-model="evidenceReviewForm.findingId" type="text" />
+        </div>
+        <div class="form-field">
+          <label for="evidenceReviewFollowUpId">Follow-up ID</label>
+          <input id="evidenceReviewFollowUpId" v-model="evidenceReviewForm.followUpId" type="text" />
+        </div>
+        <div class="form-field">
+          <label for="evidenceReviewDecision">Decision</label>
+          <select id="evidenceReviewDecision" v-model="evidenceReviewForm.decision">
+            <option value="Adequate">Adequate</option>
+            <option value="Inadequate">Inadequate</option>
+          </select>
+        </div>
+        <div class="form-field field-span-2">
+          <label for="evidenceReviewNotes">Notes</label>
+          <textarea id="evidenceReviewNotes" v-model="evidenceReviewForm.notes" rows="2" />
+        </div>
+      </div>
+      <BaseButton variant="primary" @click="reviewEvidence" :disabled="followUpStore.loading">Apply Decision</BaseButton>
+    </section>
 
     <section v-if="showForm" class="card">
       <h3>Register Follow-up</h3>
@@ -126,6 +153,14 @@ const authStore = useAuthStore();
 const message = ref('');
 const searchErrorMessage = ref('');
 const showForm = ref(false);
+const showEvidenceReviewForm = ref(false);
+
+const evidenceReviewForm = reactive({
+  findingId: '',
+  followUpId: '',
+  decision: 'Adequate',
+  notes: '',
+});
 
 const followUpTypes = [
   'Progress Review',
@@ -211,6 +246,27 @@ async function createFollowUp() {
   } catch (error) {
     console.error('Follow-up creation failed:', error);
     searchErrorMessage.value = error?.message || 'Could not create follow-up. Please try again.';
+  }
+}
+
+async function reviewEvidence() {
+  message.value = '';
+  try {
+    await followUpStore.reviewEvidence({
+      findingId: evidenceReviewForm.findingId,
+      followUpId: evidenceReviewForm.followUpId,
+      decision: evidenceReviewForm.decision,
+      notes: evidenceReviewForm.notes,
+      csrfToken: authStore.csrfToken,
+    });
+    message.value = 'Evidence review applied.';
+    evidenceReviewForm.findingId = '';
+    evidenceReviewForm.followUpId = '';
+    evidenceReviewForm.notes = '';
+    await loadFollowUps();
+  } catch (error) {
+    console.error('Evidence review failed:', error);
+    searchErrorMessage.value = error?.message || 'Could not apply evidence review. Please try again.';
   }
 }
 

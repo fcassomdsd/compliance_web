@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia';
-import { apiFollowUps, apiCreateFindingFollowUp } from '@/services/apiServices';
+import { apiFollowUps, apiCreateFindingFollowUp, apiReviewFollowUpEvidence } from '@/services/apiServices';
 
 export const useFollowUpStore = defineStore('followUp', {
   state: () => ({
@@ -43,6 +43,20 @@ export const useFollowUpStore = defineStore('followUp', {
       this.error = null;
       try {
         const { data } = await apiCreateFindingFollowUp(findingId, payload, csrfToken);
+        return data;
+      } catch (error) {
+        this.error = error.message;
+        throw error;
+      } finally {
+        this.loading = false;
+      }
+    },
+
+    async reviewEvidence({ findingId, followUpId, decision, notes, csrfToken }) {
+      this.loading = true;
+      this.error = null;
+      try {
+        const { data } = await apiReviewFollowUpEvidence(findingId, followUpId, { decision, notes }, csrfToken);
         return data;
       } catch (error) {
         this.error = error.message;

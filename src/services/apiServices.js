@@ -740,3 +740,207 @@ export async function apiCreateFindingFollowUp(findingId, payload, csrfToken) {
   }
 }
 
+export async function apiReviewFinding(findingId, edits, csrfToken) {
+  try {
+    if (!findingId || typeof findingId !== 'string') {
+      throw new Error('findingId is required');
+    }
+
+    const result = await axios({
+      method: 'patch',
+      url: `${complianceApiServer}/findings/${encodeURIComponent(findingId)}/review`,
+      data: edits,
+      headers: buildCsrfHeader(csrfToken),
+      withCredentials: true,
+    });
+    return { data: result.data, status: result.status };
+  } catch (error) {
+    const backendMessage = error?.response?.data?.message || error?.response?.data?.error;
+    const status = error?.response?.status;
+    const detail = backendMessage || error.message;
+    throw new Error(`apiReviewFinding: ${status ? `[${status}] ` : ''}${detail}`);
+  }
+}
+
+export async function apiClosureReviewFinding(findingId, decision, csrfToken) {
+  try {
+    if (!findingId || typeof findingId !== 'string') {
+      throw new Error('findingId is required');
+    }
+
+    const result = await axios({
+      method: 'patch',
+      url: `${complianceApiServer}/findings/${encodeURIComponent(findingId)}/closure-review`,
+      data: { decision },
+      headers: buildCsrfHeader(csrfToken),
+      withCredentials: true,
+    });
+    return { data: result.data, status: result.status };
+  } catch (error) {
+    const backendMessage = error?.response?.data?.message || error?.response?.data?.error;
+    const status = error?.response?.status;
+    const detail = backendMessage || error.message;
+    throw new Error(`apiClosureReviewFinding: ${status ? `[${status}] ` : ''}${detail}`);
+  }
+}
+
+export async function apiRequestDeadlineExtension(findingId, payload, csrfToken) {
+  try {
+    if (!findingId || typeof findingId !== 'string') {
+      throw new Error('findingId is required');
+    }
+
+    const result = await axios({
+      method: 'post',
+      url: `${complianceApiServer}/findings/${encodeURIComponent(findingId)}/deadline-extension-requests`,
+      data: payload,
+      headers: buildCsrfHeader(csrfToken),
+      withCredentials: true,
+    });
+    return { data: result.data, status: result.status };
+  } catch (error) {
+    const backendMessage = error?.response?.data?.message || error?.response?.data?.error;
+    const status = error?.response?.status;
+    const detail = backendMessage || error.message;
+    throw new Error(`apiRequestDeadlineExtension: ${status ? `[${status}] ` : ''}${detail}`);
+  }
+}
+
+export async function apiReviewDeadlineExtension(findingId, decision, csrfToken) {
+  try {
+    if (!findingId || typeof findingId !== 'string') {
+      throw new Error('findingId is required');
+    }
+
+    const result = await axios({
+      method: 'patch',
+      url: `${complianceApiServer}/findings/${encodeURIComponent(findingId)}/deadline-extension-review`,
+      data: { decision },
+      headers: buildCsrfHeader(csrfToken),
+      withCredentials: true,
+    });
+    return { data: result.data, status: result.status };
+  } catch (error) {
+    const backendMessage = error?.response?.data?.message || error?.response?.data?.error;
+    const status = error?.response?.status;
+    const detail = backendMessage || error.message;
+    throw new Error(`apiReviewDeadlineExtension: ${status ? `[${status}] ` : ''}${detail}`);
+  }
+}
+
+export async function apiProviderHistoryReport(providerId, year) {
+  try {
+    if (!providerId || typeof providerId !== 'string') {
+      throw new Error('providerId is required');
+    }
+
+    const result = await axios({
+      method: 'get',
+      url: `${complianceApiServer}/reports/provider-history`,
+      params: { providerId, ...(year ? { year } : {}) },
+      withCredentials: true,
+    });
+    return { data: result.data, status: result.status };
+  } catch (error) {
+    const backendMessage = error?.response?.data?.message || error?.response?.data?.error;
+    const status = error?.response?.status;
+    const detail = backendMessage || error.message;
+    throw new Error(`apiProviderHistoryReport: ${status ? `[${status}] ` : ''}${detail}`);
+  }
+}
+
+export async function apiListNotifications(unreadOnly = false) {
+  try {
+    const result = await axios({
+      method: 'get',
+      url: `${complianceApiServer}/notifications`,
+      params: { unreadOnly: unreadOnly ? 'true' : 'false' },
+      withCredentials: true,
+    });
+    return { data: result.data, status: result.status };
+  } catch (error) {
+    const backendMessage = error?.response?.data?.message || error?.response?.data?.error;
+    const status = error?.response?.status;
+    const detail = backendMessage || error.message;
+    throw new Error(`apiListNotifications: ${status ? `[${status}] ` : ''}${detail}`);
+  }
+}
+
+export async function apiGetUnreadNotificationCount() {
+  try {
+    const result = await axios({
+      method: 'get',
+      url: `${complianceApiServer}/notifications/unread-count`,
+      withCredentials: true,
+    });
+    return { data: result.data, status: result.status };
+  } catch (error) {
+    const backendMessage = error?.response?.data?.message || error?.response?.data?.error;
+    const status = error?.response?.status;
+    const detail = backendMessage || error.message;
+    throw new Error(`apiGetUnreadNotificationCount: ${status ? `[${status}] ` : ''}${detail}`);
+  }
+}
+
+export async function apiMarkNotificationRead(notificationId, csrfToken) {
+  try {
+    if (!notificationId || typeof notificationId !== 'string') {
+      throw new Error('notificationId is required');
+    }
+
+    const result = await axios({
+      method: 'patch',
+      url: `${complianceApiServer}/notifications/${encodeURIComponent(notificationId)}/read`,
+      headers: buildCsrfHeader(csrfToken),
+      withCredentials: true,
+    });
+    return { data: result.data, status: result.status };
+  } catch (error) {
+    const backendMessage = error?.response?.data?.message || error?.response?.data?.error;
+    const status = error?.response?.status;
+    const detail = backendMessage || error.message;
+    throw new Error(`apiMarkNotificationRead: ${status ? `[${status}] ` : ''}${detail}`);
+  }
+}
+
+export async function apiListNotificationFailures() {
+  try {
+    const result = await axios({
+      method: 'get',
+      url: `${complianceApiServer}/notifications/failures`,
+      withCredentials: true,
+    });
+    return { data: result.data, status: result.status };
+  } catch (error) {
+    const backendMessage = error?.response?.data?.message || error?.response?.data?.error;
+    const status = error?.response?.status;
+    const detail = backendMessage || error.message;
+    throw new Error(`apiListNotificationFailures: ${status ? `[${status}] ` : ''}${detail}`);
+  }
+}
+
+export async function apiReviewFollowUpEvidence(findingId, followUpId, payload, csrfToken) {
+  try {
+    if (!findingId || typeof findingId !== 'string') {
+      throw new Error('findingId is required');
+    }
+    if (!followUpId || typeof followUpId !== 'string') {
+      throw new Error('followUpId is required');
+    }
+
+    const result = await axios({
+      method: 'patch',
+      url: `${complianceApiServer}/findings/${encodeURIComponent(findingId)}/follow-ups/${encodeURIComponent(followUpId)}/evidence-review`,
+      data: payload,
+      headers: buildCsrfHeader(csrfToken),
+      withCredentials: true,
+    });
+    return { data: result.data, status: result.status };
+  } catch (error) {
+    const backendMessage = error?.response?.data?.message || error?.response?.data?.error;
+    const status = error?.response?.status;
+    const detail = backendMessage || error.message;
+    throw new Error(`apiReviewFollowUpEvidence: ${status ? `[${status}] ` : ''}${detail}`);
+  }
+}
+
