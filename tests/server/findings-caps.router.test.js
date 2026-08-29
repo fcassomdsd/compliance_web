@@ -1,10 +1,25 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import request from 'supertest';
 import { createRequire } from 'node:module';
 
 const require = createRequire(import.meta.url);
 const { createApp } = require('../../server/app.cjs');
 const { InMemorySessionRepository } = require('../setup/mocks/InMemorySessionRepository.cjs');
+const { InMemoryNotificationRepository } = require('../setup/mocks/InMemoryNotificationRepository.cjs');
+const { createNotificationService } = require('../../server/notifications/notificationService.cjs');
+
+function buildTestNotificationService() {
+  const repository = new InMemoryNotificationRepository();
+  const sent = [];
+  const emailTransport = {
+    from: 'noreply@compliance.local',
+    async send(message) {
+      sent.push(message);
+    },
+  };
+  const logger = { info: () => {}, warn: () => {}, error: () => {} };
+  return { service: createNotificationService({ repository, emailTransport, logger }), sent };
+}
 
 function buildFixture() {
   const inspectionNode = {
@@ -71,7 +86,7 @@ function buildFixture() {
   };
 }
 
-async function buildApp({ roles = ['cap_entry'], now = new Date('2026-04-03T10:00:00.000Z') } = {}) {
+async function buildApp({ roles = ['cap_entry'], now = new Date('2026-04-03T10:00:00.000Z'), notificationService } = {}) {
   const fixture = buildFixture();
 
   const session = {
@@ -252,6 +267,7 @@ async function buildApp({ roles = ['cap_entry'], now = new Date('2026-04-03T10:0
     },
     sessionRepository,
     alfrescoClient,
+    notificationService,
     logger: console,
     now: () => now,
   });
@@ -412,6 +428,28 @@ describe('Findings and CAP API', () => {
 
     expect(response.status).toBe(409);
     expect(response.body.code).toBe('FINDING_NOT_REVIEWED');
+  });
+
+  it('notifies the inspector inbox when a CAP is submitted', async () => {
+    const originalEmail = process.env.INSPECTOR_NOTIFICATIONS_EMAIL;
+    process.env.INSPECTOR_NOTIFICATIONS_EMAIL = 'inspectors@example.com';
+    try {
+      const { service, sent } = buildTestNotificationService();
+      const { app } = await buildApp({ roles: ['cap_entry'], notificationService: service });
+
+      const response = await request(app)
+        .post('/api/findings/MDPP001-AYVIS-01/caps')
+        .set('Cookie', 'compliance_session_id=session-1')
+        .set('x-csrf-token', 'csrf-token-1')
+        .send(fullCapPayload());
+
+      expect(response.status).toBe(201);
+      expect(sent).toHaveLength(1);
+      expect(sent[0].to).toBe('inspectors@example.com');
+      expect(sent[0].subject).toContain('MDPP001-AYVIS-01');
+    } finally {
+      process.env.INSPECTOR_NOTIFICATIONS_EMAIL = originalEmail;
+    }
   });
 
   function fullCapPayload(overrides = {}) {
@@ -788,6 +826,28 @@ describe('Findings and CAP API', () => {
 
     expect(response.status).toBe(200);
     expect(response.body.cap.acceptanceStatus).toBe('Accepted');
+  });
+
+  it('notifies the cap_entry inbox when a CAP is reviewed', async () => {
+    const originalEmail = process.env.CAP_ENTRY_NOTIFICATIONS_EMAIL;
+    process.env.CAP_ENTRY_NOTIFICATIONS_EMAIL = 'cap-entry@example.com';
+    try {
+      const { service, sent } = buildTestNotificationService();
+      const { app } = await buildApp({ roles: ['inspector'], notificationService: service });
+
+      const response = await request(app)
+        .patch('/api/caps/CA-MDPP001AYVIS-01-01/review')
+        .set('Cookie', 'compliance_session_id=session-1')
+        .set('x-csrf-token', 'csrf-token-1')
+        .send({ acceptanceStatus: 'Accepted' });
+
+      expect(response.status).toBe(200);
+      expect(sent).toHaveLength(1);
+      expect(sent[0].to).toBe('cap-entry@example.com');
+      expect(sent[0].subject).toContain('CA-MDPP001AYVIS-01-01');
+    } finally {
+      process.env.CAP_ENTRY_NOTIFICATIONS_EMAIL = originalEmail;
+    }
   });
 
   it('registers a follow-up report as Pending Review, without changing finding status', async () => {
@@ -1173,5 +1233,146 @@ describe('Findings and CAP API', () => {
     expect(response.body.paging.maxItems).toBe(1);
     expect(response.body.scopeMeta.statusMode).toBe('stored');
     expect(response.body.scopeMeta.matchedFindings).toBe(1);
+  });
+});
+
+describe('Findings and CAP API notifications', () => {
+  const originalInspectorEmail = process.env.INSPECTOR_NOTIFICATIONS_EMAIL;
+  const originalCapEntryEmail = process.env.CAP_ENTRY_NOTIFICATIONS_EMAIL;
+
+  beforeEach(() => {
+    process.env.INSPECTOR_NOTIFICATIONS_EMAIL = 'inspectors@example.com';
+    process.env.CAP_ENTRY_NOTIFICATIONS_EMAIL = 'cap-entry@example.com';
+  });
+
+  afterEach(() => {
+    process.env.INSPECTOR_NOTIFICATIONS_EMAIL = originalInspectorEmail;
+    process.env.CAP_ENTRY_NOTIFICATIONS_EMAIL = originalCapEntryEmail;
+  });
+
+  it('notifies inspectors when a follow-up is submitted (evidence review pending)', async () => {
+    const { service, sent } = buildTestNotificationService();
+    const { app } = await buildApp({ roles: ['inspector'], notificationService: service });
+
+    const response = await request(app)
+      .post('/api/findings/MDPP001-AYVIS-01/follow-ups')
+      .set('Cookie', 'compliance_session_id=session-1')
+      .set('x-csrf-token', 'csrf-token-1')
+      .send({ followUpType: 'Progress Review', followUpDate: '2026-04-03T10:00:00.000Z', percentComplete: 40 });
+
+    expect(response.status).toBe(201);
+    expect(sent).toHaveLength(1);
+    expect(sent[0].to).toBe('inspectors@example.com');
+    expect(sent[0].subject).toContain('MDPP001-AYVIS-01');
+  });
+
+  it('notifies inspectors when evidence is marked Adequate and pushes a finding to Pending Closure Approval', async () => {
+    const { service, sent } = buildTestNotificationService();
+    const { app } = await buildApp({ roles: ['inspector'], notificationService: service });
+
+    await request(app)
+      .post('/api/findings/MDPP001-AYVIS-01/follow-ups')
+      .set('Cookie', 'compliance_session_id=session-1')
+      .set('x-csrf-token', 'csrf-token-1')
+      .send({ followUpType: 'Closure Verification', followUpDate: '2026-04-03T10:00:00.000Z', findingClosed: true, effectivenessConfirmed: true, percentComplete: 100 });
+    sent.length = 0; // discard the "evidence review pending" notification from creation
+
+    const response = await request(app)
+      .patch('/api/findings/MDPP001-AYVIS-01/follow-ups/FU-MDPP001AYVIS-01-01/evidence-review')
+      .set('Cookie', 'compliance_session_id=session-1')
+      .set('x-csrf-token', 'csrf-token-1')
+      .send({ decision: 'Adequate' });
+
+    expect(response.status).toBe(200);
+    expect(sent).toHaveLength(1);
+    expect(sent[0].subject).toContain('awaiting approval');
+  });
+
+  it('notifies inspectors when evidence is marked Inadequate', async () => {
+    const { service, sent } = buildTestNotificationService();
+    const { app } = await buildApp({ roles: ['inspector'], notificationService: service });
+
+    await request(app)
+      .post('/api/findings/MDPP001-AYVIS-01/follow-ups')
+      .set('Cookie', 'compliance_session_id=session-1')
+      .set('x-csrf-token', 'csrf-token-1')
+      .send({ followUpType: 'Progress Review', followUpDate: '2026-04-03T10:00:00.000Z', percentComplete: 40 });
+    sent.length = 0;
+
+    const response = await request(app)
+      .patch('/api/findings/MDPP001-AYVIS-01/follow-ups/FU-MDPP001AYVIS-01-01/evidence-review')
+      .set('Cookie', 'compliance_session_id=session-1')
+      .set('x-csrf-token', 'csrf-token-1')
+      .send({ decision: 'Inadequate', notes: 'Missing photos' });
+
+    expect(response.status).toBe(200);
+    expect(sent).toHaveLength(1);
+    expect(sent[0].subject).toContain('resubmission');
+  });
+
+  it('notifies cap_entry when a finding closure is approved', async () => {
+    const { service, sent } = buildTestNotificationService();
+    const { app, fixture } = await buildApp({ roles: ['inspector'], notificationService: service });
+    fixture.findingNode.properties['vso:findingStatus'] = 'Pending Closure Approval';
+
+    const response = await request(app)
+      .patch('/api/findings/MDPP001-AYVIS-01/closure-review')
+      .set('Cookie', 'compliance_session_id=session-1')
+      .set('x-csrf-token', 'csrf-token-1')
+      .send({ decision: 'approve' });
+
+    expect(response.status).toBe(200);
+    expect(sent).toHaveLength(1);
+    expect(sent[0].to).toBe('cap-entry@example.com');
+    expect(sent[0].subject).toContain('closed');
+  });
+
+  it('notifies inspectors when a finding closure is rejected', async () => {
+    const { service, sent } = buildTestNotificationService();
+    const { app, fixture } = await buildApp({ roles: ['inspector'], notificationService: service });
+    fixture.findingNode.properties['vso:findingStatus'] = 'Pending Closure Approval';
+
+    const response = await request(app)
+      .patch('/api/findings/MDPP001-AYVIS-01/closure-review')
+      .set('Cookie', 'compliance_session_id=session-1')
+      .set('x-csrf-token', 'csrf-token-1')
+      .send({ decision: 'reject' });
+
+    expect(response.status).toBe(200);
+    expect(sent).toHaveLength(1);
+    expect(sent[0].to).toBe('inspectors@example.com');
+    expect(sent[0].subject).toContain('rejected');
+  });
+
+  it('notifies inspectors when a deadline extension is requested', async () => {
+    const { service, sent } = buildTestNotificationService();
+    const { app } = await buildApp({ roles: ['cap_entry'], notificationService: service });
+
+    const response = await request(app)
+      .post('/api/findings/MDPP001-AYVIS-01/deadline-extension-requests')
+      .set('Cookie', 'compliance_session_id=session-1')
+      .set('x-csrf-token', 'csrf-token-1')
+      .send({ requestedResolutionDeadline: '2026-06-01' });
+
+    expect(response.status).toBe(201);
+    expect(sent).toHaveLength(1);
+    expect(sent[0].to).toBe('inspectors@example.com');
+  });
+
+  it('notifies cap_entry when a deadline extension is reviewed', async () => {
+    const { service, sent } = buildTestNotificationService();
+    const { app, fixture } = await buildApp({ roles: ['inspector'], notificationService: service });
+    fixture.findingNode.properties['vso:deadlineExtensionStatus'] = 'Requested';
+    fixture.findingNode.properties['vso:requestedResolutionDeadline'] = '2026-06-01';
+
+    const response = await request(app)
+      .patch('/api/findings/MDPP001-AYVIS-01/deadline-extension-review')
+      .set('Cookie', 'compliance_session_id=session-1')
+      .set('x-csrf-token', 'csrf-token-1')
+      .send({ decision: 'Accepted' });
+
+    expect(response.status).toBe(200);
+    expect(sent).toHaveLength(1);
+    expect(sent[0].to).toBe('cap-entry@example.com');
   });
 });
