@@ -6,6 +6,7 @@ stages:
   - test
   - build
   - publish
+  - release
 
 variables:
   npm_config_cache: "$CI_PROJECT_DIR/.npm"
@@ -107,6 +108,32 @@ publish:backend:image:
     - if: '$PUBLISH_DOCKER_IMAGES == "true" && $CI_REGISTRY && $CI_REGISTRY_USER && $CI_REGISTRY_PASSWORD && ($CI_COMMIT_BRANCH == "main" || $CI_COMMIT_BRANCH == "develop")'
       when: on_success
     - when: never
+
+# Release stage - creates a GitLab Release tagged with the current date
+# whenever a pipeline runs on main (i.e. on every merge to main).
+compute_release_tag:
+  stage: release
+  image: alpine:latest
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main"'
+  script:
+    - echo "RELEASE_TAG=$(date +%Y-%m-%d)" >> release.env
+  artifacts:
+    reports:
+      dotenv: release.env
+
+create_release:
+  stage: release
+  needs: ["compute_release_tag"]
+  image: registry.gitlab.com/gitlab-org/release-cli:latest
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main"'
+  script:
+    - echo "Creating release $RELEASE_TAG"
+  release:
+    tag_name: '$RELEASE_TAG'
+    description: "Release $RELEASE_TAG"
+    ref: '$CI_COMMIT_SHA'
 
 publish:frontend:image:
   stage: publish
