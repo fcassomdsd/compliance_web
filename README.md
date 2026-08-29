@@ -130,8 +130,14 @@ Notification settings (see `NOTIFICATIONS_SQL.sql` for the schema):
 - `CASE_ESCALATION_EMAIL` — fixed distribution-list address for case-escalation notifications (finding overdue job)
 - `INSPECTOR_NOTIFICATIONS_EMAIL` — fixed distribution list for events an inspector/reviewer needs to act on: CAP submitted, follow-up evidence needs review, evidence marked inadequate, finding pending post-upload review (daily digest), finding closure pending approval, finding closure rejected, deadline extension requested
 - `CAP_ENTRY_NOTIFICATIONS_EMAIL` — fixed distribution list for events the CAP submitter side needs to know about: CAP reviewed, deadline extension reviewed, finding closed
+- `PLANNER_NOTIFICATIONS_EMAIL` — fixed distribution list for auto-scheduled site visits (see below)
 
 All notification env vars are optional — each notification type is skipped (not queued) if its target env var isn't set, rather than failing.
+
+Site visit scheduling job settings:
+
+- `NODE_RED_BASE_URL` (default `http://localhost:1880`) — where the site visit scheduling job reaches Node-RED's generic entity CRUD endpoints (`queryEntity`/`addEntity`/`updateEntity`), the same integration path the frontend uses directly. Requires `ALFRESCO_JOB_USERNAME`/`ALFRESCO_JOB_PASSWORD` (shared with the finding overdue job) to obtain the ticket Node-RED expects in `X-Alfresco-Ticket`.
+- `SITE_VISIT_SCHEDULING_JOB_HOUR` (default `2`) — local hour the daily sweep runs. It queries active `InspectionCadence` records (a recurring inspection cadence per Provider × Specialty × Location, managed in AtroCore) for any with `nextDueDate` in the past, auto-creates a `SiteVisit` + `Inspection` for each, and advances the cadence's `lastScheduledDate`/`nextDueDate` by its `intervalMonths`.
 
 Auth backend details: [server/README.md](server/README.md)
 
