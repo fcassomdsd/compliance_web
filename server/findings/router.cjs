@@ -1,7 +1,15 @@
 const express = require('express');
+const multer = require('multer');
+const crypto = require('crypto');
 
 const { buildError } = require('../auth/sessionAuth.cjs');
-const { mapFindingNode, mapFollowUpReportNode, getFollowUpReportsForFinding, listEvidenceForSection } = require('../domain/alfrescoMappers.cjs');
+const {
+  mapFindingNode,
+  mapFollowUpReportNode,
+  mapEvidenceItemNode,
+  getFollowUpReportsForFinding,
+  listEvidenceForSection,
+} = require('../domain/alfrescoMappers.cjs');
 const { parseFollowUpId, buildFollowUpIdFromFinding } = require('../domain/idFormats.cjs');
 const { computeDeadlinesForSeverity } = require('./severityDeadlines.cjs');
 const { FINDING_STATUS } = require('../domain/statusRules.cjs');
@@ -22,6 +30,86 @@ const { canReviewFinding } = require('../domain/statusRules.cjs');
 const { notifyRoleInbox } = require('../notifications/roleNotify.cjs');
 
 const FINDINGS_LIBRARY_PATH = "Sites/vigilancia-de-la-so/documentLibrary/Vigilancia/Hallazgos";
+
+const MAX_EVIDENCE_FILE_BYTES = 15 * 1024 * 1024; // 15 MB
+const ALLOWED_EVIDENCE_MIME_TYPES = new Set([
+  'application/pdf',
+  'image/png',
+  'image/jpeg',
+  'image/webp',
+  'application/msword',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'application/vnd.ms-excel',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  'text/plain',
+]);
+const FOLLOW_UP_EVIDENCE_ROLES = ['Progress Evidence', 'Closure Evidence'];
+// 'On-site' is reserved for the canonical-import path (field app ZIP
+// upload) — this endpoint is only reached for evidence entering through
+// compliance_web directly, which per the BPMN is always already-vetted
+// remote or provider-submitted evidence.
+const FOLLOW_UP_EVIDENCE_COLLECTION_METHODS = ['Remote', 'Provider-submitted'];
+
+const evidenceUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: MAX_EVIDENCE_FILE_BYTES, files: 1 },
+  fileFilter: (req, file, cb) => {
+    if (!ALLOWED_EVIDENCE_MIME_TYPES.has(file.mimetype)) {
+      return cb(new Error('UNSUPPORTED_FILE_TYPE'));
+    }
+    cb(null, true);
+  },
+});
+
+function singleEvidenceUpload(fieldName) {
+  return (req, res, next) => {
+    evidenceUpload.single(fieldName)(req, res, (err) => {
+      if (!err) {
+        return next();
+      }
+      if (err instanceof multer.MulterError && err.code === 'LIMIT_FILE_SIZE') {
+        return res.status(413).json(buildError('EVIDENCE_TOO_LARGE', 'Uploaded file exceeds the maximum allowed size'));
+      }
+      if (err.message === 'UNSUPPORTED_FILE_TYPE') {
+        return res.status(415).json(buildError('EVIDENCE_UNSUPPORTED_TYPE', 'Uploaded file type is not supported'));
+      }
+      return res.status(400).json(buildError('EVIDENCE_UPLOAD_FAILED', err.message));
+    });
+  };
+}
+
+function hashEvidenceBuffer(buffer) {
+  return crypto.createHash('sha256').update(buffer).digest('hex');
+}
+
+async function resolveEvidenceContainerNodeId({ alfrescoClient, ticket, startNode }) {
+  let currentNode = startNode;
+  const visitedNodeIds = new Set();
+
+  while (currentNode?.parentId && !visitedNodeIds.has(currentNode.parentId)) {
+    visitedNodeIds.add(currentNode.parentId);
+    const parentNode = await alfrescoClient.getNodeById({
+      ticket,
+      nodeId: currentNode.parentId,
+    });
+
+    if (!parentNode) {
+      return null;
+    }
+
+    if (
+      parentNode.isFolder === true ||
+      parentNode.nodeType === 'cm:folder' ||
+      parentNode.nodeType === 'vso:inspection'
+    ) {
+      return parentNode.id;
+    }
+
+    currentNode = parentNode;
+  }
+
+  return null;
+}
 
 function escapeAftsValue(value) {
   return String(value || '').replace(/"/g, '\\"');
@@ -609,6 +697,7 @@ function createFindingsRouter({ auth, alfrescoClient, notificationService, nodeR
             'vso:evidenceReviewStatus': decision,
             'vso:evidenceReviewNotes': notes || null,
             'vso:evidenceReviewDate': toDateOnly(now()),
+            'vso:evidenceReviewedBy': req.auth.username,
           },
         });
 
@@ -656,6 +745,175 @@ function createFindingsRouter({ auth, alfrescoClient, notificationService, nodeR
         });
       } catch (error) {
         return res.status(502).json(buildError('EVIDENCE_REVIEW_FAILED', error.message));
+      }
+    }
+  );
+
+  router.post(
+    '/:findingId/follow-ups/:followUpId/evidence',
+    auth.authenticate,
+    auth.authorize(['inspector', 'admin']),
+    auth.requireCsrf(),
+    singleEvidenceUpload('file'),
+    async (req, res) => {
+      try {
+        if (!req.file) {
+          return res.status(400).json(buildError('EVIDENCE_BAD_REQUEST', 'file is required'));
+        }
+
+        const evidenceRole = req.body?.evidenceRole;
+        if (!FOLLOW_UP_EVIDENCE_ROLES.includes(evidenceRole)) {
+          return res.status(400).json(buildError(
+            'EVIDENCE_BAD_REQUEST',
+            `evidenceRole must be one of: ${FOLLOW_UP_EVIDENCE_ROLES.join(', ')}`
+          ));
+        }
+
+        const collectionMethod = req.body?.collectionMethod;
+        if (!FOLLOW_UP_EVIDENCE_COLLECTION_METHODS.includes(collectionMethod)) {
+          return res.status(400).json(buildError(
+            'EVIDENCE_BAD_REQUEST',
+            `collectionMethod must be one of: ${FOLLOW_UP_EVIDENCE_COLLECTION_METHODS.join(', ')}`
+          ));
+        }
+
+        const findingNode = await alfrescoClient.searchFindingByBusinessId({
+          ticket: req.auth.ticket,
+          findingId: req.params.findingId,
+        });
+        if (!findingNode) {
+          return res.status(404).json(buildError('FINDING_NOT_FOUND', 'Finding not found'));
+        }
+
+        const followUpNodes = await alfrescoClient.listChildrenByType({
+          ticket: req.auth.ticket,
+          parentNodeId: findingNode.id,
+          nodeType: 'vso:followUpReport',
+        });
+        const followUpNode = followUpNodes.find(
+          (entry) => entry?.properties?.['vso:followUpId'] === req.params.followUpId
+        );
+        if (!followUpNode) {
+          return res.status(404).json(buildError('FOLLOW_UP_NOT_FOUND', 'Follow-up report not found'));
+        }
+
+        const evidenceContainerNodeId = await resolveEvidenceContainerNodeId({
+          alfrescoClient,
+          ticket: req.auth.ticket,
+          startNode: followUpNode,
+        });
+        if (!evidenceContainerNodeId) {
+          return res.status(422).json(buildError(
+            'FOLLOW_UP_EVIDENCE_CONTAINER_NOT_FOUND',
+            'Unable to resolve a valid folder parent for follow-up evidence'
+          ));
+        }
+
+        const evidenceId = `EV-${req.params.followUpId}-${crypto.randomUUID()}`;
+        const evidenceNode = await alfrescoClient.createChildNode({
+          ticket: req.auth.ticket,
+          parentNodeId: evidenceContainerNodeId,
+          nodeType: 'vso:evidenceItem',
+          name: `${evidenceId}-${req.file.originalname}`.slice(0, 255),
+          associationType: 'cm:contains',
+          aspectNames: [
+            'vso:evidenceIntegrity',
+            'vso:inspectionContext',
+            'vso:serviceContext',
+            'vso:usoapEvidenceContext',
+          ],
+          properties: {
+            'vso:contentType': 'evidenceItem',
+            'vso:evidenceId': evidenceId,
+            'vso:evidenceType': req.file.mimetype,
+            'vso:source': 'compliance_web follow-up submission',
+            'vso:collectionDate': new Date().toISOString().slice(0, 10),
+            'vso:evidenceRole': evidenceRole,
+            'vso:collectionMethod': collectionMethod,
+            'vso:inspectionId': followUpNode?.properties?.['vso:inspectionId'],
+            'vso:locationId': followUpNode?.properties?.['vso:locationId'],
+            'vso:locationCode': followUpNode?.properties?.['vso:locationCode'],
+            'vso:locationName': followUpNode?.properties?.['vso:locationName'],
+            'vso:specialtyId': followUpNode?.properties?.['vso:specialtyId'],
+            'vso:specialtyCode': followUpNode?.properties?.['vso:specialtyCode'],
+            'vso:specialtyName': followUpNode?.properties?.['vso:specialtyName'],
+            'vso:providerId': followUpNode?.properties?.['vso:providerId'],
+            'vso:providerName': followUpNode?.properties?.['vso:providerName'],
+            'vso:hashValue': hashEvidenceBuffer(req.file.buffer),
+            'vso:immutable': false,
+          },
+        });
+
+        await alfrescoClient.putNodeContent({
+          ticket: req.auth.ticket,
+          nodeId: evidenceNode.id,
+          buffer: req.file.buffer,
+          mimeType: req.file.mimetype,
+        });
+
+        await alfrescoClient.createTargetAssociation({
+          ticket: req.auth.ticket,
+          sourceNodeId: followUpNode.id,
+          targetNodeId: evidenceNode.id,
+          assocType: 'vso:relatedEvidence',
+        });
+
+        return res.status(201).json({ evidence: mapEvidenceItemNode(evidenceNode) });
+      } catch (error) {
+        const upstreamStatus = Number(error?.response?.status || 0);
+        return res
+          .status(upstreamStatus >= 400 && upstreamStatus < 500 ? upstreamStatus : 502)
+          .json(buildError('EVIDENCE_UPLOAD_FAILED', extractUpstreamErrorDetail(error)));
+      }
+    }
+  );
+
+  router.get(
+    '/:findingId/follow-ups/:followUpId/evidence/:evidenceNodeId/content',
+    auth.authenticate,
+    auth.authorize(['inspector', 'planner', 'admin', 'cap_entry']),
+    async (req, res) => {
+      try {
+        const findingNode = await alfrescoClient.searchFindingByBusinessId({
+          ticket: req.auth.ticket,
+          findingId: req.params.findingId,
+        });
+        if (!findingNode) {
+          return res.status(404).json(buildError('FINDING_NOT_FOUND', 'Finding not found'));
+        }
+
+        const followUpNodes = await alfrescoClient.listChildrenByType({
+          ticket: req.auth.ticket,
+          parentNodeId: findingNode.id,
+          nodeType: 'vso:followUpReport',
+        });
+        const followUpNode = followUpNodes.find(
+          (entry) => entry?.properties?.['vso:followUpId'] === req.params.followUpId
+        );
+        if (!followUpNode) {
+          return res.status(404).json(buildError('FOLLOW_UP_NOT_FOUND', 'Follow-up report not found'));
+        }
+
+        const evidenceList = await listEvidenceForSection({
+          alfrescoClient,
+          ticket: req.auth.ticket,
+          sectionNodeId: followUpNode.id,
+        });
+        const evidence = evidenceList.find((item) => item.nodeId === req.params.evidenceNodeId);
+        if (!evidence) {
+          return res.status(404).json(buildError('EVIDENCE_NOT_FOUND', 'Evidence item not found for this follow-up'));
+        }
+
+        const { buffer, contentType } = await alfrescoClient.getNodeContent({
+          ticket: req.auth.ticket,
+          nodeId: evidence.nodeId,
+        });
+
+        res.setHeader('Content-Type', evidence.evidenceType || contentType);
+        res.setHeader('Content-Disposition', `inline; filename="${(evidence.name || 'evidence').replace(/"/g, '')}"`);
+        return res.status(200).send(buffer);
+      } catch (error) {
+        return res.status(502).json(buildError('FOLLOW_UP_EVIDENCE_CONTENT_FAILED', error.message));
       }
     }
   );

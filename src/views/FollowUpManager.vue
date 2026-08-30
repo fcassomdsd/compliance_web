@@ -29,6 +29,8 @@
             <th>Specialty</th>
             <th>Percent Complete</th>
             <th>Inherited CAP</th>
+            <th>Evidence Review</th>
+            <th></th>
           </tr>
         </thead>
         <tbody>
@@ -40,41 +42,65 @@
             <td>{{ followUp.specialtyCode || '-' }}</td>
             <td>{{ followUp.percentComplete ?? '-' }}</td>
             <td>{{ followUp.inheritedCapId || '-' }}</td>
+            <td>{{ followUp.evidenceReviewStatus || '-' }}</td>
+            <td><BaseButton variant="ghost" size="sm" @click="viewFollowUp(followUp)">View</BaseButton></td>
           </tr>
         </tbody>
       </table>
     </section>
 
-    <div class="detail-buttons">
-      <BaseButton variant="secondary" size="sm" :class="{ 'push-button-active': showForm }" @click="showForm = !showForm">Register Follow-up</BaseButton>
-      <BaseButton variant="secondary" size="sm" :class="{ 'push-button-active': showEvidenceReviewForm }" @click="showEvidenceReviewForm = !showEvidenceReviewForm">Review Evidence</BaseButton>
-    </div>
+    <section v-if="selectedFollowUp" class="card detail-panel">
+      <h3>Follow-up Detail: {{ selectedFollowUp.followUpId }}</h3>
+      <BaseButton variant="ghost" size="sm" @click="closeFollowUpDetail">Close</BaseButton>
+      <p><strong>Finding ID:</strong> {{ selectedFollowUp.findingId || '-' }}</p>
+      <p><strong>Type:</strong> {{ selectedFollowUp.followUpType || '-' }}</p>
+      <p><strong>Follow-up date:</strong> {{ selectedFollowUp.followUpDate || '-' }}</p>
+      <p><strong>Percent complete:</strong> {{ selectedFollowUp.percentComplete ?? '-' }}</p>
+      <p><strong>Inherited CAP:</strong> {{ selectedFollowUp.inheritedCapId || '-' }}</p>
+      <p><strong>Finding closed:</strong> {{ selectedFollowUp.findingClosed ? 'Yes' : 'No' }}</p>
+      <p><strong>Effectiveness confirmed:</strong> {{ selectedFollowUp.effectivenessConfirmed ? 'Yes' : 'No' }}</p>
+      <p><strong>Evidence review status:</strong> {{ selectedFollowUp.evidenceReviewStatus || '-' }}</p>
+      <template v-if="selectedFollowUp.evidenceReviewedBy">
+        <p><strong>Reviewed by:</strong> {{ selectedFollowUp.evidenceReviewedBy }} on {{ selectedFollowUp.evidenceReviewDate || '-' }}</p>
+        <p v-if="selectedFollowUp.evidenceReviewNotes"><strong>Review notes:</strong> {{ selectedFollowUp.evidenceReviewNotes }}</p>
+      </template>
 
-    <section v-if="showEvidenceReviewForm" class="card">
-      <h3>Review Evidence</h3>
-      <div class="form-grid">
-        <div class="form-field">
-          <label for="evidenceReviewFindingId">Finding ID</label>
-          <input id="evidenceReviewFindingId" v-model="evidenceReviewForm.findingId" type="text" />
-        </div>
-        <div class="form-field">
-          <label for="evidenceReviewFollowUpId">Follow-up ID</label>
-          <input id="evidenceReviewFollowUpId" v-model="evidenceReviewForm.followUpId" type="text" />
-        </div>
-        <div class="form-field">
-          <label for="evidenceReviewDecision">Decision</label>
-          <select id="evidenceReviewDecision" v-model="evidenceReviewForm.decision">
-            <option value="Adequate">Adequate</option>
-            <option value="Inadequate">Inadequate</option>
-          </select>
-        </div>
-        <div class="form-field field-span-2">
-          <label for="evidenceReviewNotes">Notes</label>
-          <textarea id="evidenceReviewNotes" v-model="evidenceReviewForm.notes" rows="2" />
+      <div v-if="selectedFollowUp.evidence?.length" class="evidence-list">
+        <p class="evidence-list-title"><strong>Attachments</strong></p>
+        <ul>
+          <li v-for="item in selectedFollowUp.evidence" :key="item.nodeId">
+            <span class="evidence-name">{{ item.name }}</span>
+            <span class="evidence-meta">{{ item.evidenceRole || '-' }} &middot; {{ item.collectionMethod || '-' }}</span>
+            <BaseButton variant="ghost" size="sm" @click="viewFollowUpEvidence(item)">View</BaseButton>
+          </li>
+        </ul>
+      </div>
+      <p v-else class="evidence-list-empty">No evidence attached.</p>
+
+      <div v-if="selectedFollowUp.evidenceReviewStatus === 'Pending Review'" class="evidence-review-panel">
+        <BaseButton variant="secondary" size="sm" :class="{ 'push-button-active': showEvidenceReviewForm }" @click="showEvidenceReviewForm = !showEvidenceReviewForm">Review Evidence</BaseButton>
+        <div v-if="showEvidenceReviewForm" class="form-grid">
+          <div class="form-field">
+            <label for="evidenceReviewDecision">Decision</label>
+            <select id="evidenceReviewDecision" v-model="evidenceReviewForm.decision">
+              <option value="Adequate">Adequate</option>
+              <option value="Inadequate">Inadequate</option>
+            </select>
+          </div>
+          <div class="form-field field-span-2">
+            <label for="evidenceReviewNotes">Notes</label>
+            <textarea id="evidenceReviewNotes" v-model="evidenceReviewForm.notes" rows="2" />
+          </div>
+          <div class="form-actions">
+            <BaseButton variant="primary" @click="reviewEvidence" :disabled="followUpStore.loading">Apply Decision</BaseButton>
+          </div>
         </div>
       </div>
-      <BaseButton variant="primary" @click="reviewEvidence" :disabled="followUpStore.loading">Apply Decision</BaseButton>
     </section>
+
+    <div class="detail-buttons">
+      <BaseButton variant="secondary" size="sm" :class="{ 'push-button-active': showForm }" @click="showForm = !showForm">Register Follow-up</BaseButton>
+    </div>
 
     <section v-if="showForm" class="card">
       <h3>Register Follow-up</h3>
@@ -125,6 +151,33 @@
           <label for="followMethod">Verification Method</label>
           <input id="followMethod" v-model="form.closureVerificationMethod" type="text" />
         </div>
+
+        <div class="form-field">
+          <label for="followEvidenceRole">Evidence Role</label>
+          <select id="followEvidenceRole" v-model="form.evidenceRole">
+            <option v-for="role in followUpEvidenceRoles" :key="role" :value="role">{{ role }}</option>
+          </select>
+        </div>
+
+        <div class="form-field">
+          <label for="followEvidenceCollectionMethod">Evidence Collection Method</label>
+          <select id="followEvidenceCollectionMethod" v-model="form.collectionMethod">
+            <option v-for="collectionMethod in followUpEvidenceCollectionMethods" :key="collectionMethod" :value="collectionMethod">{{ collectionMethod }}</option>
+          </select>
+        </div>
+
+        <div class="form-field field-span-2">
+          <label for="followEvidenceFiles">Attach Evidence (optional)</label>
+          <input id="followEvidenceFiles" type="file" multiple @change="onEvidenceFileChange" />
+          <div v-if="stagedEvidenceFiles.length" class="evidence-list">
+            <ul>
+              <li v-for="(file, index) in stagedEvidenceFiles" :key="`${file.name}-${index}`">
+                <span class="evidence-name">{{ file.name }}</span>
+                <BaseButton variant="ghost" size="sm" @click="removeStagedEvidence(index)">Remove</BaseButton>
+              </li>
+            </ul>
+          </div>
+        </div>
       </div>
       <div class="form-actions">
         <BaseButton variant="primary" @click="createFollowUp" :disabled="followUpStore.loading">Create Follow-up</BaseButton>
@@ -138,13 +191,14 @@
 </template>
 
 <script setup>
-import { reactive, ref, onMounted } from 'vue';
+import { reactive, ref, onMounted, watch } from 'vue';
 import { useRoute } from 'vue-router';
 import BaseManager from '@/components/base/BaseManager.vue';
 import BaseButton from '@/components/base/BaseButton.vue';
 import ScopePicker from '@/components/common/ScopePicker.vue';
 import { useFollowUpStore } from '@/stores/followUpStore';
 import { useAuthStore } from '@/stores/authStore';
+import { apiFollowUpEvidenceContentUrl } from '@/services/apiServices';
 
 const route = useRoute();
 const followUpStore = useFollowUpStore();
@@ -154,6 +208,8 @@ const message = ref('');
 const searchErrorMessage = ref('');
 const showForm = ref(false);
 const showEvidenceReviewForm = ref(false);
+const selectedFollowUp = ref(null);
+const stagedEvidenceFiles = ref([]);
 
 const evidenceReviewForm = reactive({
   findingId: '',
@@ -169,6 +225,14 @@ const followUpTypes = [
   'Ad-hoc Inquiry',
 ];
 
+// Field app / follow-up evidence roles only — reuses the same
+// vso:evidenceRoleList values the CAP evidence flow uses elsewhere.
+const followUpEvidenceRoles = ['Progress Evidence', 'Closure Evidence'];
+// 'On-site' is reserved for the field app's ZIP import path — evidence
+// attached directly through this form always entered the app already
+// vetted (remote or provider-submitted), per the BPMN evidence flow.
+const followUpEvidenceCollectionMethods = ['Remote', 'Provider-submitted'];
+
 const form = reactive({
   findingId: '',
   followUpType: 'Progress Review',
@@ -179,6 +243,12 @@ const form = reactive({
   effectivenessConfirmed: false,
   followUpClosureDate: '',
   closureVerificationMethod: '',
+  evidenceRole: 'Progress Evidence',
+  collectionMethod: 'Remote',
+});
+
+watch(() => form.followUpType, (followUpType) => {
+  form.evidenceRole = followUpType === 'Closure Verification' ? 'Closure Evidence' : 'Progress Evidence';
 });
 
 let scope = reactive({
@@ -216,11 +286,36 @@ async function loadFollowUps() {
   }
 }
 
+function onEvidenceFileChange(event) {
+  const selectedFiles = Array.from(event.target.files || []);
+  stagedEvidenceFiles.value = [...stagedEvidenceFiles.value, ...selectedFiles];
+  // Clear the input so choosing the same file again still fires 'change'
+  // (each selection is appended to the staged list above, not replaced).
+  event.target.value = '';
+}
+
+function removeStagedEvidence(index) {
+  stagedEvidenceFiles.value = stagedEvidenceFiles.value.filter((_, i) => i !== index);
+}
+
+async function uploadStagedEvidence({ findingId, followUpId }) {
+  for (const file of stagedEvidenceFiles.value) {
+    await followUpStore.uploadFollowUpEvidence({
+      findingId,
+      followUpId,
+      file,
+      evidenceRole: form.evidenceRole,
+      collectionMethod: form.collectionMethod,
+      csrfToken: authStore.csrfToken,
+    });
+  }
+}
+
 async function createFollowUp() {
   message.value = '';
   searchErrorMessage.value = '';
   try {
-    await followUpStore.createFollowUp({
+    const created = await followUpStore.createFollowUp({
       findingId: form.findingId,
       payload: {
         followUpType: form.followUpType,
@@ -234,6 +329,12 @@ async function createFollowUp() {
       },
       csrfToken: authStore.csrfToken,
     });
+
+    const createdFollowUpId = created?.followUpReport?.followUpId;
+    if (createdFollowUpId && stagedEvidenceFiles.value.length) {
+      await uploadStagedEvidence({ findingId: form.findingId, followUpId: createdFollowUpId });
+    }
+
     message.value = 'Follow-up report created.';
     form.inheritedCapId = '';
     form.followUpDate = '';
@@ -242,11 +343,35 @@ async function createFollowUp() {
     form.effectivenessConfirmed = false;
     form.followUpClosureDate = '';
     form.closureVerificationMethod = '';
+    stagedEvidenceFiles.value = [];
     await loadFollowUps();
   } catch (error) {
     console.error('Follow-up creation failed:', error);
     searchErrorMessage.value = error?.message || 'Could not create follow-up. Please try again.';
   }
+}
+
+function viewFollowUp(followUp) {
+  message.value = '';
+  showEvidenceReviewForm.value = false;
+  selectedFollowUp.value = followUp;
+  evidenceReviewForm.findingId = followUp.findingId;
+  evidenceReviewForm.followUpId = followUp.followUpId;
+  evidenceReviewForm.decision = 'Adequate';
+  evidenceReviewForm.notes = '';
+}
+
+function closeFollowUpDetail() {
+  selectedFollowUp.value = null;
+  showEvidenceReviewForm.value = false;
+}
+
+function viewFollowUpEvidence(item) {
+  window.open(
+    apiFollowUpEvidenceContentUrl(selectedFollowUp.value.findingId, selectedFollowUp.value.followUpId, item.nodeId),
+    '_blank',
+    'noopener'
+  );
 }
 
 async function reviewEvidence() {
@@ -260,9 +385,8 @@ async function reviewEvidence() {
       csrfToken: authStore.csrfToken,
     });
     message.value = 'Evidence review applied.';
-    evidenceReviewForm.findingId = '';
-    evidenceReviewForm.followUpId = '';
-    evidenceReviewForm.notes = '';
+    showEvidenceReviewForm.value = false;
+    closeFollowUpDetail();
     await loadFollowUps();
   } catch (error) {
     console.error('Evidence review failed:', error);
@@ -349,6 +473,61 @@ onMounted(async () => {
   display: flex;
   gap: var(--space-4);
   margin-bottom: var(--space-4);
+}
+
+.detail-panel p {
+  margin: var(--space-1) 0;
+}
+
+.evidence-list {
+  margin-top: var(--space-2);
+}
+
+.evidence-list-title {
+  margin: 0 0 var(--space-1);
+  font-size: var(--text-sm);
+  color: var(--color-primary-700);
+}
+
+.evidence-list-empty {
+  color: var(--color-gray-500);
+  font-size: var(--text-sm);
+}
+
+.evidence-list ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.evidence-list li {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  background: var(--color-gray-50);
+}
+
+.evidence-name {
+  flex: 1;
+  font-size: var(--text-sm);
+  overflow-wrap: anywhere;
+}
+
+.evidence-meta {
+  font-size: var(--text-sm);
+  color: var(--color-gray-500);
+}
+
+.evidence-review-panel {
+  margin-top: var(--space-4);
+  border-top: 1px dashed var(--border-color);
+  padding-top: var(--space-3);
 }
 
 .push-button-active {

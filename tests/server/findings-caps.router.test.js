@@ -94,6 +94,8 @@ function buildFixture() {
     findingEvidenceNodes: [evidenceNode],
     followUpNodes: [],
     followUpCapLinks: new Map(),
+    followUpEvidenceLinks: new Map(),
+    evidenceNodesById: new Map(),
     capSectionChildren: new Map(),
     lastCreatedChildNodeArgs: null,
   };
@@ -182,17 +184,29 @@ async function buildApp({ roles = ['cap_entry'], now = new Date('2026-04-03T10:0
       const existing = fixture.capSectionChildren.get(key) || [];
       const next = { id: `${nodeType}-${existing.length + 1}`, parentId: parentNodeId, nodeType, name, properties };
       fixture.capSectionChildren.set(key, [...existing, next]);
+      if (nodeType === 'vso:evidenceItem') {
+        fixture.evidenceNodesById.set(next.id, next);
+      }
       return next;
     },
     createTargetAssociation: async ({ sourceNodeId, targetNodeId, assocType }) => {
       if (assocType === 'vso:relatedCorrectiveAction') {
         fixture.followUpCapLinks.set(sourceNodeId, targetNodeId);
       }
+      if (assocType === 'vso:relatedEvidence') {
+        const existing = fixture.followUpEvidenceLinks.get(sourceNodeId) || [];
+        fixture.followUpEvidenceLinks.set(sourceNodeId, [...existing, targetNodeId]);
+      }
       return { id: `${sourceNodeId}->${targetNodeId}` };
     },
     listTargetAssociations: async ({ nodeId, assocType }) => {
       if (assocType === 'vso:relatedEvidence' && nodeId === fixture.findingNode.id) {
         return fixture.findingEvidenceNodes;
+      }
+      if (assocType === 'vso:relatedEvidence' && fixture.followUpEvidenceLinks.has(nodeId)) {
+        return fixture.followUpEvidenceLinks.get(nodeId)
+          .map((targetNodeId) => fixture.evidenceNodesById.get(targetNodeId))
+          .filter(Boolean);
       }
       if (assocType !== 'vso:relatedCorrectiveAction') {
         return [];
@@ -273,6 +287,9 @@ async function buildApp({ roles = ['cap_entry'], now = new Date('2026-04-03T10:0
     getNodeContent: async ({ nodeId }) => {
       if (nodeId === fixture.evidenceNode.id) {
         return { buffer: Buffer.from('fake-image-bytes'), contentType: 'image/jpeg' };
+      }
+      if (fixture.evidenceNodesById.has(nodeId)) {
+        return { buffer: Buffer.from('fake-upload-bytes'), contentType: 'image/jpeg' };
       }
       throw Object.assign(new Error('Not found'), { response: { status: 404 } });
     },
@@ -1088,6 +1105,146 @@ describe('Findings and CAP API', () => {
     expect(reviewResponse.body.followUpReport.evidenceReviewNotes).toBe('Missing photographic evidence');
     expect(reviewResponse.body.finding.findingStatus).toBe('Open');
     expect(fixture.findingNode.properties['vso:findingStatus']).toBe('Open');
+  });
+
+  it('records the reviewing user on evidence-review decisions', async () => {
+    const { app } = await buildApp({ roles: ['inspector'] });
+
+    await request(app)
+      .post('/api/findings/MDPP001-AYVIS-01/follow-ups')
+      .set('Cookie', 'compliance_session_id=session-1')
+      .set('x-csrf-token', 'csrf-token-1')
+      .send({ followUpType: 'Progress Review', followUpDate: '2026-04-03T10:00:00.000Z', percentComplete: 50 });
+
+    const reviewResponse = await request(app)
+      .patch('/api/findings/MDPP001-AYVIS-01/follow-ups/FU-MDPP001AYVIS-01-01/evidence-review')
+      .set('Cookie', 'compliance_session_id=session-1')
+      .set('x-csrf-token', 'csrf-token-1')
+      .send({ decision: 'Adequate' });
+
+    expect(reviewResponse.status).toBe(200);
+    expect(reviewResponse.body.followUpReport.evidenceReviewedBy).toBe('tester');
+  });
+
+  it('uploads Remote evidence for a follow-up and lists it on the finding detail view', async () => {
+    const { app, fixture } = await buildApp({ roles: ['inspector'] });
+
+    await request(app)
+      .post('/api/findings/MDPP001-AYVIS-01/follow-ups')
+      .set('Cookie', 'compliance_session_id=session-1')
+      .set('x-csrf-token', 'csrf-token-1')
+      .send({ followUpType: 'Progress Review', followUpDate: '2026-04-03T10:00:00.000Z', percentComplete: 50 });
+
+    const uploadResponse = await request(app)
+      .post('/api/findings/MDPP001-AYVIS-01/follow-ups/FU-MDPP001AYVIS-01-01/evidence')
+      .set('Cookie', 'compliance_session_id=session-1')
+      .set('x-csrf-token', 'csrf-token-1')
+      .field('evidenceRole', 'Progress Evidence')
+      .field('collectionMethod', 'Remote')
+      .attach('file', Buffer.from('%PDF-1.4 test'), { filename: 'evidence.pdf', contentType: 'application/pdf' });
+
+    expect(uploadResponse.status).toBe(201);
+    expect(uploadResponse.body.evidence.evidenceRole).toBe('Progress Evidence');
+    expect(uploadResponse.body.evidence.collectionMethod).toBe('Remote');
+    expect(fixture.lastCreatedChildNodeArgs.parentNodeId).toBe('inspection-node-1');
+    expect(fixture.lastCreatedChildNodeArgs.associationType).toBe('cm:contains');
+    expect(fixture.lastCreatedChildNodeArgs.properties['vso:inspectionId']).toBe('MDPP-001');
+    expect(fixture.lastCreatedChildNodeArgs.properties['vso:providerName']).toBe('Provider 1');
+    expect(fixture.lastCreatedChildNodeArgs.properties['vso:hashValue']).toMatch(/^[a-f0-9]{64}$/);
+
+    const detailResponse = await request(app)
+      .get('/api/findings/MDPP001-AYVIS-01')
+      .set('Cookie', 'compliance_session_id=session-1');
+
+    expect(detailResponse.status).toBe(200);
+    expect(detailResponse.body.followUpReports).toHaveLength(1);
+    expect(detailResponse.body.followUpReports[0].evidence).toHaveLength(1);
+    expect(detailResponse.body.followUpReports[0].evidence[0].collectionMethod).toBe('Remote');
+    expect(detailResponse.body.followUpReports[0].evidence[0].evidenceRole).toBe('Progress Evidence');
+  });
+
+  it('retrieves the content of uploaded follow-up evidence', async () => {
+    const { app } = await buildApp({ roles: ['inspector'] });
+
+    await request(app)
+      .post('/api/findings/MDPP001-AYVIS-01/follow-ups')
+      .set('Cookie', 'compliance_session_id=session-1')
+      .set('x-csrf-token', 'csrf-token-1')
+      .send({ followUpType: 'Progress Review', followUpDate: '2026-04-03T10:00:00.000Z', percentComplete: 50 });
+
+    const uploadResponse = await request(app)
+      .post('/api/findings/MDPP001-AYVIS-01/follow-ups/FU-MDPP001AYVIS-01-01/evidence')
+      .set('Cookie', 'compliance_session_id=session-1')
+      .set('x-csrf-token', 'csrf-token-1')
+      .field('evidenceRole', 'Progress Evidence')
+      .field('collectionMethod', 'Provider-submitted')
+      .attach('file', Buffer.from('%PDF-1.4 test'), { filename: 'evidence.pdf', contentType: 'application/pdf' });
+
+    const evidenceNodeId = uploadResponse.body.evidence.nodeId;
+
+    const contentResponse = await request(app)
+      .get(`/api/findings/MDPP001-AYVIS-01/follow-ups/FU-MDPP001AYVIS-01-01/evidence/${evidenceNodeId}/content`)
+      .set('Cookie', 'compliance_session_id=session-1');
+
+    expect(contentResponse.status).toBe(200);
+    expect(contentResponse.body.toString()).toBe('fake-upload-bytes');
+  });
+
+  it('rejects follow-up evidence upload with an On-site collectionMethod (reserved for canonical import)', async () => {
+    const { app } = await buildApp({ roles: ['inspector'] });
+
+    await request(app)
+      .post('/api/findings/MDPP001-AYVIS-01/follow-ups')
+      .set('Cookie', 'compliance_session_id=session-1')
+      .set('x-csrf-token', 'csrf-token-1')
+      .send({ followUpType: 'Progress Review', followUpDate: '2026-04-03T10:00:00.000Z', percentComplete: 50 });
+
+    const response = await request(app)
+      .post('/api/findings/MDPP001-AYVIS-01/follow-ups/FU-MDPP001AYVIS-01-01/evidence')
+      .set('Cookie', 'compliance_session_id=session-1')
+      .set('x-csrf-token', 'csrf-token-1')
+      .field('evidenceRole', 'Progress Evidence')
+      .field('collectionMethod', 'On-site')
+      .attach('file', Buffer.from('%PDF-1.4 test'), { filename: 'evidence.pdf', contentType: 'application/pdf' });
+
+    expect(response.status).toBe(400);
+    expect(response.body.code).toBe('EVIDENCE_BAD_REQUEST');
+  });
+
+  it('rejects follow-up evidence upload with an invalid evidenceRole', async () => {
+    const { app } = await buildApp({ roles: ['inspector'] });
+
+    await request(app)
+      .post('/api/findings/MDPP001-AYVIS-01/follow-ups')
+      .set('Cookie', 'compliance_session_id=session-1')
+      .set('x-csrf-token', 'csrf-token-1')
+      .send({ followUpType: 'Progress Review', followUpDate: '2026-04-03T10:00:00.000Z', percentComplete: 50 });
+
+    const response = await request(app)
+      .post('/api/findings/MDPP001-AYVIS-01/follow-ups/FU-MDPP001AYVIS-01-01/evidence')
+      .set('Cookie', 'compliance_session_id=session-1')
+      .set('x-csrf-token', 'csrf-token-1')
+      .field('evidenceRole', 'RCA Evidence')
+      .field('collectionMethod', 'Remote')
+      .attach('file', Buffer.from('%PDF-1.4 test'), { filename: 'evidence.pdf', contentType: 'application/pdf' });
+
+    expect(response.status).toBe(400);
+    expect(response.body.code).toBe('EVIDENCE_BAD_REQUEST');
+  });
+
+  it('returns 404 uploading evidence to an unknown follow-up id', async () => {
+    const { app } = await buildApp({ roles: ['inspector'] });
+
+    const response = await request(app)
+      .post('/api/findings/MDPP001-AYVIS-01/follow-ups/FU-MDPP001AYVIS-99-99/evidence')
+      .set('Cookie', 'compliance_session_id=session-1')
+      .set('x-csrf-token', 'csrf-token-1')
+      .field('evidenceRole', 'Progress Evidence')
+      .field('collectionMethod', 'Remote')
+      .attach('file', Buffer.from('%PDF-1.4 test'), { filename: 'evidence.pdf', contentType: 'application/pdf' });
+
+    expect(response.status).toBe(404);
+    expect(response.body.code).toBe('FOLLOW_UP_NOT_FOUND');
   });
 
   it('rejects reviewing evidence a second time once already reviewed', async () => {

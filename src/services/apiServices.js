@@ -954,3 +954,43 @@ export async function apiReviewFollowUpEvidence(findingId, followUpId, payload, 
   }
 }
 
+export async function apiUploadFollowUpEvidence(findingId, followUpId, file, evidenceRole, collectionMethod, csrfToken) {
+  try {
+    if (!findingId || typeof findingId !== 'string') {
+      throw new Error('findingId is required');
+    }
+    if (!followUpId || typeof followUpId !== 'string') {
+      throw new Error('followUpId is required');
+    }
+    if (!file) {
+      throw new Error('file is required');
+    }
+
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('evidenceRole', evidenceRole);
+    formData.append('collectionMethod', collectionMethod);
+
+    const result = await axios({
+      method: 'post',
+      url: `${complianceApiServer}/findings/${encodeURIComponent(findingId)}/follow-ups/${encodeURIComponent(followUpId)}/evidence`,
+      data: formData,
+      headers: buildCsrfHeader(csrfToken),
+      withCredentials: true,
+    });
+    return { data: result.data, status: result.status };
+  } catch (error) {
+    const backendMessage = error?.response?.data?.message || error?.response?.data?.error;
+    const status = error?.response?.status;
+    const detail = backendMessage || error.message;
+    throw new Error(`apiUploadFollowUpEvidence: ${status ? `[${status}] ` : ''}${detail}`);
+  }
+}
+
+export function apiFollowUpEvidenceContentUrl(findingId, followUpId, evidenceNodeId) {
+  if (!findingId || !followUpId || !evidenceNodeId) {
+    throw new Error('apiFollowUpEvidenceContentUrl: findingId, followUpId and evidenceNodeId are required');
+  }
+  return `${complianceApiServer}/findings/${encodeURIComponent(findingId)}/follow-ups/${encodeURIComponent(followUpId)}/evidence/${encodeURIComponent(evidenceNodeId)}/content`;
+}
+

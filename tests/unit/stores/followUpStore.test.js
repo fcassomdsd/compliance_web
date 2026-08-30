@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { createPinia, setActivePinia } from 'pinia';
 import { useFollowUpStore } from '@/stores/followUpStore';
-import { apiFollowUps, apiCreateFindingFollowUp } from '@/services/apiServices';
+import { apiFollowUps, apiCreateFindingFollowUp, apiUploadFollowUpEvidence } from '@/services/apiServices';
 
 vi.mock('../../../src/services/apiServices.js');
 
@@ -51,6 +51,33 @@ describe('followUpStore', () => {
     vi.mocked(apiCreateFindingFollowUp).mockRejectedValueOnce(new Error('follow-up create failed'));
     await expect(store.createFollowUp(payload)).rejects.toThrow('follow-up create failed');
     expect(store.error).toBe('follow-up create failed');
+  });
+
+  it('uploadFollowUpEvidence returns API payload and tracks errors', async () => {
+    const file = new File(['x'], 'evidence.pdf');
+    const args = {
+      findingId: 'MDPP001-AYVIS-01',
+      followUpId: 'FU-MDPP001AYVIS-01-01',
+      file,
+      evidenceRole: 'Progress Evidence',
+      collectionMethod: 'Remote',
+      csrfToken: 'csrf-token',
+    };
+    vi.mocked(apiUploadFollowUpEvidence).mockResolvedValue({ data: { evidence: { nodeId: 'ev-1' } } });
+
+    await expect(store.uploadFollowUpEvidence(args)).resolves.toEqual({ evidence: { nodeId: 'ev-1' } });
+    expect(apiUploadFollowUpEvidence).toHaveBeenCalledWith(
+      'MDPP001-AYVIS-01',
+      'FU-MDPP001AYVIS-01-01',
+      file,
+      'Progress Evidence',
+      'Remote',
+      'csrf-token'
+    );
+
+    vi.mocked(apiUploadFollowUpEvidence).mockRejectedValueOnce(new Error('evidence upload failed'));
+    await expect(store.uploadFollowUpEvidence(args)).rejects.toThrow('evidence upload failed');
+    expect(store.error).toBe('evidence upload failed');
   });
 
   it('setFilter updates only known filters', () => {

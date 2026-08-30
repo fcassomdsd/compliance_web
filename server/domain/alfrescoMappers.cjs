@@ -81,6 +81,7 @@ function mapEvidenceItemNode(node) {
     source: nodeProperty(node, 'vso:source'),
     collectionDate: nodeProperty(node, 'vso:collectionDate'),
     evidenceRole: nodeProperty(node, 'vso:evidenceRole'),
+    collectionMethod: nodeProperty(node, 'vso:collectionMethod'),
     name: node?.name || null,
   };
 }
@@ -234,6 +235,7 @@ function mapFollowUpReportNode(node) {
     evidenceReviewStatus: nodeProperty(node, 'vso:evidenceReviewStatus'),
     evidenceReviewNotes: nodeProperty(node, 'vso:evidenceReviewNotes'),
     evidenceReviewDate: nodeProperty(node, 'vso:evidenceReviewDate'),
+    evidenceReviewedBy: nodeProperty(node, 'vso:evidenceReviewedBy'),
     inspectionId: nodeProperty(node, 'vso:inspectionId'),
     locationId: nodeProperty(node, 'vso:locationId'),
     locationCode: nodeProperty(node, 'vso:locationCode'),
@@ -269,5 +271,10 @@ async function getFollowUpReportsForFinding({ alfrescoClient, ticket, findingNod
     parentNodeId: findingNodeId,
     nodeType: 'vso:followUpReport',
   });
-  return followUpNodes.map(mapFollowUpReportNode);
+  return Promise.all(
+    followUpNodes.map(async (node) => ({
+      ...mapFollowUpReportNode(node),
+      evidence: await listEvidenceForSection({ alfrescoClient, ticket, sectionNodeId: node.id }),
+    }))
+  );
 }

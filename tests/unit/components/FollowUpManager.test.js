@@ -43,13 +43,19 @@ describe('FollowUpManager.vue', () => {
           specialtyCode: 'AYVIS',
           percentComplete: 10,
           inheritedCapId: 'CA-MDPP001AYVIS-01-01',
+          evidenceReviewStatus: 'Pending Review',
+          evidence: [
+            { nodeId: 'ev-1', name: 'photo.jpg', evidenceRole: 'Progress Evidence', collectionMethod: 'Remote' },
+          ],
         },
       ],
       loading: false,
       error: null,
       setFilter: vi.fn(),
       fetchFollowUps: vi.fn().mockResolvedValue(undefined),
-      createFollowUp: vi.fn().mockResolvedValue({ ok: true }),
+      createFollowUp: vi.fn().mockResolvedValue({ followUpReport: { followUpId: 'FU-MDPP001AYVIS-01-02' } }),
+      uploadFollowUpEvidence: vi.fn().mockResolvedValue({ evidence: { nodeId: 'ev-2' } }),
+      reviewEvidence: vi.fn().mockResolvedValue({ ok: true }),
     };
     mockAuthStore = { csrfToken: 'csrf-token' };
 
@@ -145,5 +151,67 @@ describe('FollowUpManager.vue', () => {
     await searchBtn.trigger('click');
 
     expect(mockFollowUpStore.fetchFollowUps).toHaveBeenCalled();
+  });
+
+  it('viewFollowUp opens the detail panel with evidence and pre-fills the review form', async () => {
+    const wrapper = mountComponent();
+    await wrapper.vm.$nextTick();
+
+    wrapper.vm.viewFollowUp(mockFollowUpStore.followUps[0]);
+    await wrapper.vm.$nextTick();
+
+    expect(wrapper.vm.selectedFollowUp.followUpId).toBe('FU-MDPP001AYVIS-01-01');
+    expect(wrapper.vm.evidenceReviewForm.findingId).toBe('MDPP001-AYVIS-01');
+    expect(wrapper.vm.evidenceReviewForm.followUpId).toBe('FU-MDPP001AYVIS-01-01');
+    expect(wrapper.text()).toContain('photo.jpg');
+    expect(wrapper.text()).toContain('Progress Evidence');
+  });
+
+  it('uploads staged evidence files after creating a follow-up', async () => {
+    const wrapper = mountComponent();
+    await wrapper.vm.$nextTick();
+
+    const file = new File(['x'], 'evidence.pdf', { type: 'application/pdf' });
+    wrapper.vm.stagedEvidenceFiles = [file];
+    wrapper.vm.form.findingId = 'MDPP001-AYVIS-01';
+    wrapper.vm.form.evidenceRole = 'Progress Evidence';
+    wrapper.vm.form.collectionMethod = 'Remote';
+
+    await wrapper.vm.createFollowUp();
+
+    expect(mockFollowUpStore.uploadFollowUpEvidence).toHaveBeenCalledWith({
+      findingId: 'MDPP001-AYVIS-01',
+      followUpId: 'FU-MDPP001AYVIS-01-02',
+      file,
+      evidenceRole: 'Progress Evidence',
+      collectionMethod: 'Remote',
+      csrfToken: 'csrf-token',
+    });
+    expect(wrapper.vm.stagedEvidenceFiles).toEqual([]);
+  });
+
+  it('reviewEvidence applies the decision and displays the reviewer once set', async () => {
+    const wrapper = mountComponent();
+    await wrapper.vm.$nextTick();
+
+    wrapper.vm.viewFollowUp(mockFollowUpStore.followUps[0]);
+    wrapper.vm.evidenceReviewForm.decision = 'Adequate';
+
+    await wrapper.vm.reviewEvidence();
+
+    expect(mockFollowUpStore.reviewEvidence).toHaveBeenCalledWith({
+      findingId: 'MDPP001-AYVIS-01',
+      followUpId: 'FU-MDPP001AYVIS-01-01',
+      decision: 'Adequate',
+      notes: '',
+      csrfToken: 'csrf-token',
+    });
+    expect(wrapper.vm.selectedFollowUp).toBeNull();
+
+    mockFollowUpStore.followUps[0].evidenceReviewedBy = 'tester';
+    wrapper.vm.viewFollowUp(mockFollowUpStore.followUps[0]);
+    await wrapper.vm.$nextTick();
+    expect(wrapper.text()).toContain('Reviewed by:');
+    expect(wrapper.text()).toContain('tester');
   });
 });
