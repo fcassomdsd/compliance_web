@@ -152,6 +152,39 @@ function createReportsRouter({ auth, alfrescoClient, now = () => new Date() }) {
     }
   );
 
+  router.get(
+    '/provider-history',
+    auth.authenticate,
+    auth.authorize(['inspector', 'planner', 'reporter', 'admin']),
+    async (req, res) => {
+      try {
+        const providerId = String(req.query?.providerId || '').trim();
+        if (!providerId) {
+          return res.status(400).json(buildError('PROVIDER_HISTORY_BAD_REQUEST', 'providerId is required'));
+        }
+
+        const year = String(req.query?.year || '').trim() || undefined;
+
+        const report = await alfrescoClient.getProviderHistoryReport({
+          ticket: req.auth.ticket,
+          providerId,
+          year,
+        });
+
+        return res.status(200).json(report);
+      } catch (error) {
+        const upstreamStatus = Number(error?.response?.status || 0);
+        const upstreamDetail = error?.response?.data?.error || error?.response?.data?.message || error.message;
+
+        if (upstreamStatus >= 400 && upstreamStatus < 500) {
+          return res.status(400).json(buildError('PROVIDER_HISTORY_BAD_REQUEST', upstreamDetail));
+        }
+
+        return res.status(502).json(buildError('PROVIDER_HISTORY_REPORT_FAILED', upstreamDetail));
+      }
+    }
+  );
+
   return router;
 }
 

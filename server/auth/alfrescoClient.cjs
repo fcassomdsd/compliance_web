@@ -339,6 +339,26 @@ class AlfrescoClient {
     const entries = await this.searchNodes({ ticket, query, maxItems: 2 });
     return entries[0] || null;
   }
+
+  async getProviderHistoryReport({ ticket, providerId, year }) {
+    if (!ticket || !providerId) {
+      throw new Error('ticket and providerId are required');
+    }
+
+    const response = await this.request({
+      method: 'post',
+      url: `${this.baseUrl}/alfresco/s/api/providers/provider-history-report`,
+      params: {
+        alf_ticket: ticket,
+      },
+      data: {
+        providerId,
+        ...(year ? { year } : {}),
+      },
+    });
+
+    return response?.data || null;
+  }
 }
 
 module.exports = {

@@ -1,5 +1,12 @@
 import { defineStore } from 'pinia';
-import { apiFindings, apiFindingDetail } from '@/services/apiServices';
+import {
+  apiFindings,
+  apiFindingDetail,
+  apiReviewFinding,
+  apiClosureReviewFinding,
+  apiRequestDeadlineExtension,
+  apiReviewDeadlineExtension,
+} from '@/services/apiServices';
 
 export const useFindingStore = defineStore('finding', {
   state: () => ({
@@ -46,6 +53,62 @@ export const useFindingStore = defineStore('finding', {
       try {
         const { data } = await apiFindingDetail(findingId);
         this.selectedFinding = data || null;
+      } catch (error) {
+        this.error = error.message;
+        throw error;
+      } finally {
+        this.loading = false;
+      }
+    },
+
+    async reviewFinding({ findingId, edits, csrfToken }) {
+      this.loading = true;
+      this.error = null;
+      try {
+        const { data } = await apiReviewFinding(findingId, edits, csrfToken);
+        return data;
+      } catch (error) {
+        this.error = error.message;
+        throw error;
+      } finally {
+        this.loading = false;
+      }
+    },
+
+    async closureReviewFinding({ findingId, decision, csrfToken }) {
+      this.loading = true;
+      this.error = null;
+      try {
+        const { data } = await apiClosureReviewFinding(findingId, decision, csrfToken);
+        return data;
+      } catch (error) {
+        this.error = error.message;
+        throw error;
+      } finally {
+        this.loading = false;
+      }
+    },
+
+    async requestDeadlineExtension({ findingId, payload, csrfToken }) {
+      this.loading = true;
+      this.error = null;
+      try {
+        const { data } = await apiRequestDeadlineExtension(findingId, payload, csrfToken);
+        return data;
+      } catch (error) {
+        this.error = error.message;
+        throw error;
+      } finally {
+        this.loading = false;
+      }
+    },
+
+    async reviewDeadlineExtension({ findingId, decision, csrfToken }) {
+      this.loading = true;
+      this.error = null;
+      try {
+        const { data } = await apiReviewDeadlineExtension(findingId, decision, csrfToken);
+        return data;
       } catch (error) {
         this.error = error.message;
         throw error;

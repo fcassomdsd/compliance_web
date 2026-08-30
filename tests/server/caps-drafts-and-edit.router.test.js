@@ -48,7 +48,7 @@ function buildFixture() {
       'vso:proposedAction': 'Action A',
       'vso:responsibleEntity': 'Provider 1',
       'vso:dueDate': '2026-05-01',
-      'vso:acceptanceStatus': 'Returned',
+      'vso:acceptanceStatus': 'Not Accepted',
       'vso:inspectionId': 'MDPP-001',
       'vso:locationId': 'LOC-01',
       'vso:locationCode': 'MDPP',
@@ -91,6 +91,10 @@ function fullCapPayload(overrides = {}) {
       calculatedRiskLevel: 'High',
       tolerabilityLevel: 'Unacceptable',
       justification: 'Based on historical occurrence data',
+    },
+    containmentMeasures: {
+      description: 'Temporary closure of the affected runway segment',
+      implementedDate: '2026-06-02',
     },
     correctiveActions: [
       {
@@ -416,8 +420,8 @@ describe('CAP drafts (Postgres-staged)', () => {
   });
 });
 
-describe('PATCH /api/caps/:capId (Returned-CAP editing)', () => {
-  it('rejects editing a CAP that is not Returned', async () => {
+describe('PATCH /api/caps/:capId (Not-Accepted-CAP editing)', () => {
+  it('rejects editing a CAP that is not Not Accepted', async () => {
     const { app, fixture } = await buildApp();
     fixture.capNode.properties['vso:acceptanceStatus'] = 'Pending review';
 
@@ -430,7 +434,7 @@ describe('PATCH /api/caps/:capId (Returned-CAP editing)', () => {
     expect(response.status).toBe(409);
   });
 
-  it('saves a partial edit to a Returned CAP without resubmitting (status stays Returned)', async () => {
+  it('saves a partial edit to a Not Accepted CAP without resubmitting (status stays Not Accepted)', async () => {
     const { app, fixture } = await buildApp();
 
     const response = await request(app)
@@ -440,7 +444,7 @@ describe('PATCH /api/caps/:capId (Returned-CAP editing)', () => {
       .send({ dueDate: '2026-08-01' });
 
     expect(response.status).toBe(200);
-    expect(response.body.cap.acceptanceStatus).toBe('Returned');
+    expect(response.body.cap.acceptanceStatus).toBe('Not Accepted');
     expect(response.body.cap.dueDate).toBe('2026-08-01');
     expect(fixture.findingNode.properties['vso:findingStatus']).toBe('Open');
   });
@@ -551,10 +555,10 @@ describe('PATCH /api/caps/:capId (Returned-CAP editing)', () => {
       .send({ resubmit: true, dueDate: '2026-08-01' });
 
     expect(response.status).toBe(400);
-    expect(fixture.capNode.properties['vso:acceptanceStatus']).toBe('Returned');
+    expect(fixture.capNode.properties['vso:acceptanceStatus']).toBe('Not Accepted');
   });
 
-  it('resubmits a complete Returned CAP: status flips to Pending review and finding to CAP Submitted', async () => {
+  it('resubmits a complete Not Accepted CAP: status flips to Pending review and finding to CAP Submitted', async () => {
     const { app, fixture } = await buildApp();
 
     const payload = fullCapPayload();
@@ -573,7 +577,7 @@ describe('PATCH /api/caps/:capId (Returned-CAP editing)', () => {
 describe('PATCH /api/caps/:capId/review preconditions', () => {
   it('rejects reviewing a CAP that is not Pending review', async () => {
     const { app, fixture } = await buildApp({ roles: ['inspector'] });
-    fixture.capNode.properties['vso:acceptanceStatus'] = 'Returned';
+    fixture.capNode.properties['vso:acceptanceStatus'] = 'Not Accepted';
 
     const response = await request(app)
       .patch(`/api/caps/${fixture.capNode.properties['vso:capId']}/review`)
@@ -596,6 +600,52 @@ describe('PATCH /api/caps/:capId/review preconditions', () => {
 
     expect(response.status).toBe(200);
     expect(response.body.cap.acceptanceStatus).toBe('Accepted');
+    expect(response.body.cap.capReviewedBy).toBe('tester');
+    expect(response.body.cap.capReviewDate).toBeTruthy();
+  });
+
+  it('rejects marking a CAP Not Accepted without a reason', async () => {
+    const { app, fixture } = await buildApp({ roles: ['inspector'] });
+    fixture.capNode.properties['vso:acceptanceStatus'] = 'Pending review';
+
+    const response = await request(app)
+      .patch(`/api/caps/${fixture.capNode.properties['vso:capId']}/review`)
+      .set('Cookie', 'compliance_session_id=session-1')
+      .set('x-csrf-token', 'csrf-token-1')
+      .send({ acceptanceStatus: 'Not Accepted' });
+
+    expect(response.status).toBe(400);
+    expect(response.body.code).toBe('CAP_REVIEW_REASON_REQUIRED');
+  });
+
+  it('marks a CAP Not Accepted and records the reason', async () => {
+    const { app, fixture } = await buildApp({ roles: ['inspector'] });
+    fixture.capNode.properties['vso:acceptanceStatus'] = 'Pending review';
+
+    const response = await request(app)
+      .patch(`/api/caps/${fixture.capNode.properties['vso:capId']}/review`)
+      .set('Cookie', 'compliance_session_id=session-1')
+      .set('x-csrf-token', 'csrf-token-1')
+      .send({ acceptanceStatus: 'Not Accepted', reason: 'Root cause does not explain the finding' });
+
+    expect(response.status).toBe(200);
+    expect(response.body.cap.acceptanceStatus).toBe('Not Accepted');
+    expect(response.body.cap.capReviewReason).toBe('Root cause does not explain the finding');
+    expect(fixture.findingNode.properties['vso:findingStatus']).toBe('Open');
+  });
+
+  it('rejects an invalid review decision value', async () => {
+    const { app, fixture } = await buildApp({ roles: ['inspector'] });
+    fixture.capNode.properties['vso:acceptanceStatus'] = 'Pending review';
+
+    const response = await request(app)
+      .patch(`/api/caps/${fixture.capNode.properties['vso:capId']}/review`)
+      .set('Cookie', 'compliance_session_id=session-1')
+      .set('x-csrf-token', 'csrf-token-1')
+      .send({ acceptanceStatus: 'Returned' });
+
+    expect(response.status).toBe(400);
+    expect(response.body.code).toBe('CAP_BAD_REVIEW_STATUS');
   });
 });
 
@@ -653,7 +703,7 @@ describe('CAP evidence management (view/remove)', () => {
     expect(response.status).toBe(404);
   });
 
-  it('removes evidence from a Returned CAP', async () => {
+  it('removes evidence from a Not Accepted CAP', async () => {
     const { app, fixture } = await buildApp();
     const { sectionNode, evidenceNode } = seedRcaEvidence(fixture);
 
@@ -667,7 +717,7 @@ describe('CAP evidence management (view/remove)', () => {
     expect(fixture.evidenceAssociations.get(sectionNode.id)).toHaveLength(0);
   });
 
-  it('rejects removing evidence from a CAP that is not Returned', async () => {
+  it('rejects removing evidence from a CAP that is not Not Accepted', async () => {
     const { app, fixture } = await buildApp();
     fixture.capNode.properties['vso:acceptanceStatus'] = 'Pending review';
     const { evidenceNode } = seedRcaEvidence(fixture);

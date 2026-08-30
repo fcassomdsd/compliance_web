@@ -18,8 +18,7 @@ const FINDING_STATUS = Object.freeze({
 const CAP_ACCEPTANCE_STATUS = Object.freeze({
   PENDING_REVIEW: 'Pending review',
   ACCEPTED: 'Accepted',
-  REJECTED: 'Rejected',
-  RETURNED_FOR_REVISION: 'Returned',
+  NOT_ACCEPTED: 'Not Accepted',
 });
 
 const ACTION_ITEM_STATUS = Object.freeze({
@@ -188,6 +187,14 @@ function isValidCapAcceptanceStatus(status) {
   return Object.values(CAP_ACCEPTANCE_STATUS).includes(status);
 }
 
+// The review decision itself is narrower than the full acceptance-status
+// enum — a reviewer can only ever choose Accepted or Not Accepted (never
+// set a CAP back to Pending review, which is only reachable via creation
+// or resubmission).
+function isValidCapReviewDecision(status) {
+  return status === CAP_ACCEPTANCE_STATUS.ACCEPTED || status === CAP_ACCEPTANCE_STATUS.NOT_ACCEPTED;
+}
+
 const CLOSURE_VERIFICATION_FOLLOW_UP_TYPE = 'Closure Verification';
 
 // A follow-up may only request closure with this exact type/flag combination
@@ -274,13 +281,13 @@ function resolveFindingStatusFromFollowUp({ followUpType, effectivenessConfirmed
   return FINDING_STATUS.IN_PROGRESS;
 }
 
-// A CAP's content (RCA, risk assessment, action items, residual risk,
-// effectiveness verification) can only be edited in place while it's
-// Returned for revision. Pending-review/Accepted/Rejected CAPs are
+// A CAP's content (RCA, risk assessment, containment measures, action
+// items, residual risk, effectiveness verification) can only be edited in
+// place while it's Not Accepted. Pending-review/Accepted CAPs are
 // immutable content-wise. Draft CAPs are staged outside Alfresco
 // entirely (see cap_draft table) and never reach this check.
 function isCapEditable(acceptanceStatus) {
-  return acceptanceStatus === CAP_ACCEPTANCE_STATUS.RETURNED_FOR_REVISION;
+  return acceptanceStatus === CAP_ACCEPTANCE_STATUS.NOT_ACCEPTED;
 }
 
 module.exports = {
@@ -299,6 +306,7 @@ module.exports = {
   computeEffectiveFindingStatus,
   canSubmitCap,
   isValidCapAcceptanceStatus,
+  isValidCapReviewDecision,
   isCapEditable,
   CLOSURE_VERIFICATION_FOLLOW_UP_TYPE,
   isValidClosureRequest,

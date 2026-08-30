@@ -149,11 +149,11 @@ export const useCapStore = defineStore('cap', {
       }
     },
 
-    async reviewCap({ capId, acceptanceStatus, csrfToken }) {
+    async reviewCap({ capId, acceptanceStatus, csrfToken, reason }) {
       this.loading = true;
       this.error = null;
       try {
-        const { data } = await apiReviewCap(capId, acceptanceStatus, csrfToken);
+        const { data } = await apiReviewCap(capId, acceptanceStatus, csrfToken, reason);
         return data;
       } catch (error) {
         this.error = error.message;

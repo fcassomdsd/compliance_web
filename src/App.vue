@@ -6,6 +6,7 @@
         <h2>Operational Safety Compliance System</h2>
       </span>
       <div class="header-actions" v-if="authStore.authenticated">
+        <NotificationBell />
         <span v-if="authStore.user?.username" class="signed-in-user">
           {{ authStore.user.username }}
         </span>
@@ -43,6 +44,12 @@
       <RouterLink to="/follow-ups" class="nav-link" exact-active-class="active-view" @click="navOpen = false">
         Follow-ups
       </RouterLink>
+      <RouterLink to="/inspection-cadences" class="nav-link" exact-active-class="active-view" @click="navOpen = false">
+        Inspection Cadences
+      </RouterLink>
+      <RouterLink to="/provider-history" class="nav-link" exact-active-class="active-view" @click="navOpen = false">
+        Provider History
+      </RouterLink>
     </div>
     <RouterView v-slot="{ Component }">
       <transition name="fade" mode="out-in">
@@ -57,6 +64,7 @@ import { ref, onMounted, onUnmounted } from 'vue';
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/authStore';
 import BaseButton from '@/components/base/BaseButton.vue';
+import NotificationBell from '@/components/NotificationBell.vue';
 import logo from './assets/images/logos/compliance-logo.png'
 
 const router = useRouter()

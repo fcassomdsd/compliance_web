@@ -43,7 +43,7 @@ describe('CorrectiveActionManager.vue', () => {
       fetchCaps: vi.fn().mockResolvedValue(undefined),
       fetchDrafts: vi.fn().mockResolvedValue(undefined),
       submitCap: vi.fn().mockResolvedValue({ cap: { capId: 'CAP-10' } }),
-      updateCap: vi.fn().mockResolvedValue({ cap: { capId: 'CAP-1', acceptanceStatus: 'Returned' } }),
+      updateCap: vi.fn().mockResolvedValue({ cap: { capId: 'CAP-1', acceptanceStatus: 'Not Accepted' } }),
       saveDraft: vi.fn().mockResolvedValue({ draftId: 'DRAFT-1' }),
       deleteDraft: vi.fn().mockResolvedValue(undefined),
       submitDraft: vi.fn().mockResolvedValue({ cap: { capId: 'CAP-20' } }),
@@ -76,7 +76,7 @@ describe('CorrectiveActionManager.vue', () => {
     await wrapper.vm.$nextTick();
 
     wrapper.vm.scope.preset = 'accepted-caps';
-    wrapper.vm.scope.acceptanceStatus = 'Rejected';
+    wrapper.vm.scope.acceptanceStatus = 'Not Accepted';
     wrapper.vm.scope.locationId = 'LOC-1';
     wrapper.vm.scope.providerId = 'PROV-1';
     wrapper.vm.scope.inspectionId = 'INS-1';
@@ -142,6 +142,26 @@ describe('CorrectiveActionManager.vue', () => {
     expect(wrapper.vm.message).toContain('submitted successfully');
     expect(wrapper.vm.editMode.type).toBe('new');
     expect(mockCapStore.fetchCaps).toHaveBeenCalledTimes(2);
+  });
+
+  it('includes containmentMeasures in the payload only when the reviewer filled it in', async () => {
+    const wrapper = mountComponent();
+    await wrapper.vm.$nextTick();
+
+    wrapper.vm.capForm.findingId = 'F-1';
+    wrapper.vm.capForm.containmentMeasures.description = 'Temporary manual workaround';
+    wrapper.vm.capForm.containmentMeasures.implementedDate = '2026-07-01';
+    wrapper.vm.rcaEvidenceFiles = [new File(['x'], 'evidence.pdf')];
+
+    await wrapper.vm.submitForReviewAction();
+
+    expect(mockCapStore.submitCap).toHaveBeenCalledWith(
+      expect.objectContaining({
+        payload: expect.objectContaining({
+          containmentMeasures: { description: 'Temporary manual workaround', implementedDate: '2026-07-01' },
+        }),
+      })
+    );
   });
 
   it('saveDraftAction creates a new draft and switches editMode to draft', async () => {
@@ -216,13 +236,13 @@ describe('CorrectiveActionManager.vue', () => {
     expect(wrapper.vm.editMode.type).toBe('new');
   });
 
-  it('editCap fetches CAP detail and populates the form for a Returned CAP', async () => {
+  it('editCap fetches CAP detail and populates the form for a Not Accepted CAP', async () => {
     mockCapStore.fetchCapDetail = vi.fn().mockImplementation(async () => {
       mockCapStore.selectedCap = {
         capId: 'CAP-7',
         findingId: 'F-7',
         dueDate: '2026-09-01',
-        acceptanceStatus: 'Returned',
+        acceptanceStatus: 'Not Accepted',
         rootCauseAnalysis: { method: 'BowTie' },
         correctiveActions: [{ sequenceNumber: 1, description: 'Existing', responsiblePerson: 'A', deadline: '2026-09-15' }],
       };
@@ -234,7 +254,7 @@ describe('CorrectiveActionManager.vue', () => {
     await wrapper.vm.editCap({ capId: 'CAP-7' });
 
     expect(mockCapStore.fetchCapDetail).toHaveBeenCalledWith('CAP-7');
-    expect(wrapper.vm.editMode).toEqual({ type: 'returned', capId: 'CAP-7' });
+    expect(wrapper.vm.editMode).toEqual({ type: 'notAccepted', capId: 'CAP-7' });
     expect(wrapper.vm.capForm.findingId).toBe('F-7');
     expect(wrapper.vm.capForm.rootCauseAnalysis.method).toBe('BowTie');
     expect(wrapper.vm.capForm.correctiveActions).toHaveLength(1);
@@ -245,7 +265,7 @@ describe('CorrectiveActionManager.vue', () => {
     const wrapper = mountComponent();
     await wrapper.vm.$nextTick();
 
-    wrapper.vm.editMode = { type: 'returned', capId: 'CAP-7' };
+    wrapper.vm.editMode = { type: 'notAccepted', capId: 'CAP-7' };
     await wrapper.vm.saveReturnedChangesAction();
 
     expect(mockCapStore.updateCap).toHaveBeenCalledWith({
@@ -254,14 +274,14 @@ describe('CorrectiveActionManager.vue', () => {
       csrfToken: 'csrf-token',
     });
     expect(mockCapStore.fetchCapDetail).toHaveBeenCalledWith('CAP-7');
-    expect(wrapper.vm.editMode.type).toBe('returned');
+    expect(wrapper.vm.editMode.type).toBe('notAccepted');
   });
 
   it('resubmitReturnedAction saves with resubmit flag and resets the form', async () => {
     const wrapper = mountComponent();
     await wrapper.vm.$nextTick();
 
-    wrapper.vm.editMode = { type: 'returned', capId: 'CAP-7' };
+    wrapper.vm.editMode = { type: 'notAccepted', capId: 'CAP-7' };
     await wrapper.vm.resubmitReturnedAction();
 
     expect(mockCapStore.updateCap).toHaveBeenCalledWith({
@@ -272,30 +292,120 @@ describe('CorrectiveActionManager.vue', () => {
     expect(wrapper.vm.editMode.type).toBe('new');
   });
 
-  it('isCapEditableStatus is true only for Returned', async () => {
+  it('isCapEditableStatus is true only for Not Accepted', async () => {
     const wrapper = mountComponent();
     await wrapper.vm.$nextTick();
 
-    expect(wrapper.vm.isCapEditableStatus('Returned')).toBe(true);
+    expect(wrapper.vm.isCapEditableStatus('Not Accepted')).toBe(true);
     expect(wrapper.vm.isCapEditableStatus('Pending review')).toBe(false);
     expect(wrapper.vm.isCapEditableStatus('Accepted')).toBe(false);
   });
 
-  it('reviewCap sends payload, resets cap id and refreshes', async () => {
+  it('isCapReviewable is true only for Pending review', async () => {
     const wrapper = mountComponent();
     await wrapper.vm.$nextTick();
 
-    wrapper.vm.reviewForm.capId = 'CAP-20';
-    wrapper.vm.reviewForm.acceptanceStatus = 'Rejected';
-    await wrapper.vm.reviewCap();
+    expect(wrapper.vm.isCapReviewable('Pending review')).toBe(true);
+    expect(wrapper.vm.isCapReviewable('Accepted')).toBe(false);
+    expect(wrapper.vm.isCapReviewable('Not Accepted')).toBe(false);
+  });
+
+  it('startReview enters review mode, fetches detail, and resets prior decision/reason', async () => {
+    mockCapStore.selectedCap = { capId: 'CAP-20', acceptanceStatus: 'Pending review' };
+    const wrapper = mountComponent();
+    await wrapper.vm.$nextTick();
+
+    await wrapper.vm.startReview('CAP-20');
+
+    expect(mockCapStore.fetchCapDetail).toHaveBeenCalledWith('CAP-20');
+    expect(wrapper.vm.reviewMode).toBe(true);
+    expect(wrapper.vm.reviewDecision).toBe('Accepted');
+    expect(wrapper.vm.reviewReason).toBe('');
+  });
+
+  it('cancelReview exits review mode without submitting', async () => {
+    const wrapper = mountComponent();
+    await wrapper.vm.$nextTick();
+
+    await wrapper.vm.startReview('CAP-20');
+    wrapper.vm.cancelReview();
+
+    expect(wrapper.vm.reviewMode).toBe(false);
+    expect(mockCapStore.reviewCap).not.toHaveBeenCalled();
+  });
+
+  it('confirmReview rejects a Not Accepted decision with no reason, without calling the store', async () => {
+    mockCapStore.selectedCap = { capId: 'CAP-20', acceptanceStatus: 'Pending review' };
+    const wrapper = mountComponent();
+    await wrapper.vm.$nextTick();
+
+    await wrapper.vm.startReview('CAP-20');
+    wrapper.vm.reviewDecision = 'Not Accepted';
+    await wrapper.vm.confirmReview();
+
+    expect(mockCapStore.reviewCap).not.toHaveBeenCalled();
+    expect(wrapper.vm.reviewValidationError).toContain('reason is required');
+  });
+
+  it('confirmReview sends the decision and reason, then exits review mode and refreshes', async () => {
+    mockCapStore.selectedCap = { capId: 'CAP-20', acceptanceStatus: 'Pending review' };
+    const wrapper = mountComponent();
+    await wrapper.vm.$nextTick();
+
+    await wrapper.vm.startReview('CAP-20');
+    wrapper.vm.reviewDecision = 'Not Accepted';
+    wrapper.vm.reviewReason = 'Root cause does not explain the finding';
+    await wrapper.vm.confirmReview();
 
     expect(mockCapStore.reviewCap).toHaveBeenCalledWith({
       capId: 'CAP-20',
-      acceptanceStatus: 'Rejected',
+      acceptanceStatus: 'Not Accepted',
+      reason: 'Root cause does not explain the finding',
       csrfToken: 'csrf-token',
     });
-    expect(wrapper.vm.reviewForm.capId).toBe('');
-    expect(wrapper.vm.message).toContain('review updated');
+    expect(wrapper.vm.reviewMode).toBe(false);
+    expect(wrapper.vm.message).toContain('review applied');
+  });
+
+  it('reviewChecklist flags missing sections and evidence', async () => {
+    mockCapStore.selectedCap = {
+      capId: 'CAP-20',
+      acceptanceStatus: 'Pending review',
+      rootCauseAnalysis: { method: 'Fishbone', rootCause: '', evidence: [] },
+      correctiveActions: [],
+    };
+    const wrapper = mountComponent();
+    await wrapper.vm.$nextTick();
+
+    const rcaCheck = wrapper.vm.reviewChecklist.find((c) => c.label === 'Root Cause Analysis complete');
+    const actionsCheck = wrapper.vm.reviewChecklist.find((c) => c.label === 'At least one Corrective Action defined');
+    const evidenceCheck = wrapper.vm.reviewChecklist.find((c) => c.label === 'At least one evidence file attached');
+
+    expect(rcaCheck.met).toBe(false);
+    expect(actionsCheck.met).toBe(false);
+    expect(evidenceCheck.met).toBe(false);
+  });
+
+  it('reviewChecklist treats an absent containment section as not applicable (met)', async () => {
+    mockCapStore.selectedCap = { capId: 'CAP-21', acceptanceStatus: 'Pending review' };
+    const wrapper = mountComponent();
+    await wrapper.vm.$nextTick();
+
+    const check = wrapper.vm.reviewChecklist.find((c) => c.label === 'Immediate Containment Measures complete');
+    expect(check.met).toBe(true);
+  });
+
+  it('reviewChecklist flags a present-but-incomplete containment section', async () => {
+    mockCapStore.selectedCap = {
+      capId: 'CAP-22',
+      acceptanceStatus: 'Pending review',
+      containmentMeasures: { description: 'Partial only', implementedDate: '' },
+    };
+    const wrapper = mountComponent();
+    await wrapper.vm.$nextTick();
+
+    const check = wrapper.vm.reviewChecklist.find((c) => c.label === 'Immediate Containment Measures complete');
+    expect(check.met).toBe(false);
   });
 
   it('viewCap fetches selected CAP detail', async () => {
@@ -310,13 +420,15 @@ describe('CorrectiveActionManager.vue', () => {
     const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
     mockCapStore.submitCap.mockRejectedValueOnce(new Error('submit error'));
     mockCapStore.reviewCap.mockRejectedValueOnce(new Error('review error'));
+    mockCapStore.selectedCap = { capId: 'CAP-20', acceptanceStatus: 'Pending review' };
 
     const wrapper = mountComponent();
     await wrapper.vm.$nextTick();
 
     wrapper.vm.rcaEvidenceFiles = [new File(['x'], 'evidence.pdf')];
     await wrapper.vm.submitForReviewAction();
-    await wrapper.vm.reviewCap();
+    await wrapper.vm.startReview('CAP-20');
+    await wrapper.vm.confirmReview();
 
     expect(consoleSpy).toHaveBeenCalled();
     consoleSpy.mockRestore();
@@ -423,9 +535,9 @@ describe('CorrectiveActionManager.vue', () => {
     expect(wrapper.vm.message).toContain('not saved with drafts');
   });
 
-  it('hides the create-time evidence inputs while editing a Returned CAP', async () => {
+  it('hides the create-time evidence inputs while editing a Not Accepted CAP', async () => {
     mockCapStore.fetchCapDetail = vi.fn().mockImplementation(async () => {
-      mockCapStore.selectedCap = { capId: 'CAP-7', findingId: 'F-7', acceptanceStatus: 'Returned' };
+      mockCapStore.selectedCap = { capId: 'CAP-7', findingId: 'F-7', acceptanceStatus: 'Not Accepted' };
     });
 
     const wrapper = mountComponent();
@@ -453,10 +565,10 @@ describe('CorrectiveActionManager.vue', () => {
     expect(mockCapStore.fetchCapDetail).toHaveBeenCalledWith('CAP-1');
   });
 
-  it('shows an Edit button in the listing only for Returned CAPs', async () => {
+  it('shows an Edit button in the listing only for Not Accepted CAPs', async () => {
     mockCapStore.caps = [
       { capId: 'CAP-1', acceptanceStatus: 'Pending review', responsibleEntity: 'Org A', dueDate: '2026-05-01' },
-      { capId: 'CAP-2', acceptanceStatus: 'Returned', responsibleEntity: 'Org B', dueDate: '2026-06-01' },
+      { capId: 'CAP-2', acceptanceStatus: 'Not Accepted', responsibleEntity: 'Org B', dueDate: '2026-06-01' },
     ];
 
     const wrapper = mountComponent();
@@ -468,6 +580,38 @@ describe('CorrectiveActionManager.vue', () => {
 
     expect(editButtonsInFirstRow).toHaveLength(0);
     expect(editButtonsInSecondRow).toHaveLength(1);
+  });
+
+  it('shows a Review button in the listing only for Pending review CAPs', async () => {
+    mockCapStore.caps = [
+      { capId: 'CAP-1', acceptanceStatus: 'Pending review', responsibleEntity: 'Org A', dueDate: '2026-05-01' },
+      { capId: 'CAP-2', acceptanceStatus: 'Accepted', responsibleEntity: 'Org B', dueDate: '2026-06-01' },
+    ];
+
+    const wrapper = mountComponent();
+    await wrapper.vm.$nextTick();
+
+    const rows = wrapper.findAll('tbody tr');
+    const reviewButtonsInFirstRow = rows[0].findAll('button').filter((btn) => btn.text() === 'Review');
+    const reviewButtonsInSecondRow = rows[1].findAll('button').filter((btn) => btn.text() === 'Review');
+
+    expect(reviewButtonsInFirstRow).toHaveLength(1);
+    expect(reviewButtonsInSecondRow).toHaveLength(0);
+  });
+
+  it('clicking Review in the listing row starts review mode for that CAP', async () => {
+    mockCapStore.caps = [
+      { capId: 'CAP-1', acceptanceStatus: 'Pending review', responsibleEntity: 'Org A', dueDate: '2026-05-01' },
+    ];
+
+    const wrapper = mountComponent();
+    await wrapper.vm.$nextTick();
+
+    const reviewButton = wrapper.findAll('tbody tr')[0].findAll('button').find((btn) => btn.text() === 'Review');
+    await reviewButton.trigger('click');
+
+    expect(mockCapStore.fetchCapDetail).toHaveBeenCalledWith('CAP-1');
+    expect(wrapper.vm.reviewMode).toBe(true);
   });
 
   it('renders the My Draft CAPs section when drafts exist', async () => {
@@ -501,10 +645,10 @@ describe('CorrectiveActionManager.vue', () => {
     expect(wrapper.find('.evidence-upload').exists()).toBe(false);
   });
 
-  it('shows Remove and the upload control for a Returned CAP', async () => {
+  it('shows Remove and the upload control for a Not Accepted CAP', async () => {
     mockCapStore.selectedCap = {
       capId: 'CAP-91',
-      acceptanceStatus: 'Returned',
+      acceptanceStatus: 'Not Accepted',
       rootCauseAnalysis: { method: 'Fishbone', evidence: [{ nodeId: 'ev-2', name: 'notes.pdf' }] },
     };
 
@@ -532,7 +676,7 @@ describe('CorrectiveActionManager.vue', () => {
   });
 
   it('removing evidence requires confirmation before calling the store', async () => {
-    mockCapStore.selectedCap = { capId: 'CAP-91', acceptanceStatus: 'Returned' };
+    mockCapStore.selectedCap = { capId: 'CAP-91', acceptanceStatus: 'Not Accepted' };
 
     const wrapper = mountComponent();
     await wrapper.vm.$nextTick();
