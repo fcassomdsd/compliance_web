@@ -193,7 +193,7 @@ function validateCapDraftPayloadShape(payload) {
 }
 
 // Property-mapping for each CAP section, shared between performCapCreate
-// (fresh/promoted CAPs) and the Returned-CAP edit route, so the mapping
+// (fresh/promoted CAPs) and the Not-Accepted-CAP edit route, so the mapping
 // from payload shape to Alfresco property names lives in exactly one place.
 function buildRcaProperties(rca) {
   return {
@@ -1009,8 +1009,8 @@ function createCapsRouter({ auth, alfrescoClient, capDraftRepository, notificati
     }
   );
 
-  // Content edit for a CAP that's Returned for revision. Unlike Draft
-  // (Postgres-only), a Returned CAP is already a real, already-versioned
+  // Content edit for a CAP marked Not Accepted. Unlike Draft
+  // (Postgres-only), a Not Accepted CAP is already a real, already-versioned
   // Alfresco node — each save here does create a new version, which is
   // correct: it's genuine revision history of a real submission, not
   // pre-submission noise.

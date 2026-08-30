@@ -467,8 +467,8 @@
       </div>
 
       <div class="form-actions" v-if="editMode.type === 'notAccepted'">
-        <BaseButton variant="secondary" @click="saveReturnedChangesAction" :disabled="capStore.loading">Save Changes</BaseButton>
-        <BaseButton variant="primary" @click="resubmitReturnedAction" :disabled="capStore.loading">Resubmit for Review</BaseButton>
+        <BaseButton variant="secondary" @click="saveNotAcceptedChangesAction" :disabled="capStore.loading">Save Changes</BaseButton>
+        <BaseButton variant="primary" @click="resubmitNotAcceptedAction" :disabled="capStore.loading">Resubmit for Review</BaseButton>
       </div>
       <div class="form-actions" v-else>
         <BaseButton variant="secondary" @click="saveDraftAction" :disabled="capStore.loading">Save Draft</BaseButton>
@@ -860,7 +860,7 @@ async function performSubmitForReview() {
 
 // "notAccepted" mode: Save Changes edits an already-versioned Alfresco CAP
 // in place (status stays Not Accepted) without resubmitting it for review.
-async function saveReturnedChangesAction() {
+async function saveNotAcceptedChangesAction() {
   message.value = '';
   try {
     await capStore.updateCap({
@@ -878,7 +878,7 @@ async function saveReturnedChangesAction() {
 
 // "notAccepted" mode: Resubmit for Review saves and flips status back to
 // Pending review, same side effects as a fresh submission.
-async function resubmitReturnedAction() {
+async function resubmitNotAcceptedAction() {
   message.value = '';
   try {
     await capStore.updateCap({
