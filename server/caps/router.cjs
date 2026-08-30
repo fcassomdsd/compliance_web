@@ -122,14 +122,22 @@ function validateCorrectiveActions(items) {
   return null;
 }
 
+// Containment measures don't apply to every finding, unlike the other CAP
+// sections — optional at the model level (see vsoModel.xml), so validated
+// as optional here too: only checked when actually provided, and with no
+// sub-field requirements even then.
 function validateContainmentMeasures(containmentMeasures) {
-  if (!containmentMeasures || typeof containmentMeasures !== 'object') {
-    return 'containmentMeasures is required';
+  if (containmentMeasures === undefined || containmentMeasures === null) {
+    return null;
   }
-  if (!containmentMeasures.description || !containmentMeasures.implementedDate) {
-    return 'containmentMeasures.description and implementedDate are required';
+  if (typeof containmentMeasures !== 'object') {
+    return 'containmentMeasures must be an object';
   }
   return null;
+}
+
+function hasContainmentMeasuresData(containmentMeasures) {
+  return Boolean(containmentMeasures?.description || containmentMeasures?.implementedDate);
 }
 
 function validateResidualRisk(residualRisk) {
@@ -563,14 +571,18 @@ async function performCapCreate({
       associationType: 'vso:hasRiskAssessment',
       properties: buildRiskAssessmentProperties(riskAssessment),
     }),
-    alfrescoClient.createChildNode({
-      ticket,
-      parentNodeId: created.id,
-      nodeType: 'vso:containmentMeasures',
-      name: `${effectiveCapId}-CONTAINMENT-MEASURES`,
-      associationType: 'vso:hasContainmentMeasures',
-      properties: buildContainmentMeasuresProperties(containmentMeasures),
-    }),
+    ...(hasContainmentMeasuresData(containmentMeasures)
+      ? [
+          alfrescoClient.createChildNode({
+            ticket,
+            parentNodeId: created.id,
+            nodeType: 'vso:containmentMeasures',
+            name: `${effectiveCapId}-CONTAINMENT-MEASURES`,
+            associationType: 'vso:hasContainmentMeasures',
+            properties: buildContainmentMeasuresProperties(containmentMeasures),
+          }),
+        ]
+      : []),
     alfrescoClient.createChildNode({
       ticket,
       parentNodeId: created.id,

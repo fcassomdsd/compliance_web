@@ -122,10 +122,6 @@ describe('CorrectiveActionManager.vue', () => {
           tolerabilityLevel: '',
           justification: '',
         },
-        containmentMeasures: {
-          description: '',
-          implementedDate: '',
-        },
         correctiveActions: [
           { description: '', priority: 'Medium', responsiblePerson: '', deadline: '' },
         ],
@@ -146,6 +142,26 @@ describe('CorrectiveActionManager.vue', () => {
     expect(wrapper.vm.message).toContain('submitted successfully');
     expect(wrapper.vm.editMode.type).toBe('new');
     expect(mockCapStore.fetchCaps).toHaveBeenCalledTimes(2);
+  });
+
+  it('includes containmentMeasures in the payload only when the reviewer filled it in', async () => {
+    const wrapper = mountComponent();
+    await wrapper.vm.$nextTick();
+
+    wrapper.vm.capForm.findingId = 'F-1';
+    wrapper.vm.capForm.containmentMeasures.description = 'Temporary manual workaround';
+    wrapper.vm.capForm.containmentMeasures.implementedDate = '2026-07-01';
+    wrapper.vm.rcaEvidenceFiles = [new File(['x'], 'evidence.pdf')];
+
+    await wrapper.vm.submitForReviewAction();
+
+    expect(mockCapStore.submitCap).toHaveBeenCalledWith(
+      expect.objectContaining({
+        payload: expect.objectContaining({
+          containmentMeasures: { description: 'Temporary manual workaround', implementedDate: '2026-07-01' },
+        }),
+      })
+    );
   });
 
   it('saveDraftAction creates a new draft and switches editMode to draft', async () => {
@@ -368,6 +384,28 @@ describe('CorrectiveActionManager.vue', () => {
     expect(rcaCheck.met).toBe(false);
     expect(actionsCheck.met).toBe(false);
     expect(evidenceCheck.met).toBe(false);
+  });
+
+  it('reviewChecklist treats an absent containment section as not applicable (met)', async () => {
+    mockCapStore.selectedCap = { capId: 'CAP-21', acceptanceStatus: 'Pending review' };
+    const wrapper = mountComponent();
+    await wrapper.vm.$nextTick();
+
+    const check = wrapper.vm.reviewChecklist.find((c) => c.label === 'Immediate Containment Measures complete');
+    expect(check.met).toBe(true);
+  });
+
+  it('reviewChecklist flags a present-but-incomplete containment section', async () => {
+    mockCapStore.selectedCap = {
+      capId: 'CAP-22',
+      acceptanceStatus: 'Pending review',
+      containmentMeasures: { description: 'Partial only', implementedDate: '' },
+    };
+    const wrapper = mountComponent();
+    await wrapper.vm.$nextTick();
+
+    const check = wrapper.vm.reviewChecklist.find((c) => c.label === 'Immediate Containment Measures complete');
+    expect(check.met).toBe(false);
   });
 
   it('viewCap fetches selected CAP detail', async () => {

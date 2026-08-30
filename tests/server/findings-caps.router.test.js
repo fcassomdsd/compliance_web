@@ -702,7 +702,7 @@ describe('Findings and CAP API', () => {
     expect(response.body.cap.containmentMeasures.implementedDate).toBe('2026-06-02');
   });
 
-  it('rejects CAP creation when containmentMeasures is missing', async () => {
+  it('creates a CAP without containmentMeasures, since it does not apply to every finding', async () => {
     const { app } = await buildApp({ roles: ['cap_entry'] });
 
     const payload = fullCapPayload();
@@ -714,8 +714,8 @@ describe('Findings and CAP API', () => {
       .set('x-csrf-token', 'csrf-token-1')
       .send(payload);
 
-    expect(response.status).toBe(400);
-    expect(response.body.error?.message || response.body.message).toMatch(/containmentMeasures/);
+    expect(response.status).toBe(201);
+    expect(response.body.cap.containmentMeasures).toBeFalsy();
   });
 
   it('preserves repository 422 errors during evidence upload', async () => {

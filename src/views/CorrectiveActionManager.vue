@@ -684,7 +684,9 @@ const reviewChecklist = computed(() => {
   return [
     { label: 'Root Cause Analysis complete', met: Boolean(rca?.method && rca?.rootCause) },
     { label: 'Risk Assessment complete', met: Boolean(risk?.identifiedHazard && risk?.potentialConsequence && risk?.justification) },
-    { label: 'Immediate Containment Measures complete', met: Boolean(containment?.description && containment?.implementedDate) },
+    // Containment measures don't apply to every finding — absent entirely
+    // is not a red flag, only present-but-incomplete is.
+    { label: 'Immediate Containment Measures complete', met: !containment || Boolean(containment.description && containment.implementedDate) },
     { label: 'At least one Corrective Action defined', met: actions.length > 0 },
     { label: 'Every corrective action has a responsible person', met: actions.length > 0 && actions.every((item) => item.responsiblePerson) },
     { label: 'Every corrective action has a deadline', met: actions.length > 0 && actions.every((item) => item.deadline) },
@@ -766,11 +768,16 @@ function resetForm() {
 }
 
 function buildCapPayload() {
+  // Containment measures don't apply to every finding — omitted entirely
+  // (rather than sent as a hollow object) when the reviewer never filled
+  // either field in.
+  const hasContainmentMeasures = Boolean(capForm.containmentMeasures.description || capForm.containmentMeasures.implementedDate);
+
   return {
     dueDate: capForm.dueDate,
     rootCauseAnalysis: { ...capForm.rootCauseAnalysis },
     riskAssessment: { ...capForm.riskAssessment },
-    containmentMeasures: { ...capForm.containmentMeasures },
+    ...(hasContainmentMeasures ? { containmentMeasures: { ...capForm.containmentMeasures } } : {}),
     correctiveActions: capForm.correctiveActions.map((item) => ({ ...item })),
     residualRisk: { ...capForm.residualRisk },
     effectivenessVerification: { ...capForm.effectivenessVerification },
