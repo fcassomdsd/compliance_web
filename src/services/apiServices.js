@@ -740,6 +740,13 @@ export async function apiCreateFindingFollowUp(findingId, payload, csrfToken) {
   }
 }
 
+export function apiFindingEvidenceContentUrl(findingId, evidenceNodeId) {
+  if (!findingId || !evidenceNodeId) {
+    throw new Error('apiFindingEvidenceContentUrl: findingId and evidenceNodeId are required');
+  }
+  return `${complianceApiServer}/findings/${encodeURIComponent(findingId)}/evidence/${encodeURIComponent(evidenceNodeId)}/content`;
+}
+
 export async function apiReviewFinding(findingId, edits, csrfToken) {
   try {
     if (!findingId || typeof findingId !== 'string') {

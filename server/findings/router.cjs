@@ -1,8 +1,9 @@
 const express = require('express');
 
 const { buildError } = require('../auth/sessionAuth.cjs');
-const { mapFindingNode, mapFollowUpReportNode, getFollowUpReportsForFinding } = require('../domain/alfrescoMappers.cjs');
+const { mapFindingNode, mapFollowUpReportNode, getFollowUpReportsForFinding, listEvidenceForSection } = require('../domain/alfrescoMappers.cjs');
 const { parseFollowUpId, buildFollowUpIdFromFinding } = require('../domain/idFormats.cjs');
+const { computeDeadlinesForSeverity } = require('./severityDeadlines.cjs');
 const { FINDING_STATUS } = require('../domain/statusRules.cjs');
 const { computeEffectiveFindingStatus } = require('../domain/statusRules.cjs');
 const { isValidClosureRequest, canReviewClosure } = require('../domain/statusRules.cjs');
@@ -197,7 +198,7 @@ function applyFindingFilters({ findings, status, capOverdueOnly, solutionOverdue
   });
 }
 
-function createFindingsRouter({ auth, alfrescoClient, notificationService, now = () => new Date() }) {
+function createFindingsRouter({ auth, alfrescoClient, notificationService, nodeRedClient, now = () => new Date() }) {
   const router = express.Router();
 
   router.get(
@@ -674,38 +675,43 @@ function createFindingsRouter({ auth, alfrescoClient, notificationService, now =
           return res.status(404).json(buildError('FINDING_NOT_FOUND', 'Finding not found'));
         }
 
+        if (findingNode?.properties?.['vso:findingLevel'] !== 'Non-Compliance') {
+          return res.status(400).json(buildError('FINDING_REVIEW_NOT_APPLICABLE', 'Only findings with findingLevel "Non-Compliance" can be reviewed'));
+        }
+
         const currentReviewStatus = findingNode?.properties?.['vso:findingReviewStatus'];
         if (!canReviewFinding(currentReviewStatus)) {
           return res.status(409).json(buildError('FINDING_ALREADY_REVIEWED', 'This finding has already been reviewed'));
         }
 
-        // Fields a reviewer may correct before confirming — the content a
-        // field inspector formulated directly, not identifiers, dates, or
-        // the findingStatus/findingReviewStatus lifecycle fields themselves.
-        const EDITABLE_FIELDS = {
-          description: 'vso:description',
-          findingLevel: 'vso:findingLevel',
-          findingSeverity: 'vso:findingSeverity',
-          riskClassification: 'vso:riskClassification',
-          targetResidualRisk: 'vso:targetResidualRisk',
-          requirementBreached: 'vso:requirementBreached',
+        // The only field a reviewer may correct — findingId, findingLevel,
+        // dateIssued, requirementBreached, checklistItemCode, description,
+        // nationalRegulation, regulationItem and evidence are all sourced
+        // from field capture and displayed read-only during review.
+        const findingSeverity = req.body?.findingSeverity;
+
+        const properties = {
+          'vso:findingReviewStatus': 'Confirmed',
+          'vso:findingReviewDate': toDateOnly(now()),
+          'vso:findingReviewedBy': req.auth.username,
         };
 
-        const edits = {};
-        for (const [bodyKey, alfrescoKey] of Object.entries(EDITABLE_FIELDS)) {
-          if (req.body?.[bodyKey] !== undefined) {
-            edits[alfrescoKey] = req.body[bodyKey];
-          }
+        if (findingSeverity !== undefined) {
+          properties['vso:findingSeverity'] = findingSeverity;
+          const deadlines = await computeDeadlinesForSeverity({
+            nodeRedClient,
+            ticket: req.auth.ticket,
+            findingSeverity,
+            baseDate: now(),
+          });
+          properties['vso:resolutionDeadline'] = deadlines.resolutionDeadline;
+          properties['vso:submissionDeadline'] = deadlines.submissionDeadline;
         }
 
         const updatedFinding = await alfrescoClient.updateNodeProperties({
           ticket: req.auth.ticket,
           nodeId: findingNode.id,
-          properties: {
-            ...edits,
-            'vso:findingReviewStatus': 'Confirmed',
-            'vso:findingReviewDate': toDateOnly(now()),
-          },
+          properties,
         });
 
         return res.status(200).json({
@@ -919,11 +925,18 @@ function createFindingsRouter({ auth, alfrescoClient, notificationService, now =
         }
 
         const finding = mapFindingNode(findingNode);
-        const followUpReports = await getFollowUpReportsForFinding({
-          alfrescoClient,
-          ticket: req.auth.ticket,
-          findingNodeId: finding.nodeId,
-        });
+        const [followUpReports, evidence] = await Promise.all([
+          getFollowUpReportsForFinding({
+            alfrescoClient,
+            ticket: req.auth.ticket,
+            findingNodeId: finding.nodeId,
+          }),
+          listEvidenceForSection({
+            alfrescoClient,
+            ticket: req.auth.ticket,
+            sectionNodeId: finding.nodeId,
+          }),
+        ]);
 
         return res.status(200).json({
           ...finding,
@@ -933,9 +946,48 @@ function createFindingsRouter({ auth, alfrescoClient, notificationService, now =
             now: now(),
           }),
           followUpReports,
+          evidence,
         });
       } catch (error) {
         return res.status(502).json(buildError('FINDING_DETAIL_FAILED', error.message));
+      }
+    }
+  );
+
+  router.get(
+    '/:findingId/evidence/:evidenceNodeId/content',
+    auth.authenticate,
+    auth.authorize(['inspector', 'planner', 'admin', 'cap_entry']),
+    async (req, res) => {
+      try {
+        const findingNode = await alfrescoClient.searchFindingByBusinessId({
+          ticket: req.auth.ticket,
+          findingId: req.params.findingId,
+        });
+        if (!findingNode) {
+          return res.status(404).json(buildError('FINDING_NOT_FOUND', 'Finding not found'));
+        }
+
+        const evidenceList = await listEvidenceForSection({
+          alfrescoClient,
+          ticket: req.auth.ticket,
+          sectionNodeId: findingNode.id,
+        });
+        const evidence = evidenceList.find((item) => item.nodeId === req.params.evidenceNodeId);
+        if (!evidence) {
+          return res.status(404).json(buildError('EVIDENCE_NOT_FOUND', 'Evidence item not found for this finding'));
+        }
+
+        const { buffer, contentType } = await alfrescoClient.getNodeContent({
+          ticket: req.auth.ticket,
+          nodeId: evidence.nodeId,
+        });
+
+        res.setHeader('Content-Type', contentType);
+        res.setHeader('Content-Disposition', `inline; filename="${(evidence.name || 'evidence').replace(/"/g, '')}"`);
+        return res.status(200).send(buffer);
+      } catch (error) {
+        return res.status(502).json(buildError('FINDING_EVIDENCE_CONTENT_FAILED', error.message));
       }
     }
   );

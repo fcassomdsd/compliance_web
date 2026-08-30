@@ -38,6 +38,7 @@ function buildFixture() {
     properties: {
       'vso:findingId': 'MDPP001-AYVIS-01',
       'vso:findingStatus': 'Open',
+      'vso:findingLevel': 'Non-Compliance',
       'vso:submissionDeadline': '2026-04-01',
       'vso:inspectionId': 'MDPP-001',
       'vso:locationId': 'LOC-01',
@@ -75,14 +76,43 @@ function buildFixture() {
     },
   };
 
+  const evidenceNode = {
+    id: 'evidence-node-1',
+    nodeType: 'vso:evidenceItem',
+    name: 'photo.jpg',
+    properties: {
+      'vso:evidenceId': 'EV-01',
+      'vso:evidenceType': 'image/jpeg',
+    },
+  };
+
   return {
     inspectionNode,
     findingNode,
     capNode,
+    evidenceNode,
+    findingEvidenceNodes: [evidenceNode],
     followUpNodes: [],
     followUpCapLinks: new Map(),
     capSectionChildren: new Map(),
     lastCreatedChildNodeArgs: null,
+  };
+}
+
+const FINDING_SEVERITY_RECORDS = [
+  { id: 'sev-a', name: 'A', daysToSolution: 7, daysToSubmission: 3 },
+  { id: 'sev-b', name: 'B', daysToSolution: 30, daysToSubmission: 15 },
+  { id: 'sev-c', name: 'C', daysToSolution: 90, daysToSubmission: 30 },
+];
+
+function buildNodeRedClientMock() {
+  return {
+    queryEntity: async ({ entity, data }) => {
+      if (entity === 'FindingSeverity') {
+        return { list: FINDING_SEVERITY_RECORDS.filter((record) => record.name === data.name) };
+      }
+      return { list: [] };
+    },
   };
 }
 
@@ -161,6 +191,9 @@ async function buildApp({ roles = ['cap_entry'], now = new Date('2026-04-03T10:0
       return { id: `${sourceNodeId}->${targetNodeId}` };
     },
     listTargetAssociations: async ({ nodeId, assocType }) => {
+      if (assocType === 'vso:relatedEvidence' && nodeId === fixture.findingNode.id) {
+        return fixture.findingEvidenceNodes;
+      }
       if (assocType !== 'vso:relatedCorrectiveAction') {
         return [];
       }
@@ -237,6 +270,12 @@ async function buildApp({ roles = ['cap_entry'], now = new Date('2026-04-03T10:0
     putNodeContent: async ({ nodeId }) => {
       return { id: nodeId };
     },
+    getNodeContent: async ({ nodeId }) => {
+      if (nodeId === fixture.evidenceNode.id) {
+        return { buffer: Buffer.from('fake-image-bytes'), contentType: 'image/jpeg' };
+      }
+      throw Object.assign(new Error('Not found'), { response: { status: 404 } });
+    },
     getNodeById: async ({ nodeId }) => {
       if (nodeId === fixture.inspectionNode.id) {
         return fixture.inspectionNode;
@@ -268,6 +307,7 @@ async function buildApp({ roles = ['cap_entry'], now = new Date('2026-04-03T10:0
     sessionRepository,
     alfrescoClient,
     notificationService,
+    nodeRedClient: buildNodeRedClientMock(),
     logger: console,
     now: () => now,
   });
@@ -747,30 +787,47 @@ describe('Findings and CAP API', () => {
 
     expect(response.status).toBe(200);
     expect(response.body.finding.findingReviewStatus).toBe('Confirmed');
+    expect(response.body.finding.findingReviewedBy).toBe('tester');
     expect(response.body.finding.description).toBe('Finding description');
     expect(fixture.findingNode.properties['vso:findingReviewDate']).toBeTruthy();
+    // No findingSeverity sent, so deadlines are untouched.
+    expect(fixture.findingNode.properties['vso:resolutionDeadline']).toBeUndefined();
   });
 
-  it('confirms a finding while correcting its content', async () => {
-    const { app, fixture } = await buildApp({ roles: ['inspector'] });
+  it('confirms a finding while updating its severity, recomputing both deadlines from FindingSeverity', async () => {
+    const { app, fixture } = await buildApp({ roles: ['inspector'], now: new Date('2026-04-03T10:00:00.000Z') });
     fixture.findingNode.properties['vso:findingReviewStatus'] = 'Pending Review';
 
     const response = await request(app)
       .patch('/api/findings/MDPP001-AYVIS-01/review')
       .set('Cookie', 'compliance_session_id=session-1')
       .set('x-csrf-token', 'csrf-token-1')
-      .send({
-        description: 'Corrected description after review',
-        findingSeverity: 'A',
-        riskClassification: 'High',
-      });
+      .send({ findingSeverity: 'A' });
 
     expect(response.status).toBe(200);
     expect(response.body.finding.findingReviewStatus).toBe('Confirmed');
-    expect(response.body.finding.description).toBe('Corrected description after review');
+    expect(response.body.finding.findingReviewedBy).toBe('tester');
     expect(response.body.finding.findingSeverity).toBe('A');
-    expect(response.body.finding.riskClassification).toBe('High');
-    expect(fixture.findingNode.properties['vso:description']).toBe('Corrected description after review');
+    // Severity A: daysToSolution=7, daysToSubmission=3, from baseDate 2026-04-03.
+    expect(response.body.finding.resolutionDeadline).toBe('2026-04-10');
+    expect(response.body.finding.submissionDeadline).toBe('2026-04-06');
+    // Fields other than findingSeverity are never accepted by this endpoint.
+    expect(fixture.findingNode.properties['vso:description']).toBe('Finding description');
+  });
+
+  it('rejects reviewing a finding whose findingLevel is not Non-Compliance', async () => {
+    const { app, fixture } = await buildApp({ roles: ['inspector'] });
+    fixture.findingNode.properties['vso:findingLevel'] = 'Observation';
+    fixture.findingNode.properties['vso:findingReviewStatus'] = 'Pending Review';
+
+    const response = await request(app)
+      .patch('/api/findings/MDPP001-AYVIS-01/review')
+      .set('Cookie', 'compliance_session_id=session-1')
+      .set('x-csrf-token', 'csrf-token-1')
+      .send({});
+
+    expect(response.status).toBe(400);
+    expect(response.body.code).toBe('FINDING_REVIEW_NOT_APPLICABLE');
   });
 
   it('rejects reviewing a finding a second time once already confirmed', async () => {
@@ -797,6 +854,42 @@ describe('Findings and CAP API', () => {
       .send({});
 
     expect(response.status).toBe(403);
+  });
+
+  it('includes the finding\'s attached evidence in the detail response', async () => {
+    const { app } = await buildApp({ roles: ['inspector'] });
+
+    const response = await request(app)
+      .get('/api/findings/MDPP001-AYVIS-01')
+      .set('Cookie', 'compliance_session_id=session-1');
+
+    expect(response.status).toBe(200);
+    expect(response.body.evidence).toHaveLength(1);
+    expect(response.body.evidence[0].nodeId).toBe('evidence-node-1');
+    expect(response.body.evidence[0].name).toBe('photo.jpg');
+  });
+
+  it('streams finding evidence content', async () => {
+    const { app } = await buildApp({ roles: ['inspector'] });
+
+    const response = await request(app)
+      .get('/api/findings/MDPP001-AYVIS-01/evidence/evidence-node-1/content')
+      .set('Cookie', 'compliance_session_id=session-1');
+
+    expect(response.status).toBe(200);
+    expect(response.headers['content-type']).toContain('image/jpeg');
+    expect(Buffer.from(response.body).toString()).toBe('fake-image-bytes');
+  });
+
+  it('returns 404 for an evidence id not attached to the finding', async () => {
+    const { app } = await buildApp({ roles: ['inspector'] });
+
+    const response = await request(app)
+      .get('/api/findings/MDPP001-AYVIS-01/evidence/unknown-evidence/content')
+      .set('Cookie', 'compliance_session_id=session-1');
+
+    expect(response.status).toBe(404);
+    expect(response.body.code).toBe('EVIDENCE_NOT_FOUND');
   });
 
   it('filters findings list by reviewStatus', async () => {

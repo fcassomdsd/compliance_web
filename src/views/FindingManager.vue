@@ -56,13 +56,19 @@
             <td>
               <BaseButton variant="ghost" size="sm" @click="viewDetail(finding.findingId)">View</BaseButton>
               <BaseButton variant="ghost" size="sm" @click="goToFollowUps(finding.findingId)">Follow-ups</BaseButton>
+              <BaseButton
+                v-if="isReviewable(finding)"
+                variant="ghost"
+                size="sm"
+                @click="startReview(finding.findingId)"
+              >Review</BaseButton>
             </td>
           </tr>
         </tbody>
       </table>
     </section>
 
-    <section v-if="findingStore.selectedFinding" class="card detail-panel">
+    <section v-if="findingStore.selectedFinding && !reviewMode" class="card detail-panel">
       <h3>Finding Detail: {{ findingStore.selectedFinding.findingId }}</h3>
       <p><strong>Description:</strong> {{ findingStore.selectedFinding.description || '-' }}</p>
       <p><strong>Requirement breached:</strong> {{ findingStore.selectedFinding.requirementBreached || '-' }}</p>
@@ -73,49 +79,81 @@
       </p>
       <BaseButton variant="primary" size="sm" @click="goToCaps(findingStore.selectedFinding.findingId)">Open CAP Manager</BaseButton>
       <BaseButton variant="ghost" size="sm" @click="goToFollowUps(findingStore.selectedFinding.findingId)">Open Follow-up Manager</BaseButton>
+      <BaseButton
+        v-if="isReviewable(findingStore.selectedFinding)"
+        variant="ghost"
+        size="sm"
+        @click="startReview(findingStore.selectedFinding.findingId)"
+      >Review</BaseButton>
+    </section>
+
+    <section v-if="findingStore.selectedFinding && reviewMode" class="card detail-panel">
+      <h3>Review Finding: {{ findingStore.selectedFinding.findingId }}</h3>
+      <div class="form-grid">
+        <div class="form-field">
+          <label>Finding ID</label>
+          <p class="readonly-value">{{ findingStore.selectedFinding.findingId }}</p>
+        </div>
+        <div class="form-field">
+          <label>Finding Level</label>
+          <p class="readonly-value">{{ findingStore.selectedFinding.findingLevel }}</p>
+        </div>
+        <div class="form-field">
+          <label>Date Issued</label>
+          <p class="readonly-value">{{ formatDate(findingStore.selectedFinding.dateIssued) || '-' }}</p>
+        </div>
+        <div class="form-field">
+          <label>Checklist Item Code</label>
+          <p class="readonly-value">{{ findingStore.selectedFinding.checklistItemCode || '-' }}</p>
+        </div>
+        <div class="form-field field-span-2">
+          <label>Requirement Breached</label>
+          <p class="readonly-value">{{ findingStore.selectedFinding.requirementBreached || '-' }}</p>
+        </div>
+        <div class="form-field field-span-2">
+          <label>Description</label>
+          <p class="readonly-value">{{ findingStore.selectedFinding.description || '-' }}</p>
+        </div>
+        <div class="form-field">
+          <label>National Regulation</label>
+          <p class="readonly-value">{{ findingStore.selectedFinding.nationalRegulation || '-' }}</p>
+        </div>
+        <div class="form-field">
+          <label>Regulation Item</label>
+          <p class="readonly-value">{{ findingStore.selectedFinding.regulationItem || '-' }}</p>
+        </div>
+        <div class="form-field">
+          <label for="reviewFindingSeverity">Finding Severity</label>
+          <select id="reviewFindingSeverity" v-model="reviewSeverity">
+            <option value="A">A</option>
+            <option value="B">B</option>
+            <option value="C">C</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="evidence-section">
+        <h4>Evidence</h4>
+        <ul v-if="findingStore.selectedFinding.evidence?.length" class="evidence-list">
+          <li v-for="item in findingStore.selectedFinding.evidence" :key="item.nodeId">
+            <span class="evidence-name">{{ item.name }}</span>
+            <BaseButton variant="ghost" size="sm" @click="viewFindingEvidence(item)">View</BaseButton>
+          </li>
+        </ul>
+        <p v-else class="helper-text">No evidence attached.</p>
+      </div>
+
+      <div class="form-actions">
+        <BaseButton variant="ghost" @click="cancelReview">Cancel</BaseButton>
+        <BaseButton variant="primary" @click="confirmReview" :disabled="findingStore.loading">Confirm Review</BaseButton>
+      </div>
     </section>
 
     <div class="detail-buttons">
-      <BaseButton variant="secondary" size="sm" :class="{ 'push-button-active': showReviewForm }" @click="showReviewForm = !showReviewForm">Review Finding</BaseButton>
       <BaseButton variant="secondary" size="sm" :class="{ 'push-button-active': showClosureForm }" @click="showClosureForm = !showClosureForm">Closure Review</BaseButton>
       <BaseButton variant="secondary" size="sm" :class="{ 'push-button-active': showExtensionRequestForm }" @click="showExtensionRequestForm = !showExtensionRequestForm">Request Deadline Extension</BaseButton>
       <BaseButton variant="secondary" size="sm" :class="{ 'push-button-active': showExtensionReviewForm }" @click="showExtensionReviewForm = !showExtensionReviewForm">Review Deadline Extension</BaseButton>
     </div>
-
-    <section v-if="showReviewForm" class="card">
-      <h3>Review Finding</h3>
-      <div class="form-grid">
-        <div class="form-field">
-          <label for="reviewFindingId">Finding ID</label>
-          <input id="reviewFindingId" v-model="reviewForm.findingId" type="text" />
-        </div>
-        <div class="form-field field-span-2">
-          <label for="reviewDescription">Description</label>
-          <textarea id="reviewDescription" v-model="reviewForm.description" rows="2" />
-        </div>
-        <div class="form-field">
-          <label for="reviewFindingLevel">Finding Level</label>
-          <input id="reviewFindingLevel" v-model="reviewForm.findingLevel" type="text" />
-        </div>
-        <div class="form-field">
-          <label for="reviewFindingSeverity">Finding Severity</label>
-          <input id="reviewFindingSeverity" v-model="reviewForm.findingSeverity" type="text" />
-        </div>
-        <div class="form-field">
-          <label for="reviewRiskClassification">Risk Classification</label>
-          <input id="reviewRiskClassification" v-model="reviewForm.riskClassification" type="text" />
-        </div>
-        <div class="form-field">
-          <label for="reviewTargetResidualRisk">Target Residual Risk</label>
-          <input id="reviewTargetResidualRisk" v-model="reviewForm.targetResidualRisk" type="text" />
-        </div>
-        <div class="form-field field-span-2">
-          <label for="reviewRequirementBreached">Requirement Breached</label>
-          <textarea id="reviewRequirementBreached" v-model="reviewForm.requirementBreached" rows="2" />
-        </div>
-      </div>
-      <BaseButton variant="primary" @click="reviewFinding" :disabled="findingStore.loading">Confirm Review</BaseButton>
-    </section>
 
     <section v-if="showClosureForm" class="card">
       <h3>Closure Review</h3>
@@ -185,6 +223,7 @@ import ScopePicker from '@/components/common/ScopePicker.vue';
 import { useFindingStore } from '@/stores/findingStore';
 import { useAuthStore } from '@/stores/authStore';
 import { formatDate } from '@/utils/formatDate';
+import { apiFindingEvidenceContentUrl } from '@/services/apiServices';
 
 const router = useRouter();
 const route = useRoute();
@@ -192,20 +231,12 @@ const findingStore = useFindingStore();
 const authStore = useAuthStore();
 
 const message = ref('');
-const showReviewForm = ref(false);
 const showClosureForm = ref(false);
 const showExtensionRequestForm = ref(false);
 const showExtensionReviewForm = ref(false);
 
-const reviewForm = reactive({
-  findingId: '',
-  description: '',
-  findingLevel: '',
-  findingSeverity: '',
-  riskClassification: '',
-  targetResidualRisk: '',
-  requirementBreached: '',
-});
+const reviewMode = ref(false);
+const reviewSeverity = ref('A');
 
 const closureForm = reactive({
   findingId: '',
@@ -223,36 +254,47 @@ const extensionReviewForm = reactive({
   decision: 'Accepted',
 });
 
-function buildReviewEdits() {
-  const edits = {};
-  for (const field of ['description', 'findingLevel', 'findingSeverity', 'riskClassification', 'targetResidualRisk', 'requirementBreached']) {
-    if (reviewForm[field]) {
-      edits[field] = reviewForm[field];
-    }
-  }
-  return edits;
+function isReviewable(finding) {
+  return finding?.findingLevel === 'Non-Compliance' && finding?.findingReviewStatus !== 'Confirmed';
 }
 
-async function reviewFinding() {
+async function startReview(findingId) {
+  reviewMode.value = true;
+  await findingStore.fetchFindingDetail(findingId);
+  reviewSeverity.value = findingStore.selectedFinding?.findingSeverity || 'A';
+}
+
+function cancelReview() {
+  reviewMode.value = false;
+}
+
+async function confirmReview() {
   message.value = '';
+  const findingId = findingStore.selectedFinding?.findingId;
+  if (!findingId) {
+    return;
+  }
   try {
     await findingStore.reviewFinding({
-      findingId: reviewForm.findingId,
-      edits: buildReviewEdits(),
+      findingId,
+      edits: { findingSeverity: reviewSeverity.value },
       csrfToken: authStore.csrfToken,
     });
     message.value = 'Finding review confirmed.';
-    reviewForm.findingId = '';
-    reviewForm.description = '';
-    reviewForm.findingLevel = '';
-    reviewForm.findingSeverity = '';
-    reviewForm.riskClassification = '';
-    reviewForm.targetResidualRisk = '';
-    reviewForm.requirementBreached = '';
+    reviewMode.value = false;
+    await findingStore.fetchFindingDetail(findingId);
     await loadFindings();
   } catch (error) {
     console.error('Finding review failed:', error);
   }
+}
+
+function viewFindingEvidence(item) {
+  const findingId = findingStore.selectedFinding?.findingId;
+  if (!findingId) {
+    return;
+  }
+  window.open(apiFindingEvidenceContentUrl(findingId, item.nodeId), '_blank', 'noopener');
 }
 
 async function closureReview() {
@@ -381,6 +423,7 @@ async function loadFindings() {
 }
 
 async function viewDetail(findingId) {
+  reviewMode.value = false;
   await findingStore.fetchFindingDetail(findingId);
 }
 
@@ -455,6 +498,61 @@ onMounted(async () => {
   background-color: var(--color-primary-700);
   color: var(--color-white);
   border-color: var(--color-primary-700);
+}
+
+.readonly-value {
+  margin: 0;
+  padding: var(--space-3) var(--space-4);
+  background: var(--color-gray-100);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  font-size: var(--text-base);
+  color: var(--color-gray-900);
+  min-height: 1.2em;
+}
+
+.evidence-section {
+  margin-top: var(--space-3);
+  margin-bottom: var(--space-3);
+}
+
+.evidence-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.evidence-list li {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  background: var(--color-gray-50);
+}
+
+.evidence-name {
+  flex: 1;
+  font-size: var(--text-sm);
+  overflow-wrap: anywhere;
+}
+
+.helper-text {
+  margin: 0;
+  color: var(--color-gray-700);
+  font-size: var(--text-sm);
+}
+
+.form-actions {
+  grid-column: 1 / -1;
+  display: flex;
+  justify-content: center;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
 }
 
 .form-grid {

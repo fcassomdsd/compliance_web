@@ -62,6 +62,7 @@ async function start() {
     emailTransport,
     logger: auditLogger,
   });
+  const nodeRedClient = new NodeRedClient({ baseUrl: process.env.NODE_RED_BASE_URL });
 
   const app = createApp({
     config: runtimeConfig,
@@ -72,6 +73,7 @@ async function start() {
     capDraftRepository,
     notificationRepository,
     notificationService,
+    nodeRedClient,
   });
 
   app.listen(port, () => {
@@ -94,7 +96,6 @@ async function start() {
     intervalMs: Number(process.env.NOTIFICATION_SEND_INTERVAL_MS || 60 * 1000),
   });
 
-  const nodeRedClient = new NodeRedClient({ baseUrl: process.env.NODE_RED_BASE_URL });
   startSiteVisitSchedulingJob({
     alfrescoClient,
     nodeRedClient,
