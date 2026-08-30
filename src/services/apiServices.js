@@ -447,7 +447,7 @@ export async function apiCapDetail(capId) {
   }
 }
 
-export async function apiReviewCap(capId, acceptanceStatus, csrfToken) {
+export async function apiReviewCap(capId, acceptanceStatus, csrfToken, reason) {
   try {
     if (!capId || typeof capId !== 'string') {
       throw new Error('capId is required');
@@ -456,13 +456,16 @@ export async function apiReviewCap(capId, acceptanceStatus, csrfToken) {
     const result = await axios({
       method: 'patch',
       url: `${complianceApiServer}/caps/${encodeURIComponent(capId)}/review`,
-      data: { acceptanceStatus },
+      data: { acceptanceStatus, ...(reason ? { reason } : {}) },
       headers: buildCsrfHeader(csrfToken),
       withCredentials: true,
     });
     return { data: result.data, status: result.status };
   } catch (error) {
-    throw new Error('apiReviewCap: ' + error.message);
+    const backendMessage = error?.response?.data?.message || error?.response?.data?.error;
+    const status = error?.response?.status;
+    const detail = backendMessage || error.message;
+    throw new Error(`apiReviewCap: ${status ? `[${status}] ` : ''}${detail}`);
   }
 }
 
@@ -625,8 +628,8 @@ export async function apiUploadCapEvidence(capId, section, file, csrfToken) {
     if (!capId || typeof capId !== 'string') {
       throw new Error('capId is required');
     }
-    if (section !== 'rca' && section !== 'risk-assessment') {
-      throw new Error('section must be "rca" or "risk-assessment"');
+    if (section !== 'rca' && section !== 'risk-assessment' && section !== 'containment') {
+      throw new Error('section must be "rca", "risk-assessment" or "containment"');
     }
     if (!file) {
       throw new Error('file is required');
