@@ -423,6 +423,10 @@ describe('Findings and CAP API', () => {
           tolerabilityLevel: 'Unacceptable',
           justification: 'Based on historical occurrence data',
         },
+        containmentMeasures: {
+          description: 'Temporary closure of the affected runway segment',
+          implementedDate: '2026-06-02',
+        },
         correctiveActions: [
           {
             description: 'Retrain staff',
@@ -511,6 +515,10 @@ describe('Findings and CAP API', () => {
         calculatedRiskLevel: 'High',
         tolerabilityLevel: 'Unacceptable',
         justification: 'Based on historical occurrence data',
+      },
+      containmentMeasures: {
+        description: 'Temporary closure of the affected runway segment',
+        implementedDate: '2026-06-02',
       },
       correctiveActions: [
         {
@@ -660,6 +668,56 @@ describe('Findings and CAP API', () => {
     expect(fixture.lastCreatedChildNodeArgs.parentNodeId).toBe('inspection-node-1');
   });
 
+  it('uploads Containment Measures evidence for a CAP', async () => {
+    const { app, fixture } = await buildApp({ roles: ['cap_entry'] });
+
+    await request(app)
+      .post('/api/findings/MDPP001-AYVIS-01/caps')
+      .set('Cookie', 'compliance_session_id=session-1')
+      .set('x-csrf-token', 'csrf-token-1')
+      .send(fullCapPayload());
+
+    const response = await request(app)
+      .post('/api/caps/CA-MDPP001AYVIS-01-02/containment/evidence')
+      .set('Cookie', 'compliance_session_id=session-1')
+      .set('x-csrf-token', 'csrf-token-1')
+      .attach('file', Buffer.from('%PDF-1.4 test'), { filename: 'evidence.pdf', contentType: 'application/pdf' });
+
+    expect(response.status).toBe(201);
+    expect(response.body.evidence.evidenceRole).toBe('Containment Evidence');
+    expect(fixture.lastCreatedChildNodeArgs.parentNodeId).toBe('inspection-node-1');
+  });
+
+  it('creates and returns the containment measures section on CAP creation', async () => {
+    const { app } = await buildApp({ roles: ['cap_entry'] });
+
+    const response = await request(app)
+      .post('/api/findings/MDPP001-AYVIS-01/caps')
+      .set('Cookie', 'compliance_session_id=session-1')
+      .set('x-csrf-token', 'csrf-token-1')
+      .send(fullCapPayload());
+
+    expect(response.status).toBe(201);
+    expect(response.body.cap.containmentMeasures.description).toBe('Temporary closure of the affected runway segment');
+    expect(response.body.cap.containmentMeasures.implementedDate).toBe('2026-06-02');
+  });
+
+  it('rejects CAP creation when containmentMeasures is missing', async () => {
+    const { app } = await buildApp({ roles: ['cap_entry'] });
+
+    const payload = fullCapPayload();
+    delete payload.containmentMeasures;
+
+    const response = await request(app)
+      .post('/api/findings/MDPP001-AYVIS-01/caps')
+      .set('Cookie', 'compliance_session_id=session-1')
+      .set('x-csrf-token', 'csrf-token-1')
+      .send(payload);
+
+    expect(response.status).toBe(400);
+    expect(response.body.error?.message || response.body.message).toMatch(/containmentMeasures/);
+  });
+
   it('preserves repository 422 errors during evidence upload', async () => {
     const { app, alfrescoClient } = await buildApp({ roles: ['cap_entry'] });
 
@@ -750,6 +808,10 @@ describe('Findings and CAP API', () => {
           calculatedRiskLevel: 'High',
           tolerabilityLevel: 'Unacceptable',
           justification: 'Based on historical occurrence data',
+        },
+        containmentMeasures: {
+          description: 'Temporary closure of the affected runway segment',
+          implementedDate: '2026-06-02',
         },
         correctiveActions: [
           {

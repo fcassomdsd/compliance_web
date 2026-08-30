@@ -26,7 +26,7 @@ const {
   isValidActionItemStatus,
   computeEffectiveFindingStatus,
   canSubmitCap,
-  isValidCapAcceptanceStatus,
+  isValidCapReviewDecision,
   isCapEditable,
   isFindingReviewConfirmed,
 } = require('../domain/statusRules.cjs');
@@ -122,6 +122,16 @@ function validateCorrectiveActions(items) {
   return null;
 }
 
+function validateContainmentMeasures(containmentMeasures) {
+  if (!containmentMeasures || typeof containmentMeasures !== 'object') {
+    return 'containmentMeasures is required';
+  }
+  if (!containmentMeasures.description || !containmentMeasures.implementedDate) {
+    return 'containmentMeasures.description and implementedDate are required';
+  }
+  return null;
+}
+
 function validateResidualRisk(residualRisk) {
   if (!residualRisk || typeof residualRisk !== 'object') {
     return 'residualRisk is required';
@@ -151,13 +161,16 @@ function validateEffectivenessVerification(verification) {
 // content. Full completeness is enforced by the strict validate* functions
 // above, only when a draft is submitted for review.
 function validateCapDraftPayloadShape(payload) {
-  const { rootCauseAnalysis, riskAssessment, correctiveActions, residualRisk, effectivenessVerification } = payload || {};
+  const { rootCauseAnalysis, riskAssessment, containmentMeasures, correctiveActions, residualRisk, effectivenessVerification } = payload || {};
 
   if (rootCauseAnalysis !== undefined && (typeof rootCauseAnalysis !== 'object' || rootCauseAnalysis === null)) {
     return 'rootCauseAnalysis must be an object';
   }
   if (riskAssessment !== undefined && (typeof riskAssessment !== 'object' || riskAssessment === null)) {
     return 'riskAssessment must be an object';
+  }
+  if (containmentMeasures !== undefined && (typeof containmentMeasures !== 'object' || containmentMeasures === null)) {
+    return 'containmentMeasures must be an object';
   }
   if (residualRisk !== undefined && (typeof residualRisk !== 'object' || residualRisk === null)) {
     return 'residualRisk must be an object';
@@ -193,6 +206,13 @@ function buildRiskAssessmentProperties(ra) {
     'vso:calculatedRiskLevel': ra.calculatedRiskLevel,
     'vso:tolerabilityLevel': ra.tolerabilityLevel,
     'vso:raJustification': ra.justification,
+  };
+}
+
+function buildContainmentMeasuresProperties(containmentMeasures) {
+  return {
+    'vso:containmentDescription': containmentMeasures.description,
+    'vso:containmentImplementedDate': containmentMeasures.implementedDate,
   };
 }
 
@@ -355,17 +375,19 @@ async function uploadEvidenceForSection({ alfrescoClient, ticket, capId, section
 // blindly — prevents one CAP's evidence being fetched/deleted via another
 // CAP's URL.
 async function findEvidenceNodeForCap({ alfrescoClient, ticket, capNode }, evidenceNodeId) {
-  const [rcaNodes, raNodes] = await Promise.all([
+  const [rcaNodes, raNodes, cmNodes] = await Promise.all([
     alfrescoClient.listChildrenByType({ ticket, parentNodeId: capNode.id, nodeType: 'vso:rootCauseAnalysis' }),
     alfrescoClient.listChildrenByType({ ticket, parentNodeId: capNode.id, nodeType: 'vso:riskAssessment' }),
+    alfrescoClient.listChildrenByType({ ticket, parentNodeId: capNode.id, nodeType: 'vso:containmentMeasures' }),
   ]);
 
-  const [rcaEvidence, raEvidence] = await Promise.all([
+  const [rcaEvidence, raEvidence, cmEvidence] = await Promise.all([
     listEvidenceForSection({ alfrescoClient, ticket, sectionNodeId: rcaNodes[0]?.id }),
     listEvidenceForSection({ alfrescoClient, ticket, sectionNodeId: raNodes[0]?.id }),
+    listEvidenceForSection({ alfrescoClient, ticket, sectionNodeId: cmNodes[0]?.id }),
   ]);
 
-  return [...rcaEvidence, ...raEvidence].find((item) => item.nodeId === evidenceNodeId) || null;
+  return [...rcaEvidence, ...raEvidence, ...cmEvidence].find((item) => item.nodeId === evidenceNodeId) || null;
 }
 
 function escapeAftsValue(value) {
@@ -434,6 +456,7 @@ async function performCapCreate({
   dueDate,
   rootCauseAnalysis,
   riskAssessment,
+  containmentMeasures,
   correctiveActions,
   residualRisk,
   effectivenessVerification,
@@ -543,6 +566,14 @@ async function performCapCreate({
     alfrescoClient.createChildNode({
       ticket,
       parentNodeId: created.id,
+      nodeType: 'vso:containmentMeasures',
+      name: `${effectiveCapId}-CONTAINMENT-MEASURES`,
+      associationType: 'vso:hasContainmentMeasures',
+      properties: buildContainmentMeasuresProperties(containmentMeasures),
+    }),
+    alfrescoClient.createChildNode({
+      ticket,
+      parentNodeId: created.id,
       nodeType: 'vso:residualRisk',
       name: `${effectiveCapId}-RESIDUAL-RISK`,
       associationType: 'vso:hasResidualRisk',
@@ -626,6 +657,7 @@ function createCapsRouter({ auth, alfrescoClient, capDraftRepository, notificati
 
         const rootCauseAnalysis = req.body?.rootCauseAnalysis;
         const riskAssessment = req.body?.riskAssessment;
+        const containmentMeasures = req.body?.containmentMeasures;
         const correctiveActions = req.body?.correctiveActions;
         const residualRisk = req.body?.residualRisk;
         const effectivenessVerification = req.body?.effectivenessVerification;
@@ -633,6 +665,7 @@ function createCapsRouter({ auth, alfrescoClient, capDraftRepository, notificati
         const validationError =
           validateRootCauseAnalysis(rootCauseAnalysis) ||
           validateRiskAssessment(riskAssessment) ||
+          validateContainmentMeasures(containmentMeasures) ||
           validateCorrectiveActions(correctiveActions) ||
           validateResidualRisk(residualRisk) ||
           validateEffectivenessVerification(effectivenessVerification);
@@ -651,6 +684,7 @@ function createCapsRouter({ auth, alfrescoClient, capDraftRepository, notificati
           dueDate,
           rootCauseAnalysis,
           riskAssessment,
+          containmentMeasures,
           correctiveActions,
           residualRisk,
           effectivenessVerification,
@@ -809,6 +843,7 @@ function createCapsRouter({ auth, alfrescoClient, capDraftRepository, notificati
           dueDate,
           rootCauseAnalysis,
           riskAssessment,
+          containmentMeasures,
           correctiveActions,
           residualRisk,
           effectivenessVerification,
@@ -817,6 +852,7 @@ function createCapsRouter({ auth, alfrescoClient, capDraftRepository, notificati
         const validationError =
           validateRootCauseAnalysis(rootCauseAnalysis) ||
           validateRiskAssessment(riskAssessment) ||
+          validateContainmentMeasures(containmentMeasures) ||
           validateCorrectiveActions(correctiveActions) ||
           validateResidualRisk(residualRisk) ||
           validateEffectivenessVerification(effectivenessVerification);
@@ -857,6 +893,7 @@ function createCapsRouter({ auth, alfrescoClient, capDraftRepository, notificati
           dueDate,
           rootCauseAnalysis,
           riskAssessment,
+          containmentMeasures,
           correctiveActions,
           residualRisk,
           effectivenessVerification,
@@ -982,7 +1019,7 @@ function createCapsRouter({ auth, alfrescoClient, capDraftRepository, notificati
 
         const currentStatus = capNode?.properties?.['vso:acceptanceStatus'];
         if (!isCapEditable(currentStatus)) {
-          return res.status(409).json(buildError('CAP_NOT_EDITABLE', 'Only CAPs Returned for revision can be edited'));
+          return res.status(409).json(buildError('CAP_NOT_EDITABLE', 'Only CAPs marked Not Accepted can be edited'));
         }
 
         const {
@@ -991,6 +1028,7 @@ function createCapsRouter({ auth, alfrescoClient, capDraftRepository, notificati
           dueDate,
           rootCauseAnalysis,
           riskAssessment,
+          containmentMeasures,
           correctiveActions,
           residualRisk,
           effectivenessVerification,
@@ -1001,6 +1039,7 @@ function createCapsRouter({ auth, alfrescoClient, capDraftRepository, notificati
           const validationError =
             validateRootCauseAnalysis(rootCauseAnalysis) ||
             validateRiskAssessment(riskAssessment) ||
+            validateContainmentMeasures(containmentMeasures) ||
             validateCorrectiveActions(correctiveActions) ||
             validateResidualRisk(residualRisk) ||
             validateEffectivenessVerification(effectivenessVerification);
@@ -1044,7 +1083,7 @@ function createCapsRouter({ auth, alfrescoClient, capDraftRepository, notificati
             ...(dueDate !== undefined ? { 'vso:dueDate': dueDate } : {}),
             'vso:acceptanceStatus': resubmit
               ? CAP_ACCEPTANCE_STATUS.PENDING_REVIEW
-              : CAP_ACCEPTANCE_STATUS.RETURNED_FOR_REVISION,
+              : CAP_ACCEPTANCE_STATUS.NOT_ACCEPTED,
           },
         });
 
@@ -1083,6 +1122,22 @@ function createCapsRouter({ auth, alfrescoClient, capDraftRepository, notificati
                   nodeType: 'vso:riskAssessment',
                   name: `${req.params.capId}-RISK-ASSESSMENT`,
                   associationType: 'vso:hasRiskAssessment',
+                  properties,
+                })
+          );
+        }
+
+        if (containmentMeasures !== undefined) {
+          const properties = buildContainmentMeasuresProperties(containmentMeasures);
+          sectionWrites.push(
+            existingSections.containmentMeasures?.nodeId
+              ? alfrescoClient.updateNodeProperties({ ticket: req.auth.ticket, nodeId: existingSections.containmentMeasures.nodeId, properties })
+              : alfrescoClient.createChildNode({
+                  ticket: req.auth.ticket,
+                  parentNodeId: capNode.id,
+                  nodeType: 'vso:containmentMeasures',
+                  name: `${req.params.capId}-CONTAINMENT-MEASURES`,
+                  associationType: 'vso:hasContainmentMeasures',
                   properties,
                 })
           );
@@ -1209,8 +1264,13 @@ function createCapsRouter({ auth, alfrescoClient, capDraftRepository, notificati
     async (req, res) => {
       try {
         const acceptanceStatus = req.body?.acceptanceStatus;
-        if (!isValidCapAcceptanceStatus(acceptanceStatus)) {
-          return res.status(400).json(buildError('CAP_BAD_REVIEW_STATUS', 'Invalid acceptanceStatus value'));
+        if (!isValidCapReviewDecision(acceptanceStatus)) {
+          return res.status(400).json(buildError('CAP_BAD_REVIEW_STATUS', 'acceptanceStatus must be "Accepted" or "Not Accepted"'));
+        }
+
+        const reason = String(req.body?.reason || '').trim();
+        if (acceptanceStatus === CAP_ACCEPTANCE_STATUS.NOT_ACCEPTED && !reason) {
+          return res.status(400).json(buildError('CAP_REVIEW_REASON_REQUIRED', 'A reason is required when a CAP is marked Not Accepted'));
         }
 
         const capNode = await alfrescoClient.searchCapByBusinessId({
@@ -1231,6 +1291,9 @@ function createCapsRouter({ auth, alfrescoClient, capDraftRepository, notificati
           nodeId: capNode.id,
           properties: {
             'vso:acceptanceStatus': acceptanceStatus,
+            'vso:capReviewedBy': req.auth.username,
+            'vso:capReviewDate': nowIsoDate(now()),
+            ...(reason ? { 'vso:capReviewReason': reason } : {}),
           },
         });
 
@@ -1400,6 +1463,35 @@ function createCapsRouter({ auth, alfrescoClient, capDraftRepository, notificati
     }
   );
 
+  router.post(
+    '/caps/:capId/containment/evidence',
+    auth.authenticate,
+    auth.authorize(['cap_entry', 'admin']),
+    auth.requireCsrf(),
+    singleEvidenceUpload('file'),
+    async (req, res) => {
+      try {
+        if (!req.file) {
+          return res.status(400).json(buildError('EVIDENCE_BAD_REQUEST', 'file is required'));
+        }
+        const result = await uploadEvidenceForSection({
+          alfrescoClient,
+          ticket: req.auth.ticket,
+          capId: req.params.capId,
+          sectionNodeType: 'vso:containmentMeasures',
+          evidenceRole: 'Containment Evidence',
+          file: req.file,
+        });
+        return res.status(result.status).json(result.body);
+      } catch (error) {
+        const status = extractRepositoryErrorStatus(error);
+        return res
+          .status(status && status >= 400 && status < 500 ? status : 502)
+          .json(buildError('EVIDENCE_UPLOAD_FAILED', extractRepositoryErrorMessage(error)));
+      }
+    }
+  );
+
   router.get(
     '/caps/:capId/evidence/:evidenceNodeId/content',
     auth.authenticate,
@@ -1456,7 +1548,7 @@ function createCapsRouter({ auth, alfrescoClient, capDraftRepository, notificati
 
         const currentStatus = capNode?.properties?.['vso:acceptanceStatus'];
         if (!isCapEditable(currentStatus)) {
-          return res.status(409).json(buildError('CAP_NOT_EDITABLE', 'Only CAPs Returned for revision can have evidence removed'));
+          return res.status(409).json(buildError('CAP_NOT_EDITABLE', 'Only CAPs marked Not Accepted can have evidence removed'));
         }
 
         const evidence = await findEvidenceNodeForCap(
