@@ -261,12 +261,12 @@ describe('CorrectiveActionManager.vue', () => {
     expect(wrapper.vm.showSubmit).toBe(true);
   });
 
-  it('saveReturnedChangesAction saves without resubmitting', async () => {
+  it('saveNotAcceptedChangesAction saves without resubmitting', async () => {
     const wrapper = mountComponent();
     await wrapper.vm.$nextTick();
 
     wrapper.vm.editMode = { type: 'notAccepted', capId: 'CAP-7' };
-    await wrapper.vm.saveReturnedChangesAction();
+    await wrapper.vm.saveNotAcceptedChangesAction();
 
     expect(mockCapStore.updateCap).toHaveBeenCalledWith({
       capId: 'CAP-7',
@@ -277,12 +277,12 @@ describe('CorrectiveActionManager.vue', () => {
     expect(wrapper.vm.editMode.type).toBe('notAccepted');
   });
 
-  it('resubmitReturnedAction saves with resubmit flag and resets the form', async () => {
+  it('resubmitNotAcceptedAction saves with resubmit flag and resets the form', async () => {
     const wrapper = mountComponent();
     await wrapper.vm.$nextTick();
 
     wrapper.vm.editMode = { type: 'notAccepted', capId: 'CAP-7' };
-    await wrapper.vm.resubmitReturnedAction();
+    await wrapper.vm.resubmitNotAcceptedAction();
 
     expect(mockCapStore.updateCap).toHaveBeenCalledWith({
       capId: 'CAP-7',
