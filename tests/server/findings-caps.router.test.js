@@ -305,6 +305,10 @@ async function buildApp({ roles = ['cap_entry'], now = new Date('2026-04-03T10:0
       }
       return null;
     },
+    deleteNode: async ({ nodeId }) => {
+      fixture.deletedNodeIds = [...(fixture.deletedNodeIds || []), nodeId];
+      fixture.followUpNodes = fixture.followUpNodes.filter((node) => node.id !== nodeId);
+    },
   };
 
   const app = createApp({
@@ -1048,6 +1052,53 @@ describe('Findings and CAP API', () => {
     // reviewed and confirmed Adequate (PATCH .../evidence-review below).
     expect(response.body.followUpReport.evidenceReviewStatus).toBe('Pending Review');
     expect(fixture.findingNode.properties['vso:findingStatus']).toBe('Open');
+  });
+
+  it('rolls back the created follow-up node when the CAP association step fails', async () => {
+    const { app, fixture, alfrescoClient } = await buildApp({ roles: ['inspector'] });
+
+    alfrescoClient.createTargetAssociation = async () => {
+      throw new Error('Association failed');
+    };
+
+    const response = await request(app)
+      .post('/api/findings/MDPP001-AYVIS-01/follow-ups')
+      .set('Cookie', 'compliance_session_id=session-1')
+      .set('x-csrf-token', 'csrf-token-1')
+      .send({
+        followUpType: 'Progress Review',
+        inheritedCapId: 'CA-MDPP001AYVIS-01-01',
+        percentComplete: 10,
+      });
+
+    expect(response.status).toBe(502);
+    expect(fixture.deletedNodeIds).toContain('follow-up-node-created');
+    expect(fixture.followUpNodes.find((node) => node.id === 'follow-up-node-created')).toBeUndefined();
+  });
+
+  it('cleans up an orphaned follow-up node when node creation succeeds server-side despite a client-side error', async () => {
+    const { app, fixture, alfrescoClient } = await buildApp({ roles: ['inspector'] });
+
+    alfrescoClient.createChildNode = async ({ parentNodeId, nodeType, name, properties }) => {
+      // Simulates a write that reaches and completes on Alfresco even
+      // though the client (e.g. due to a timeout) sees this call fail.
+      const next = { id: 'follow-up-node-orphaned', parentId: parentNodeId, nodeType, name, properties };
+      fixture.followUpNodes = [...fixture.followUpNodes, next];
+      throw new Error('timeout of 10000ms exceeded');
+    };
+
+    const response = await request(app)
+      .post('/api/findings/MDPP001-AYVIS-01/follow-ups')
+      .set('Cookie', 'compliance_session_id=session-1')
+      .set('x-csrf-token', 'csrf-token-1')
+      .send({
+        followUpType: 'Progress Review',
+        percentComplete: 10,
+      });
+
+    expect(response.status).toBe(502);
+    expect(fixture.deletedNodeIds).toContain('follow-up-node-orphaned');
+    expect(fixture.followUpNodes.find((node) => node.id === 'follow-up-node-orphaned')).toBeUndefined();
   });
 
   it('marking evidence Adequate on a closure-verification follow-up moves the finding to Pending Closure Approval', async () => {

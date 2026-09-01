@@ -123,6 +123,33 @@ function extractUpstreamErrorDetail(error) {
   return briefSummary || message || payload?.message || payload?.error || errorKey || error?.message || 'Unknown error';
 }
 
+// Best-effort cleanup after a failed follow-up creation. createdNodeId
+// covers failures in steps after createChildNode succeeded; when
+// createChildNode's own call is what failed (e.g. a client-side timeout
+// after the write already reached Alfresco), createdNodeId is unset and
+// we look the node up by its deterministic followUpId instead, since a
+// client retry after an unrecovered orphan produces a genuine duplicate.
+// Never throws — a cleanup failure must not mask the original error.
+async function cleanupOrphanedFollowUp({ alfrescoClient, ticket, parentNodeId, followUpId, createdNodeId }) {
+  try {
+    let nodeId = createdNodeId;
+    if (!nodeId) {
+      const siblings = await alfrescoClient.listChildrenByType({
+        ticket,
+        parentNodeId,
+        nodeType: 'vso:followUpReport',
+      });
+      const orphan = siblings.find((entry) => entry?.properties?.['vso:followUpId'] === followUpId);
+      nodeId = orphan?.id;
+    }
+    if (nodeId) {
+      await alfrescoClient.deleteNode({ ticket, nodeId });
+    }
+  } catch (cleanupError) {
+    console.error('Follow-up rollback failed', { followUpId, message: cleanupError.message });
+  }
+}
+
 function buildFindingsQuery(filters = {}) {
   const predicates = [
     "TYPE:'vso:finding'",
@@ -578,43 +605,58 @@ function createFindingsRouter({ auth, alfrescoClient, notificationService, nodeR
         }
 
         const inheritedCapId = selectedCap?.properties?.['vso:capId'] || null;
-        const created = await alfrescoClient.createChildNode({
-          ticket: req.auth.ticket,
-          parentNodeId: finding.nodeId,
-          nodeType: 'vso:followUpReport',
-          name: followUpId,
-          associationType: 'vso:hasFollowUp',
-          properties: {
-            'vso:followUpId': followUpId,
-            'vso:followUpType': followUpType,
-            'vso:followUpDate': followUpDate,
-            'vso:percentComplete': percentComplete,
-            ...(followUpClosureDate ? { 'vso:followUpClosureDate': followUpClosureDate } : {}),
-            ...(closureVerificationMethod ? { 'vso:closureVerificationMethod': closureVerificationMethod } : {}),
-            'vso:effectivenessConfirmed': effectivenessConfirmed,
-            // Evidence must be reviewed and confirmed Adequate before it can
-            // affect vso:findingStatus (see PATCH .../evidence-review below)
-            // — submitting a follow-up never changes the finding's status.
-            'vso:evidenceReviewStatus': 'Pending Review',
-            'vso:inspectionId': finding.inspectionId,
-            'vso:locationId': finding.locationId,
-            ...(finding.locationCode ? { 'vso:locationCode': finding.locationCode } : {}),
-            'vso:locationName': finding.locationName,
-            'vso:specialtyCode': finding.specialtyCode,
-            'vso:specialtyId': finding.specialtyId,
-            'vso:specialtyName': finding.specialtyName,
-            'vso:providerId': finding.providerId,
-            'vso:providerName': finding.providerName,
-          },
-        });
-
-        if (selectedCap) {
-          await alfrescoClient.createTargetAssociation({
+        let created;
+        try {
+          created = await alfrescoClient.createChildNode({
             ticket: req.auth.ticket,
-            sourceNodeId: created.id,
-            targetNodeId: selectedCap.id,
-            assocType: 'vso:relatedCorrectiveAction',
+            parentNodeId: finding.nodeId,
+            nodeType: 'vso:followUpReport',
+            name: followUpId,
+            associationType: 'vso:hasFollowUp',
+            properties: {
+              'vso:followUpId': followUpId,
+              'vso:followUpType': followUpType,
+              'vso:followUpDate': followUpDate,
+              'vso:percentComplete': percentComplete,
+              ...(followUpClosureDate ? { 'vso:followUpClosureDate': followUpClosureDate } : {}),
+              ...(closureVerificationMethod ? { 'vso:closureVerificationMethod': closureVerificationMethod } : {}),
+              'vso:effectivenessConfirmed': effectivenessConfirmed,
+              // Evidence must be reviewed and confirmed Adequate before it can
+              // affect vso:findingStatus (see PATCH .../evidence-review below)
+              // — submitting a follow-up never changes the finding's status.
+              'vso:evidenceReviewStatus': 'Pending Review',
+              'vso:inspectionId': finding.inspectionId,
+              'vso:locationId': finding.locationId,
+              ...(finding.locationCode ? { 'vso:locationCode': finding.locationCode } : {}),
+              'vso:locationName': finding.locationName,
+              'vso:specialtyCode': finding.specialtyCode,
+              'vso:specialtyId': finding.specialtyId,
+              'vso:specialtyName': finding.specialtyName,
+              'vso:providerId': finding.providerId,
+              'vso:providerName': finding.providerName,
+            },
           });
+
+          if (selectedCap) {
+            await alfrescoClient.createTargetAssociation({
+              ticket: req.auth.ticket,
+              sourceNodeId: created.id,
+              targetNodeId: selectedCap.id,
+              assocType: 'vso:relatedCorrectiveAction',
+            });
+          }
+        } catch (error) {
+          // A failure anywhere in this block must never leave a follow-up
+          // node behind — otherwise a client retry after the error creates
+          // a genuine duplicate on top of the orphan.
+          await cleanupOrphanedFollowUp({
+            alfrescoClient,
+            ticket: req.auth.ticket,
+            parentNodeId: finding.nodeId,
+            followUpId,
+            createdNodeId: created?.id,
+          });
+          throw error;
         }
 
         await notifyRoleInbox({
