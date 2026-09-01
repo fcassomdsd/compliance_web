@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia';
 import { authLogin, authLogout, authSession, authTicket } from '@/services/authServices';
-import { apiAssignmentGroup, apiInspectorByAlfrescoUser, setAlfrescoTicket } from '@/services/apiServices';
+import { apiInspectorByAlfrescoUser, setAlfrescoTicket } from '@/services/apiServices';
 
 function extractStatusCode(error) {
   const match = String(error?.message || '').match(/status code (\d{3})/i);
@@ -16,7 +16,6 @@ export const useAuthStore = defineStore('auth', {
     roles: [],
     groups: [],
     inspectorProfile: null,
-    assignerSpecialties: [],
     session: null,
     csrfToken: null,
     error: null,
@@ -32,9 +31,6 @@ export const useAuthStore = defineStore('auth', {
 
       const roleSet = new Set((state.roles || []).map((role) => String(role).trim().toLowerCase()));
       return required.some((role) => roleSet.has(String(role).trim().toLowerCase()));
-    },
-    assignerSpecialtyIds: (state) => {
-      return new Set((state.assignerSpecialties || []).map((specialty) => specialty?.id).filter(Boolean));
     },
     canManageServiceArea: (state) => (serviceAreaId) => {
       if (!state.hasRole('planner')) return false;
@@ -61,7 +57,6 @@ export const useAuthStore = defineStore('auth', {
       this.roles = [];
       this.groups = [];
       this.inspectorProfile = null;
-      this.assignerSpecialties = [];
       this.session = null;
       this.csrfToken = null;
       setAlfrescoTicket(null);
@@ -77,9 +72,14 @@ export const useAuthStore = defineStore('auth', {
       }
     },
 
+    // Note: this used to additionally derive an "assigner specialty scope" by
+    // matching GROUP_U-VSO-IN_ASSIGNER* Alfresco groups (AssignerAGA/SNA/VA)
+    // and narrowing which specialties an assigner could act on. The AGA/SNA/VA
+    // assigner-domain concept has been retired platform-wide, so there is no
+    // grouping left to key off and the narrowing has been removed entirely —
+    // assigners now act on the full flat specialty list.
     async refreshDomainContext() {
       this.inspectorProfile = null;
-      this.assignerSpecialties = [];
 
       if (!this.authenticated || !this.user?.username) {
         return;
@@ -91,35 +91,6 @@ export const useAuthStore = defineStore('auth', {
       } catch {
         // Domain context is optional and should not block authentication.
       }
-
-      if (!this.hasRole('assigner')) {
-        return;
-      }
-
-      const scopedAssignerGroups = (this.groups || []).filter((group) => {
-        const normalized = String(group || '').trim().toUpperCase();
-        return normalized.startsWith('GROUP_U-VSO-IN_ASSIGNER') && normalized !== 'GROUP_U-VSO-IN_ASSIGNER';
-      });
-
-      if (scopedAssignerGroups.length === 0) {
-        return;
-      }
-
-      const specialtyMap = new Map();
-      for (const group of scopedAssignerGroups) {
-        try {
-          const { data } = await apiAssignmentGroup(group);
-          for (const specialty of data?.specialties || []) {
-            if (specialty?.id) {
-              specialtyMap.set(specialty.id, specialty);
-            }
-          }
-        } catch {
-          // Keep partial scope resolution when one mapping call fails.
-        }
-      }
-
-      this.assignerSpecialties = Array.from(specialtyMap.values());
     },
 
     async init(options = {}) {

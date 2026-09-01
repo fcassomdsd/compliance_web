@@ -22,14 +22,14 @@ function buildFixture() {
     parentId: 'inspection-node-1',
     nodeType: 'vso:finding',
     properties: {
-      'vso:findingId': 'MDPP001-AYVIS-01',
+      'vso:findingId': 'H-MDPPA0001-AVIS-001',
       'vso:findingStatus': 'Open',
       'vso:submissionDeadline': '2026-04-01',
       'vso:inspectionId': 'MDPP-001',
       'vso:locationId': 'LOC-01',
       'vso:locationCode': 'MDPP',
       'vso:locationName': 'Main Airport',
-      'vso:specialtyCode': 'AYVIS',
+      'vso:specialtyCode': 'AVIS',
       'vso:specialtyId': 'spec-ayvis',
       'vso:specialtyName': 'Aviation Safety',
       'vso:domain': 'OPS',
@@ -44,7 +44,7 @@ function buildFixture() {
     parentId: 'finding-node-1',
     nodeType: 'vso:correctiveAction',
     properties: {
-      'vso:capId': 'CA-MDPP001AYVIS-01-01',
+      'vso:capId': 'P-MDPPA0001-AVIS001-01',
       'vso:proposedAction': 'Action A',
       'vso:responsibleEntity': 'Provider 1',
       'vso:dueDate': '2026-05-01',
@@ -53,7 +53,7 @@ function buildFixture() {
       'vso:locationId': 'LOC-01',
       'vso:locationCode': 'MDPP',
       'vso:locationName': 'Main Airport',
-      'vso:specialtyCode': 'AYVIS',
+      'vso:specialtyCode': 'AVIS',
       'vso:specialtyId': 'spec-ayvis',
       'vso:specialtyName': 'Aviation Safety',
       'vso:providerId': 'PR-01',
@@ -146,7 +146,7 @@ async function buildApp({ roles = ['cap_entry'], username = 'tester', now = new 
       return [];
     },
     searchFindingByBusinessId: async ({ findingId }) => {
-      return findingId === 'MDPP001-AYVIS-01' ? fixture.findingNode : null;
+      return findingId === 'H-MDPPA0001-AVIS-001' ? fixture.findingNode : null;
     },
     searchCapByBusinessId: async ({ capId }) => {
       return fixture.capNode && capId === fixture.capNode.properties['vso:capId'] ? fixture.capNode : null;
@@ -276,10 +276,10 @@ describe('CAP drafts (Postgres-staged)', () => {
       .post('/api/caps/drafts')
       .set('Cookie', 'compliance_session_id=session-1')
       .set('x-csrf-token', 'csrf-token-1')
-      .send({ findingId: 'MDPP001-AYVIS-01', dueDate: '2026-06-01', rootCauseAnalysis: { method: 'Fishbone' } });
+      .send({ findingId: 'H-MDPPA0001-AVIS-001', dueDate: '2026-06-01', rootCauseAnalysis: { method: 'Fishbone' } });
 
     expect(createResponse.status).toBe(201);
-    expect(createResponse.body.draft.findingId).toBe('MDPP001-AYVIS-01');
+    expect(createResponse.body.draft.findingId).toBe('H-MDPPA0001-AVIS-001');
     const draftId = createResponse.body.draft.draftId;
 
     const listResponse = await request(app)
@@ -315,7 +315,7 @@ describe('CAP drafts (Postgres-staged)', () => {
       .post('/api/caps/drafts')
       .set('Cookie', 'compliance_session_id=session-1')
       .set('x-csrf-token', 'csrf-token-1')
-      .send({ findingId: 'MDPP001-AYVIS-01' });
+      .send({ findingId: 'H-MDPPA0001-AVIS-001' });
 
     expect(response.status).toBe(201);
   });
@@ -327,14 +327,14 @@ describe('CAP drafts (Postgres-staged)', () => {
       .post('/api/caps/drafts')
       .set('Cookie', 'compliance_session_id=session-1')
       .set('x-csrf-token', 'csrf-token-1')
-      .send({ findingId: 'MDPP001-AYVIS-01', correctiveActions: 'not-an-array' });
+      .send({ findingId: 'H-MDPPA0001-AVIS-001', correctiveActions: 'not-an-array' });
 
     expect(response.status).toBe(400);
   });
 
   it('updates a draft in place via PATCH', async () => {
     const { app, capDraftRepository } = await buildApp({ username: 'alice' });
-    const draft = await capDraftRepository.create({ findingId: 'MDPP001-AYVIS-01', ownerUsername: 'alice', payload: { dueDate: '2026-06-01' } });
+    const draft = await capDraftRepository.create({ findingId: 'H-MDPPA0001-AVIS-001', ownerUsername: 'alice', payload: { dueDate: '2026-06-01' } });
 
     const response = await request(app)
       .patch(`/api/caps/drafts/${draft.draftId}`)
@@ -348,7 +348,7 @@ describe('CAP drafts (Postgres-staged)', () => {
 
   it('cannot see or edit another user\'s draft', async () => {
     const { app, capDraftRepository } = await buildApp({ username: 'alice' });
-    const othersDraft = await capDraftRepository.create({ findingId: 'MDPP001-AYVIS-01', ownerUsername: 'bob', payload: {} });
+    const othersDraft = await capDraftRepository.create({ findingId: 'H-MDPPA0001-AVIS-001', ownerUsername: 'bob', payload: {} });
 
     const getResponse = await request(app)
       .get(`/api/caps/drafts/${othersDraft.draftId}`)
@@ -371,7 +371,7 @@ describe('CAP drafts (Postgres-staged)', () => {
 
   it('deletes a draft', async () => {
     const { app, capDraftRepository } = await buildApp({ username: 'alice' });
-    const draft = await capDraftRepository.create({ findingId: 'MDPP001-AYVIS-01', ownerUsername: 'alice', payload: {} });
+    const draft = await capDraftRepository.create({ findingId: 'H-MDPPA0001-AVIS-001', ownerUsername: 'alice', payload: {} });
 
     const response = await request(app)
       .delete(`/api/caps/drafts/${draft.draftId}`)
@@ -385,7 +385,7 @@ describe('CAP drafts (Postgres-staged)', () => {
   it('rejects submitting an incomplete draft for review, leaving the draft intact', async () => {
     const { app, capDraftRepository } = await buildApp({ username: 'alice' });
     const draft = await capDraftRepository.create({
-      findingId: 'MDPP001-AYVIS-01',
+      findingId: 'H-MDPPA0001-AVIS-001',
       ownerUsername: 'alice',
       payload: { dueDate: '2026-06-01' },
     });
@@ -403,7 +403,7 @@ describe('CAP drafts (Postgres-staged)', () => {
     const { app, fixture, capDraftRepository } = await buildApp({ username: 'alice' });
     fixture.capNode = null;
     const draft = await capDraftRepository.create({
-      findingId: 'MDPP001-AYVIS-01',
+      findingId: 'H-MDPPA0001-AVIS-001',
       ownerUsername: 'alice',
       payload: fullCapPayload(),
     });

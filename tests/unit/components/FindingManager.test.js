@@ -76,7 +76,7 @@ describe('FindingManager.vue', () => {
     wrapper.vm.scope.inspectionId = 'INS-1';
     wrapper.vm.scope.providerId = 'PROV-1';
     wrapper.vm.scope.locationId = 'LOC-1';
-    wrapper.vm.scope.specialtyCode = 'AYVIS';
+    wrapper.vm.scope.specialtyCode = 'AVIS';
     wrapper.vm.scope.domain = 'OPS';
     wrapper.vm.scope.capOverdueOnly = true;
 
@@ -87,7 +87,7 @@ describe('FindingManager.vue', () => {
     expect(mockFindingStore.setFilter).toHaveBeenCalledWith('inspectionId', 'INS-1');
     expect(mockFindingStore.setFilter).toHaveBeenCalledWith('providerId', 'PROV-1');
     expect(mockFindingStore.setFilter).toHaveBeenCalledWith('locationId', 'LOC-1');
-    expect(mockFindingStore.setFilter).toHaveBeenCalledWith('specialtyCode', 'AYVIS');
+    expect(mockFindingStore.setFilter).toHaveBeenCalledWith('specialtyCode', 'AVIS');
     expect(mockFindingStore.setFilter).toHaveBeenCalledWith('domain', 'OPS');
     expect(mockFindingStore.setFilter).toHaveBeenCalledWith('capOverdueOnly', false);
     expect(mockFindingStore.setFilter).toHaveBeenCalledWith('solutionOverdueOnly', false);

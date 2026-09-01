@@ -1,18 +1,7 @@
 import { defineStore } from 'pinia';
 import { apiEntityCRUD } from '@/services/apiServices';
 import { INSPECTION_STATUS, canInactivate, isActive } from '@/utils/siteVisitStatus';
-
-const GENERATED_CODE_PATTERN = /^([A-Za-z0-9]{4})-(\d{3})$/;
-
-const parseCodeParts = (codeValue) => {
-  if (!codeValue || typeof codeValue !== 'string') return null;
-  const match = codeValue.trim().match(GENERATED_CODE_PATTERN);
-  if (!match) return null;
-  return {
-    icaoCode: match[1].toUpperCase(),
-    sequence: Number.parseInt(match[2], 10),
-  };
-};
+import { buildSiteVisitCode, nextSiteVisitSequence, yearFromDate } from '@/utils/documentCodes';
 
 export const useSiteVisitStore = defineStore('siteVisit', {
 
@@ -59,18 +48,15 @@ export const useSiteVisitStore = defineStore('siteVisit', {
           throw new Error('Could not query existing site visits for code generation');
         }
 
-        let maxSequence = 0;
-        for (const existing of queryResults.list) {
-          const codeParts = parseCodeParts(existing.code);
-          if (!codeParts) continue;
-          if (codeParts.icaoCode !== locationIcaoCode) continue;
-          if (Number.isInteger(codeParts.sequence) && codeParts.sequence > maxSequence) {
-            maxSequence = codeParts.sequence;
-          }
-        }
-
-        const nextSequence = (maxSequence + 1).toString().padStart(3, '0');
-        addData.code = `${locationIcaoCode}-${nextSequence}`;
+        // Sequence is scoped by location AND year, so it resets each January
+        // per location. The year comes from the visit's own start date.
+        const codeYear = yearFromDate(addData.startDate);
+        const nextSequence = nextSiteVisitSequence(queryResults.list, locationIcaoCode, codeYear);
+        addData.code = buildSiteVisitCode({
+          icaoCode: locationIcaoCode,
+          year: codeYear,
+          sequence: nextSequence,
+        });
 
         if (!addData.status || addData.status === INSPECTION_STATUS.INACTIVE) {
           addData.status = INSPECTION_STATUS.CREATED;

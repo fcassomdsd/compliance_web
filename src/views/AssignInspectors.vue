@@ -100,8 +100,6 @@ import { useInspectorStore } from '@/stores/inspectorStore';
 import { useInspectedSpecialtyStore } from '@/stores/inspectedSpecialtyStore';
 import { formatDate } from '@/utils/formatDate';
 import { useInspectedProviderStore } from '@/stores/inspectedProviderStore';
-import { useAuthStore } from '@/stores/authStore';
-// specialtyStore not required here; inspectorStore provides inspector specialties
 import { useToast } from 'vue-toastification';
 import saveImg from '@/assets/images/icons/save.png';
 import cancelImg from '@/assets/images/icons/cancel.png';
@@ -114,7 +112,6 @@ const inspectionStore = useInspectionStore();
 const inspectorStore = useInspectorStore();
 const inspectedStore = useInspectedSpecialtyStore();
 const inspectedProviderStore = useInspectedProviderStore();
-const authStore = useAuthStore();
 const toast = useToast();
 
 const currentInspection = ref(null);
@@ -154,16 +151,11 @@ const buildSpecialtiesList = () => {
   allowedInspectorList.value = {};
   assigned.value = {};
   const specObj = inspectedStore.inspectedSpecialties || {};
-  const assignerScopeIds = authStore.assignerSpecialtyIds;
-  const enforceAssignerScope = authStore.hasRole('assigner')
-    && !authStore.hasRole(['admin', 'planner'])
-    && assignerScopeIds.size > 0;
 
+  // Specialties are no longer narrowed by assigner domain group (AGA/SNA/VA):
+  // that grouping has been retired, so every specialty on the inspection is
+  // assignable by anyone who can reach this view.
   for (const specKey of Object.keys(specObj)) {
-      if (enforceAssignerScope && !assignerScopeIds.has(specKey)) {
-        continue;
-      }
-
       const specialty = specObj[specKey];
       specialtiesList.value.push({ "id" : specKey, name: specialty.name, inspectedId: specialty.id });
       // prefill assignments by matching inspectors' declared specialties

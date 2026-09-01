@@ -36,7 +36,7 @@ function buildFixture() {
     parentId: 'inspection-node-1',
     nodeType: 'vso:finding',
     properties: {
-      'vso:findingId': 'MDPP001-AYVIS-01',
+      'vso:findingId': 'H-MDPPA0001-AVIS-001',
       'vso:findingStatus': 'Open',
       'vso:findingLevel': 'Non-Compliance',
       'vso:submissionDeadline': '2026-04-01',
@@ -44,7 +44,7 @@ function buildFixture() {
       'vso:locationId': 'LOC-01',
       'vso:locationCode': 'MDPP',
       'vso:locationName': 'Main Airport',
-      'vso:specialtyCode': 'AYVIS',
+      'vso:specialtyCode': 'AVIS',
       'vso:specialtyId': 'spec-ayvis',
       'vso:specialtyName': 'Aviation Safety',
       'vso:domain': 'OPS',
@@ -59,7 +59,7 @@ function buildFixture() {
     parentId: 'finding-node-1',
     nodeType: 'vso:correctiveAction',
     properties: {
-      'vso:capId': 'CA-MDPP001AYVIS-01-01',
+      'vso:capId': 'P-MDPPA0001-AVIS001-01',
       'vso:proposedAction': 'Action A',
       'vso:responsibleEntity': 'Provider 1',
       'vso:dueDate': '2026-05-01',
@@ -68,7 +68,7 @@ function buildFixture() {
       'vso:locationId': 'LOC-01',
       'vso:locationCode': 'MDPP',
       'vso:locationName': 'Main Airport',
-      'vso:specialtyCode': 'AYVIS',
+      'vso:specialtyCode': 'AVIS',
       'vso:specialtyId': 'spec-ayvis',
       'vso:specialtyName': 'Aviation Safety',
       'vso:providerId': 'PR-01',
@@ -146,7 +146,7 @@ async function buildApp({ roles = ['cap_entry'], now = new Date('2026-04-03T10:0
       return [];
     },
     searchFindingByBusinessId: async ({ findingId }) => {
-      return findingId === 'MDPP001-AYVIS-01' ? fixture.findingNode : null;
+      return findingId === 'H-MDPPA0001-AVIS-001' ? fixture.findingNode : null;
     },
     searchCapByBusinessId: async ({ capId }) => {
       return capId === fixture.capNode.properties['vso:capId'] ? fixture.capNode : null;
@@ -417,7 +417,7 @@ describe('Findings and CAP API', () => {
     const { app } = await buildApp({ roles: ['cap_entry'] });
 
     const response = await request(app)
-      .post('/api/findings/MDPP001-AYVIS-01/caps')
+      .post('/api/findings/H-MDPPA0001-AVIS-001/caps')
       .set('Cookie', 'compliance_session_id=session-1')
       .set('x-csrf-token', 'csrf-token-1')
       .send({
@@ -466,7 +466,7 @@ describe('Findings and CAP API', () => {
       });
 
     expect(response.status).toBe(201);
-    expect(response.body.cap.capId).toBe('CA-MDPP001AYVIS-01-02');
+    expect(response.body.cap.capId).toBe('P-MDPPA0001-AVIS001-02');
     expect(response.body.cap.acceptanceStatus).toBe('Pending review');
     expect(response.body.cap.rootCauseAnalysis.method).toBe('Fishbone');
     expect(response.body.cap.riskAssessment.identifiedHazard).toBe('Runway incursion');
@@ -482,7 +482,7 @@ describe('Findings and CAP API', () => {
     fixture.findingNode.properties['vso:findingReviewStatus'] = 'Pending Review';
 
     const response = await request(app)
-      .post('/api/findings/MDPP001-AYVIS-01/caps')
+      .post('/api/findings/H-MDPPA0001-AVIS-001/caps')
       .set('Cookie', 'compliance_session_id=session-1')
       .set('x-csrf-token', 'csrf-token-1')
       .send(fullCapPayload());
@@ -499,7 +499,7 @@ describe('Findings and CAP API', () => {
       const { app } = await buildApp({ roles: ['cap_entry'], notificationService: service });
 
       const response = await request(app)
-        .post('/api/findings/MDPP001-AYVIS-01/caps')
+        .post('/api/findings/H-MDPPA0001-AVIS-001/caps')
         .set('Cookie', 'compliance_session_id=session-1')
         .set('x-csrf-token', 'csrf-token-1')
         .send(fullCapPayload());
@@ -507,7 +507,7 @@ describe('Findings and CAP API', () => {
       expect(response.status).toBe(201);
       expect(sent).toHaveLength(1);
       expect(sent[0].to).toBe('inspectors@example.com');
-      expect(sent[0].subject).toContain('MDPP001-AYVIS-01');
+      expect(sent[0].subject).toContain('H-MDPPA0001-AVIS-001');
     } finally {
       process.env.INSPECTOR_NOTIFICATIONS_EMAIL = originalEmail;
     }
@@ -567,7 +567,7 @@ describe('Findings and CAP API', () => {
     delete payload.riskAssessment;
 
     const response = await request(app)
-      .post('/api/findings/MDPP001-AYVIS-01/caps')
+      .post('/api/findings/H-MDPPA0001-AVIS-001/caps')
       .set('Cookie', 'compliance_session_id=session-1')
       .set('x-csrf-token', 'csrf-token-1')
       .send(payload);
@@ -580,13 +580,13 @@ describe('Findings and CAP API', () => {
     const { app } = await buildApp({ roles: ['cap_entry'] });
 
     await request(app)
-      .post('/api/findings/MDPP001-AYVIS-01/caps')
+      .post('/api/findings/H-MDPPA0001-AVIS-001/caps')
       .set('Cookie', 'compliance_session_id=session-1')
       .set('x-csrf-token', 'csrf-token-1')
       .send(fullCapPayload());
 
     const response = await request(app)
-      .patch('/api/caps/CA-MDPP001AYVIS-01-02/actions/1')
+      .patch('/api/caps/P-MDPPA0001-AVIS001-02/actions/1')
       .set('Cookie', 'compliance_session_id=session-1')
       .set('x-csrf-token', 'csrf-token-1')
       .send({ itemStatus: 'In Progress' });
@@ -599,13 +599,13 @@ describe('Findings and CAP API', () => {
     const { app } = await buildApp({ roles: ['cap_entry'] });
 
     await request(app)
-      .post('/api/findings/MDPP001-AYVIS-01/caps')
+      .post('/api/findings/H-MDPPA0001-AVIS-001/caps')
       .set('Cookie', 'compliance_session_id=session-1')
       .set('x-csrf-token', 'csrf-token-1')
       .send(fullCapPayload());
 
     const response = await request(app)
-      .patch('/api/caps/CA-MDPP001AYVIS-01-02/actions/1')
+      .patch('/api/caps/P-MDPPA0001-AVIS001-02/actions/1')
       .set('Cookie', 'compliance_session_id=session-1')
       .set('x-csrf-token', 'csrf-token-1')
       .send({ itemStatus: 'Closed' });
@@ -617,13 +617,13 @@ describe('Findings and CAP API', () => {
     const { app } = await buildApp({ roles: ['cap_entry'] });
 
     await request(app)
-      .post('/api/findings/MDPP001-AYVIS-01/caps')
+      .post('/api/findings/H-MDPPA0001-AVIS-001/caps')
       .set('Cookie', 'compliance_session_id=session-1')
       .set('x-csrf-token', 'csrf-token-1')
       .send(fullCapPayload());
 
     const response = await request(app)
-      .patch('/api/caps/CA-MDPP001AYVIS-01-02/actions/1')
+      .patch('/api/caps/P-MDPPA0001-AVIS001-02/actions/1')
       .set('Cookie', 'compliance_session_id=session-1')
       .set('x-csrf-token', 'csrf-token-1')
       .send({ itemStatus: 'Closed', closureDate: '2026-07-01', closureNotes: 'Verified complete' });
@@ -638,13 +638,13 @@ describe('Findings and CAP API', () => {
     const { app, fixture } = await buildApp({ roles: ['cap_entry'] });
 
     await request(app)
-      .post('/api/findings/MDPP001-AYVIS-01/caps')
+      .post('/api/findings/H-MDPPA0001-AVIS-001/caps')
       .set('Cookie', 'compliance_session_id=session-1')
       .set('x-csrf-token', 'csrf-token-1')
       .send(fullCapPayload());
 
     const response = await request(app)
-      .post('/api/caps/CA-MDPP001AYVIS-01-02/rca/evidence')
+      .post('/api/caps/P-MDPPA0001-AVIS001-02/rca/evidence')
       .set('Cookie', 'compliance_session_id=session-1')
       .set('x-csrf-token', 'csrf-token-1')
       .attach('file', Buffer.from('%PDF-1.4 test'), { filename: 'evidence.pdf', contentType: 'application/pdf' });
@@ -669,13 +669,13 @@ describe('Findings and CAP API', () => {
     const { app, fixture } = await buildApp({ roles: ['cap_entry'] });
 
     await request(app)
-      .post('/api/findings/MDPP001-AYVIS-01/caps')
+      .post('/api/findings/H-MDPPA0001-AVIS-001/caps')
       .set('Cookie', 'compliance_session_id=session-1')
       .set('x-csrf-token', 'csrf-token-1')
       .send(fullCapPayload());
 
     const response = await request(app)
-      .post('/api/caps/CA-MDPP001AYVIS-01-02/risk-assessment/evidence')
+      .post('/api/caps/P-MDPPA0001-AVIS001-02/risk-assessment/evidence')
       .set('Cookie', 'compliance_session_id=session-1')
       .set('x-csrf-token', 'csrf-token-1')
       .attach('file', Buffer.from('%PDF-1.4 test'), { filename: 'evidence.pdf', contentType: 'application/pdf' });
@@ -689,13 +689,13 @@ describe('Findings and CAP API', () => {
     const { app, fixture } = await buildApp({ roles: ['cap_entry'] });
 
     await request(app)
-      .post('/api/findings/MDPP001-AYVIS-01/caps')
+      .post('/api/findings/H-MDPPA0001-AVIS-001/caps')
       .set('Cookie', 'compliance_session_id=session-1')
       .set('x-csrf-token', 'csrf-token-1')
       .send(fullCapPayload());
 
     const response = await request(app)
-      .post('/api/caps/CA-MDPP001AYVIS-01-02/containment/evidence')
+      .post('/api/caps/P-MDPPA0001-AVIS001-02/containment/evidence')
       .set('Cookie', 'compliance_session_id=session-1')
       .set('x-csrf-token', 'csrf-token-1')
       .attach('file', Buffer.from('%PDF-1.4 test'), { filename: 'evidence.pdf', contentType: 'application/pdf' });
@@ -709,7 +709,7 @@ describe('Findings and CAP API', () => {
     const { app } = await buildApp({ roles: ['cap_entry'] });
 
     const response = await request(app)
-      .post('/api/findings/MDPP001-AYVIS-01/caps')
+      .post('/api/findings/H-MDPPA0001-AVIS-001/caps')
       .set('Cookie', 'compliance_session_id=session-1')
       .set('x-csrf-token', 'csrf-token-1')
       .send(fullCapPayload());
@@ -726,7 +726,7 @@ describe('Findings and CAP API', () => {
     delete payload.containmentMeasures;
 
     const response = await request(app)
-      .post('/api/findings/MDPP001-AYVIS-01/caps')
+      .post('/api/findings/H-MDPPA0001-AVIS-001/caps')
       .set('Cookie', 'compliance_session_id=session-1')
       .set('x-csrf-token', 'csrf-token-1')
       .send(payload);
@@ -739,7 +739,7 @@ describe('Findings and CAP API', () => {
     const { app, alfrescoClient } = await buildApp({ roles: ['cap_entry'] });
 
     await request(app)
-      .post('/api/findings/MDPP001-AYVIS-01/caps')
+      .post('/api/findings/H-MDPPA0001-AVIS-001/caps')
       .set('Cookie', 'compliance_session_id=session-1')
       .set('x-csrf-token', 'csrf-token-1')
       .send(fullCapPayload());
@@ -758,7 +758,7 @@ describe('Findings and CAP API', () => {
     };
 
     const response = await request(app)
-      .post('/api/caps/CA-MDPP001AYVIS-01-02/rca/evidence')
+      .post('/api/caps/P-MDPPA0001-AVIS001-02/rca/evidence')
       .set('Cookie', 'compliance_session_id=session-1')
       .set('x-csrf-token', 'csrf-token-1')
       .attach('file', Buffer.from('%PDF-1.4 test'), { filename: 'evidence.pdf', contentType: 'application/pdf' });
@@ -771,13 +771,13 @@ describe('Findings and CAP API', () => {
     const { app } = await buildApp({ roles: ['cap_entry'] });
 
     await request(app)
-      .post('/api/findings/MDPP001-AYVIS-01/caps')
+      .post('/api/findings/H-MDPPA0001-AVIS-001/caps')
       .set('Cookie', 'compliance_session_id=session-1')
       .set('x-csrf-token', 'csrf-token-1')
       .send(fullCapPayload());
 
     const response = await request(app)
-      .post('/api/caps/CA-MDPP001AYVIS-01-02/rca/evidence')
+      .post('/api/caps/P-MDPPA0001-AVIS001-02/rca/evidence')
       .set('Cookie', 'compliance_session_id=session-1')
       .set('x-csrf-token', 'csrf-token-1');
 
@@ -788,13 +788,13 @@ describe('Findings and CAP API', () => {
     const { app } = await buildApp({ roles: ['cap_entry'] });
 
     await request(app)
-      .post('/api/findings/MDPP001-AYVIS-01/caps')
+      .post('/api/findings/H-MDPPA0001-AVIS-001/caps')
       .set('Cookie', 'compliance_session_id=session-1')
       .set('x-csrf-token', 'csrf-token-1')
       .send(fullCapPayload());
 
     const response = await request(app)
-      .post('/api/caps/CA-MDPP001AYVIS-01-02/rca/evidence')
+      .post('/api/caps/P-MDPPA0001-AVIS001-02/rca/evidence')
       .set('Cookie', 'compliance_session_id=session-1')
       .set('x-csrf-token', 'csrf-token-1')
       .attach('file', Buffer.from('#!/bin/sh\necho hi'), { filename: 'script.sh', contentType: 'application/x-sh' });
@@ -806,7 +806,7 @@ describe('Findings and CAP API', () => {
     const { app } = await buildApp({ roles: ['cap_entry'] });
 
     const response = await request(app)
-      .post('/api/findings/MDPP001-AYVIS-01/caps')
+      .post('/api/findings/H-MDPPA0001-AVIS-001/caps')
       .set('Cookie', 'compliance_session_id=session-1')
       .set('x-csrf-token', 'csrf-token-1')
       .send({
@@ -859,7 +859,7 @@ describe('Findings and CAP API', () => {
     fixture.findingNode.properties['vso:findingReviewStatus'] = 'Pending Review';
 
     const response = await request(app)
-      .patch('/api/findings/MDPP001-AYVIS-01/review')
+      .patch('/api/findings/H-MDPPA0001-AVIS-001/review')
       .set('Cookie', 'compliance_session_id=session-1')
       .set('x-csrf-token', 'csrf-token-1')
       .send({});
@@ -878,7 +878,7 @@ describe('Findings and CAP API', () => {
     fixture.findingNode.properties['vso:findingReviewStatus'] = 'Pending Review';
 
     const response = await request(app)
-      .patch('/api/findings/MDPP001-AYVIS-01/review')
+      .patch('/api/findings/H-MDPPA0001-AVIS-001/review')
       .set('Cookie', 'compliance_session_id=session-1')
       .set('x-csrf-token', 'csrf-token-1')
       .send({ findingSeverity: 'A' });
@@ -900,7 +900,7 @@ describe('Findings and CAP API', () => {
     fixture.findingNode.properties['vso:findingReviewStatus'] = 'Pending Review';
 
     const response = await request(app)
-      .patch('/api/findings/MDPP001-AYVIS-01/review')
+      .patch('/api/findings/H-MDPPA0001-AVIS-001/review')
       .set('Cookie', 'compliance_session_id=session-1')
       .set('x-csrf-token', 'csrf-token-1')
       .send({});
@@ -914,7 +914,7 @@ describe('Findings and CAP API', () => {
     fixture.findingNode.properties['vso:findingReviewStatus'] = 'Confirmed';
 
     const response = await request(app)
-      .patch('/api/findings/MDPP001-AYVIS-01/review')
+      .patch('/api/findings/H-MDPPA0001-AVIS-001/review')
       .set('Cookie', 'compliance_session_id=session-1')
       .set('x-csrf-token', 'csrf-token-1')
       .send({});
@@ -927,7 +927,7 @@ describe('Findings and CAP API', () => {
     const { app } = await buildApp({ roles: ['cap_entry'] });
 
     const response = await request(app)
-      .patch('/api/findings/MDPP001-AYVIS-01/review')
+      .patch('/api/findings/H-MDPPA0001-AVIS-001/review')
       .set('Cookie', 'compliance_session_id=session-1')
       .set('x-csrf-token', 'csrf-token-1')
       .send({});
@@ -939,7 +939,7 @@ describe('Findings and CAP API', () => {
     const { app } = await buildApp({ roles: ['inspector'] });
 
     const response = await request(app)
-      .get('/api/findings/MDPP001-AYVIS-01')
+      .get('/api/findings/H-MDPPA0001-AVIS-001')
       .set('Cookie', 'compliance_session_id=session-1');
 
     expect(response.status).toBe(200);
@@ -952,7 +952,7 @@ describe('Findings and CAP API', () => {
     const { app } = await buildApp({ roles: ['inspector'] });
 
     const response = await request(app)
-      .get('/api/findings/MDPP001-AYVIS-01/evidence/evidence-node-1/content')
+      .get('/api/findings/H-MDPPA0001-AVIS-001/evidence/evidence-node-1/content')
       .set('Cookie', 'compliance_session_id=session-1');
 
     expect(response.status).toBe(200);
@@ -964,7 +964,7 @@ describe('Findings and CAP API', () => {
     const { app } = await buildApp({ roles: ['inspector'] });
 
     const response = await request(app)
-      .get('/api/findings/MDPP001-AYVIS-01/evidence/unknown-evidence/content')
+      .get('/api/findings/H-MDPPA0001-AVIS-001/evidence/unknown-evidence/content')
       .set('Cookie', 'compliance_session_id=session-1');
 
     expect(response.status).toBe(404);
@@ -989,7 +989,7 @@ describe('Findings and CAP API', () => {
     const { app } = await buildApp({ roles: ['inspector'] });
 
     const response = await request(app)
-      .patch('/api/caps/CA-MDPP001AYVIS-01-01/review')
+      .patch('/api/caps/P-MDPPA0001-AVIS001-01/review')
       .set('Cookie', 'compliance_session_id=session-1')
       .set('x-csrf-token', 'csrf-token-1')
       .send({
@@ -1008,7 +1008,7 @@ describe('Findings and CAP API', () => {
       const { app } = await buildApp({ roles: ['inspector'], notificationService: service });
 
       const response = await request(app)
-        .patch('/api/caps/CA-MDPP001AYVIS-01-01/review')
+        .patch('/api/caps/P-MDPPA0001-AVIS001-01/review')
         .set('Cookie', 'compliance_session_id=session-1')
         .set('x-csrf-token', 'csrf-token-1')
         .send({ acceptanceStatus: 'Accepted' });
@@ -1016,7 +1016,7 @@ describe('Findings and CAP API', () => {
       expect(response.status).toBe(200);
       expect(sent).toHaveLength(1);
       expect(sent[0].to).toBe('cap-entry@example.com');
-      expect(sent[0].subject).toContain('CA-MDPP001AYVIS-01-01');
+      expect(sent[0].subject).toContain('P-MDPPA0001-AVIS001-01');
     } finally {
       process.env.CAP_ENTRY_NOTIFICATIONS_EMAIL = originalEmail;
     }
@@ -1026,12 +1026,12 @@ describe('Findings and CAP API', () => {
     const { app, fixture } = await buildApp({ roles: ['inspector'] });
 
     const response = await request(app)
-      .post('/api/findings/MDPP001-AYVIS-01/follow-ups')
+      .post('/api/findings/H-MDPPA0001-AVIS-001/follow-ups')
       .set('Cookie', 'compliance_session_id=session-1')
       .set('x-csrf-token', 'csrf-token-1')
       .send({
         followUpType: 'Closure Verification',
-        inheritedCapId: 'CA-MDPP001AYVIS-01-01',
+        inheritedCapId: 'P-MDPPA0001-AVIS001-01',
         followUpDate: '2026-04-03T10:00:00.000Z',
         findingClosed: true,
         effectivenessConfirmed: true,
@@ -1042,8 +1042,8 @@ describe('Findings and CAP API', () => {
 
     expect(response.status).toBe(201);
     expect(response.body.followUpReport.effectivenessConfirmed).toBe(true);
-    expect(response.body.followUpReport.followUpId).toBe('FU-MDPP001AYVIS-01-01');
-    expect(response.body.followUpReport.inheritedCapId).toBe('CA-MDPP001AYVIS-01-01');
+    expect(response.body.followUpReport.followUpId).toBe('S-MDPPA0001-AVIS001-01');
+    expect(response.body.followUpReport.inheritedCapId).toBe('P-MDPPA0001-AVIS001-01');
     // A follow-up can never affect finding status until its evidence is
     // reviewed and confirmed Adequate (PATCH .../evidence-review below).
     expect(response.body.followUpReport.evidenceReviewStatus).toBe('Pending Review');
@@ -1054,7 +1054,7 @@ describe('Findings and CAP API', () => {
     const { app, fixture } = await buildApp({ roles: ['inspector'] });
 
     const createResponse = await request(app)
-      .post('/api/findings/MDPP001-AYVIS-01/follow-ups')
+      .post('/api/findings/H-MDPPA0001-AVIS-001/follow-ups')
       .set('Cookie', 'compliance_session_id=session-1')
       .set('x-csrf-token', 'csrf-token-1')
       .send({
@@ -1068,7 +1068,7 @@ describe('Findings and CAP API', () => {
     expect(fixture.findingNode.properties['vso:findingStatus']).toBe('Open');
 
     const reviewResponse = await request(app)
-      .patch('/api/findings/MDPP001-AYVIS-01/follow-ups/FU-MDPP001AYVIS-01-01/evidence-review')
+      .patch('/api/findings/H-MDPPA0001-AVIS-001/follow-ups/S-MDPPA0001-AVIS001-01/evidence-review')
       .set('Cookie', 'compliance_session_id=session-1')
       .set('x-csrf-token', 'csrf-token-1')
       .send({ decision: 'Adequate' });
@@ -1083,7 +1083,7 @@ describe('Findings and CAP API', () => {
     const { app, fixture } = await buildApp({ roles: ['inspector'] });
 
     await request(app)
-      .post('/api/findings/MDPP001-AYVIS-01/follow-ups')
+      .post('/api/findings/H-MDPPA0001-AVIS-001/follow-ups')
       .set('Cookie', 'compliance_session_id=session-1')
       .set('x-csrf-token', 'csrf-token-1')
       .send({
@@ -1095,7 +1095,7 @@ describe('Findings and CAP API', () => {
       });
 
     const reviewResponse = await request(app)
-      .patch('/api/findings/MDPP001-AYVIS-01/follow-ups/FU-MDPP001AYVIS-01-01/evidence-review')
+      .patch('/api/findings/H-MDPPA0001-AVIS-001/follow-ups/S-MDPPA0001-AVIS001-01/evidence-review')
       .set('Cookie', 'compliance_session_id=session-1')
       .set('x-csrf-token', 'csrf-token-1')
       .send({ decision: 'Inadequate', notes: 'Missing photographic evidence' });
@@ -1111,13 +1111,13 @@ describe('Findings and CAP API', () => {
     const { app } = await buildApp({ roles: ['inspector'] });
 
     await request(app)
-      .post('/api/findings/MDPP001-AYVIS-01/follow-ups')
+      .post('/api/findings/H-MDPPA0001-AVIS-001/follow-ups')
       .set('Cookie', 'compliance_session_id=session-1')
       .set('x-csrf-token', 'csrf-token-1')
       .send({ followUpType: 'Progress Review', followUpDate: '2026-04-03T10:00:00.000Z', percentComplete: 50 });
 
     const reviewResponse = await request(app)
-      .patch('/api/findings/MDPP001-AYVIS-01/follow-ups/FU-MDPP001AYVIS-01-01/evidence-review')
+      .patch('/api/findings/H-MDPPA0001-AVIS-001/follow-ups/S-MDPPA0001-AVIS001-01/evidence-review')
       .set('Cookie', 'compliance_session_id=session-1')
       .set('x-csrf-token', 'csrf-token-1')
       .send({ decision: 'Adequate' });
@@ -1130,13 +1130,13 @@ describe('Findings and CAP API', () => {
     const { app, fixture } = await buildApp({ roles: ['inspector'] });
 
     await request(app)
-      .post('/api/findings/MDPP001-AYVIS-01/follow-ups')
+      .post('/api/findings/H-MDPPA0001-AVIS-001/follow-ups')
       .set('Cookie', 'compliance_session_id=session-1')
       .set('x-csrf-token', 'csrf-token-1')
       .send({ followUpType: 'Progress Review', followUpDate: '2026-04-03T10:00:00.000Z', percentComplete: 50 });
 
     const uploadResponse = await request(app)
-      .post('/api/findings/MDPP001-AYVIS-01/follow-ups/FU-MDPP001AYVIS-01-01/evidence')
+      .post('/api/findings/H-MDPPA0001-AVIS-001/follow-ups/S-MDPPA0001-AVIS001-01/evidence')
       .set('Cookie', 'compliance_session_id=session-1')
       .set('x-csrf-token', 'csrf-token-1')
       .field('evidenceRole', 'Progress Evidence')
@@ -1153,7 +1153,7 @@ describe('Findings and CAP API', () => {
     expect(fixture.lastCreatedChildNodeArgs.properties['vso:hashValue']).toMatch(/^[a-f0-9]{64}$/);
 
     const detailResponse = await request(app)
-      .get('/api/findings/MDPP001-AYVIS-01')
+      .get('/api/findings/H-MDPPA0001-AVIS-001')
       .set('Cookie', 'compliance_session_id=session-1');
 
     expect(detailResponse.status).toBe(200);
@@ -1167,13 +1167,13 @@ describe('Findings and CAP API', () => {
     const { app } = await buildApp({ roles: ['inspector'] });
 
     await request(app)
-      .post('/api/findings/MDPP001-AYVIS-01/follow-ups')
+      .post('/api/findings/H-MDPPA0001-AVIS-001/follow-ups')
       .set('Cookie', 'compliance_session_id=session-1')
       .set('x-csrf-token', 'csrf-token-1')
       .send({ followUpType: 'Progress Review', followUpDate: '2026-04-03T10:00:00.000Z', percentComplete: 50 });
 
     const uploadResponse = await request(app)
-      .post('/api/findings/MDPP001-AYVIS-01/follow-ups/FU-MDPP001AYVIS-01-01/evidence')
+      .post('/api/findings/H-MDPPA0001-AVIS-001/follow-ups/S-MDPPA0001-AVIS001-01/evidence')
       .set('Cookie', 'compliance_session_id=session-1')
       .set('x-csrf-token', 'csrf-token-1')
       .field('evidenceRole', 'Progress Evidence')
@@ -1183,7 +1183,7 @@ describe('Findings and CAP API', () => {
     const evidenceNodeId = uploadResponse.body.evidence.nodeId;
 
     const contentResponse = await request(app)
-      .get(`/api/findings/MDPP001-AYVIS-01/follow-ups/FU-MDPP001AYVIS-01-01/evidence/${evidenceNodeId}/content`)
+      .get(`/api/findings/H-MDPPA0001-AVIS-001/follow-ups/S-MDPPA0001-AVIS001-01/evidence/${evidenceNodeId}/content`)
       .set('Cookie', 'compliance_session_id=session-1');
 
     expect(contentResponse.status).toBe(200);
@@ -1194,13 +1194,13 @@ describe('Findings and CAP API', () => {
     const { app } = await buildApp({ roles: ['inspector'] });
 
     await request(app)
-      .post('/api/findings/MDPP001-AYVIS-01/follow-ups')
+      .post('/api/findings/H-MDPPA0001-AVIS-001/follow-ups')
       .set('Cookie', 'compliance_session_id=session-1')
       .set('x-csrf-token', 'csrf-token-1')
       .send({ followUpType: 'Progress Review', followUpDate: '2026-04-03T10:00:00.000Z', percentComplete: 50 });
 
     const response = await request(app)
-      .post('/api/findings/MDPP001-AYVIS-01/follow-ups/FU-MDPP001AYVIS-01-01/evidence')
+      .post('/api/findings/H-MDPPA0001-AVIS-001/follow-ups/S-MDPPA0001-AVIS001-01/evidence')
       .set('Cookie', 'compliance_session_id=session-1')
       .set('x-csrf-token', 'csrf-token-1')
       .field('evidenceRole', 'Progress Evidence')
@@ -1215,13 +1215,13 @@ describe('Findings and CAP API', () => {
     const { app } = await buildApp({ roles: ['inspector'] });
 
     await request(app)
-      .post('/api/findings/MDPP001-AYVIS-01/follow-ups')
+      .post('/api/findings/H-MDPPA0001-AVIS-001/follow-ups')
       .set('Cookie', 'compliance_session_id=session-1')
       .set('x-csrf-token', 'csrf-token-1')
       .send({ followUpType: 'Progress Review', followUpDate: '2026-04-03T10:00:00.000Z', percentComplete: 50 });
 
     const response = await request(app)
-      .post('/api/findings/MDPP001-AYVIS-01/follow-ups/FU-MDPP001AYVIS-01-01/evidence')
+      .post('/api/findings/H-MDPPA0001-AVIS-001/follow-ups/S-MDPPA0001-AVIS001-01/evidence')
       .set('Cookie', 'compliance_session_id=session-1')
       .set('x-csrf-token', 'csrf-token-1')
       .field('evidenceRole', 'RCA Evidence')
@@ -1236,7 +1236,7 @@ describe('Findings and CAP API', () => {
     const { app } = await buildApp({ roles: ['inspector'] });
 
     const response = await request(app)
-      .post('/api/findings/MDPP001-AYVIS-01/follow-ups/FU-MDPP001AYVIS-99-99/evidence')
+      .post('/api/findings/H-MDPPA0001-AVIS-001/follow-ups/S-MDPPA0001-AVIS999-99/evidence')
       .set('Cookie', 'compliance_session_id=session-1')
       .set('x-csrf-token', 'csrf-token-1')
       .field('evidenceRole', 'Progress Evidence')
@@ -1251,19 +1251,19 @@ describe('Findings and CAP API', () => {
     const { app } = await buildApp({ roles: ['inspector'] });
 
     await request(app)
-      .post('/api/findings/MDPP001-AYVIS-01/follow-ups')
+      .post('/api/findings/H-MDPPA0001-AVIS-001/follow-ups')
       .set('Cookie', 'compliance_session_id=session-1')
       .set('x-csrf-token', 'csrf-token-1')
       .send({ followUpType: 'Progress Review', followUpDate: '2026-04-03T10:00:00.000Z', percentComplete: 50 });
 
     await request(app)
-      .patch('/api/findings/MDPP001-AYVIS-01/follow-ups/FU-MDPP001AYVIS-01-01/evidence-review')
+      .patch('/api/findings/H-MDPPA0001-AVIS-001/follow-ups/S-MDPPA0001-AVIS001-01/evidence-review')
       .set('Cookie', 'compliance_session_id=session-1')
       .set('x-csrf-token', 'csrf-token-1')
       .send({ decision: 'Adequate' });
 
     const secondReview = await request(app)
-      .patch('/api/findings/MDPP001-AYVIS-01/follow-ups/FU-MDPP001AYVIS-01-01/evidence-review')
+      .patch('/api/findings/H-MDPPA0001-AVIS-001/follow-ups/S-MDPPA0001-AVIS001-01/evidence-review')
       .set('Cookie', 'compliance_session_id=session-1')
       .set('x-csrf-token', 'csrf-token-1')
       .send({ decision: 'Inadequate' });
@@ -1276,7 +1276,7 @@ describe('Findings and CAP API', () => {
     const { app } = await buildApp({ roles: ['inspector'] });
 
     const response = await request(app)
-      .patch('/api/findings/MDPP001-AYVIS-01/follow-ups/FU-MDPP001AYVIS-99-99/evidence-review')
+      .patch('/api/findings/H-MDPPA0001-AVIS-001/follow-ups/S-MDPPA0001-AVIS999-99/evidence-review')
       .set('Cookie', 'compliance_session_id=session-1')
       .set('x-csrf-token', 'csrf-token-1')
       .send({ decision: 'Adequate' });
@@ -1289,7 +1289,7 @@ describe('Findings and CAP API', () => {
     const { app } = await buildApp({ roles: ['cap_entry'] });
 
     const response = await request(app)
-      .patch('/api/findings/MDPP001-AYVIS-01/follow-ups/FU-MDPP001AYVIS-01-01/evidence-review')
+      .patch('/api/findings/H-MDPPA0001-AVIS-001/follow-ups/S-MDPPA0001-AVIS001-01/evidence-review')
       .set('Cookie', 'compliance_session_id=session-1')
       .set('x-csrf-token', 'csrf-token-1')
       .send({ decision: 'Adequate' });
@@ -1301,7 +1301,7 @@ describe('Findings and CAP API', () => {
     const { app, fixture } = await buildApp({ roles: ['inspector'] });
 
     const response = await request(app)
-      .post('/api/findings/MDPP001-AYVIS-01/follow-ups')
+      .post('/api/findings/H-MDPPA0001-AVIS-001/follow-ups')
       .set('Cookie', 'compliance_session_id=session-1')
       .set('x-csrf-token', 'csrf-token-1')
       .send({
@@ -1322,7 +1322,7 @@ describe('Findings and CAP API', () => {
     fixture.findingNode.properties['vso:findingStatus'] = 'Pending Closure Approval';
 
     const response = await request(app)
-      .patch('/api/findings/MDPP001-AYVIS-01/closure-review')
+      .patch('/api/findings/H-MDPPA0001-AVIS-001/closure-review')
       .set('Cookie', 'compliance_session_id=session-1')
       .set('x-csrf-token', 'csrf-token-1')
       .send({ decision: 'approve' });
@@ -1338,7 +1338,7 @@ describe('Findings and CAP API', () => {
     fixture.findingNode.properties['vso:findingStatus'] = 'Pending Closure Approval';
 
     const response = await request(app)
-      .patch('/api/findings/MDPP001-AYVIS-01/closure-review')
+      .patch('/api/findings/H-MDPPA0001-AVIS-001/closure-review')
       .set('Cookie', 'compliance_session_id=session-1')
       .set('x-csrf-token', 'csrf-token-1')
       .send({ decision: 'reject' });
@@ -1352,7 +1352,7 @@ describe('Findings and CAP API', () => {
     const { app } = await buildApp({ roles: ['inspector'] });
 
     const response = await request(app)
-      .patch('/api/findings/MDPP001-AYVIS-01/closure-review')
+      .patch('/api/findings/H-MDPPA0001-AVIS-001/closure-review')
       .set('Cookie', 'compliance_session_id=session-1')
       .set('x-csrf-token', 'csrf-token-1')
       .send({ decision: 'approve' });
@@ -1365,7 +1365,7 @@ describe('Findings and CAP API', () => {
     const { app } = await buildApp({ roles: ['cap_entry'] });
 
     const response = await request(app)
-      .patch('/api/findings/MDPP001-AYVIS-01/closure-review')
+      .patch('/api/findings/H-MDPPA0001-AVIS-001/closure-review')
       .set('Cookie', 'compliance_session_id=session-1')
       .set('x-csrf-token', 'csrf-token-1')
       .send({ decision: 'approve' });
@@ -1377,7 +1377,7 @@ describe('Findings and CAP API', () => {
     const { app, fixture } = await buildApp({ roles: ['cap_entry'] });
 
     const response = await request(app)
-      .post('/api/findings/MDPP001-AYVIS-01/deadline-extension-requests')
+      .post('/api/findings/H-MDPPA0001-AVIS-001/deadline-extension-requests')
       .set('Cookie', 'compliance_session_id=session-1')
       .set('x-csrf-token', 'csrf-token-1')
       .send({ requestedResolutionDeadline: '2026-06-01', reason: 'Awaiting parts' });
@@ -1393,7 +1393,7 @@ describe('Findings and CAP API', () => {
     const { app } = await buildApp({ roles: ['cap_entry'] });
 
     const response = await request(app)
-      .post('/api/findings/MDPP001-AYVIS-01/deadline-extension-requests')
+      .post('/api/findings/H-MDPPA0001-AVIS-001/deadline-extension-requests')
       .set('Cookie', 'compliance_session_id=session-1')
       .set('x-csrf-token', 'csrf-token-1')
       .send({ requestedResolutionDeadline: 'not-a-date' });
@@ -1407,7 +1407,7 @@ describe('Findings and CAP API', () => {
     fixture.findingNode.properties['vso:resolutionDeadline'] = '2026-06-01';
 
     const response = await request(app)
-      .post('/api/findings/MDPP001-AYVIS-01/deadline-extension-requests')
+      .post('/api/findings/H-MDPPA0001-AVIS-001/deadline-extension-requests')
       .set('Cookie', 'compliance_session_id=session-1')
       .set('x-csrf-token', 'csrf-token-1')
       .send({ requestedResolutionDeadline: '2026-05-01' });
@@ -1421,7 +1421,7 @@ describe('Findings and CAP API', () => {
     fixture.findingNode.properties['vso:deadlineExtensionStatus'] = 'Requested';
 
     const response = await request(app)
-      .post('/api/findings/MDPP001-AYVIS-01/deadline-extension-requests')
+      .post('/api/findings/H-MDPPA0001-AVIS-001/deadline-extension-requests')
       .set('Cookie', 'compliance_session_id=session-1')
       .set('x-csrf-token', 'csrf-token-1')
       .send({ requestedResolutionDeadline: '2026-06-01' });
@@ -1434,7 +1434,7 @@ describe('Findings and CAP API', () => {
     const { app } = await buildApp({ roles: ['inspector'] });
 
     const response = await request(app)
-      .post('/api/findings/MDPP001-AYVIS-01/deadline-extension-requests')
+      .post('/api/findings/H-MDPPA0001-AVIS-001/deadline-extension-requests')
       .set('Cookie', 'compliance_session_id=session-1')
       .set('x-csrf-token', 'csrf-token-1')
       .send({ requestedResolutionDeadline: '2026-06-01' });
@@ -1448,7 +1448,7 @@ describe('Findings and CAP API', () => {
     fixture.findingNode.properties['vso:requestedResolutionDeadline'] = '2026-06-01';
 
     const response = await request(app)
-      .patch('/api/findings/MDPP001-AYVIS-01/deadline-extension-review')
+      .patch('/api/findings/H-MDPPA0001-AVIS-001/deadline-extension-review')
       .set('Cookie', 'compliance_session_id=session-1')
       .set('x-csrf-token', 'csrf-token-1')
       .send({ decision: 'Accepted' });
@@ -1467,7 +1467,7 @@ describe('Findings and CAP API', () => {
     fixture.findingNode.properties['vso:requestedResolutionDeadline'] = '2026-06-01';
 
     const response = await request(app)
-      .patch('/api/findings/MDPP001-AYVIS-01/deadline-extension-review')
+      .patch('/api/findings/H-MDPPA0001-AVIS-001/deadline-extension-review')
       .set('Cookie', 'compliance_session_id=session-1')
       .set('x-csrf-token', 'csrf-token-1')
       .send({ decision: 'Rejected' });
@@ -1481,7 +1481,7 @@ describe('Findings and CAP API', () => {
     const { app } = await buildApp({ roles: ['inspector'] });
 
     const response = await request(app)
-      .patch('/api/findings/MDPP001-AYVIS-01/deadline-extension-review')
+      .patch('/api/findings/H-MDPPA0001-AVIS-001/deadline-extension-review')
       .set('Cookie', 'compliance_session_id=session-1')
       .set('x-csrf-token', 'csrf-token-1')
       .send({ decision: 'Accepted' });
@@ -1498,13 +1498,13 @@ describe('Findings and CAP API', () => {
         id: 'follow-up-node-1',
         parentId: fixture.findingNode.id,
         properties: {
-          'vso:followUpId': 'FU-MDPP001AYVIS-01-01',
+          'vso:followUpId': 'S-MDPPA0001-AVIS001-01',
           'vso:followUpType': 'Progress Review',
           'vso:followUpDate': '2026-04-03T10:00:00.000Z',
           'vso:percentComplete': 20,
           'vso:inspectionId': 'MDPP-001',
           'vso:locationId': 'LOC-01',
-          'vso:specialtyCode': 'AYVIS',
+          'vso:specialtyCode': 'AVIS',
           'vso:providerId': 'PR-01',
         },
       },
@@ -1512,13 +1512,13 @@ describe('Findings and CAP API', () => {
         id: 'follow-up-node-2',
         parentId: fixture.findingNode.id,
         properties: {
-          'vso:followUpId': 'FU-MDPP001AYVIS-01-02',
+          'vso:followUpId': 'S-MDPPA0001-AVIS001-02',
           'vso:followUpType': 'CAP Verification',
           'vso:followUpDate': '2026-04-02T10:00:00.000Z',
           'vso:percentComplete': 10,
           'vso:inspectionId': 'MDPP-001',
           'vso:locationId': 'LOC-01',
-          'vso:specialtyCode': 'AYVIS',
+          'vso:specialtyCode': 'AVIS',
           'vso:providerId': 'PR-01',
         },
       },
@@ -1540,7 +1540,7 @@ describe('Findings and CAP API', () => {
     expect(response.status).toBe(200);
     expect(response.body.list).toHaveLength(1);
     expect(response.body.list[0].followUpType).toBe('Progress Review');
-    expect(response.body.list[0].inheritedCapId).toBe('CA-MDPP001AYVIS-01-01');
+    expect(response.body.list[0].inheritedCapId).toBe('P-MDPPA0001-AVIS001-01');
     expect(response.body.paging.totalItems).toBe(1);
     expect(response.body.paging.maxItems).toBe(1);
     expect(response.body.scopeMeta.statusMode).toBe('stored');
@@ -1567,7 +1567,7 @@ describe('Findings and CAP API notifications', () => {
     const { app } = await buildApp({ roles: ['inspector'], notificationService: service });
 
     const response = await request(app)
-      .post('/api/findings/MDPP001-AYVIS-01/follow-ups')
+      .post('/api/findings/H-MDPPA0001-AVIS-001/follow-ups')
       .set('Cookie', 'compliance_session_id=session-1')
       .set('x-csrf-token', 'csrf-token-1')
       .send({ followUpType: 'Progress Review', followUpDate: '2026-04-03T10:00:00.000Z', percentComplete: 40 });
@@ -1575,7 +1575,7 @@ describe('Findings and CAP API notifications', () => {
     expect(response.status).toBe(201);
     expect(sent).toHaveLength(1);
     expect(sent[0].to).toBe('inspectors@example.com');
-    expect(sent[0].subject).toContain('MDPP001-AYVIS-01');
+    expect(sent[0].subject).toContain('H-MDPPA0001-AVIS-001');
   });
 
   it('notifies inspectors when evidence is marked Adequate and pushes a finding to Pending Closure Approval', async () => {
@@ -1583,14 +1583,14 @@ describe('Findings and CAP API notifications', () => {
     const { app } = await buildApp({ roles: ['inspector'], notificationService: service });
 
     await request(app)
-      .post('/api/findings/MDPP001-AYVIS-01/follow-ups')
+      .post('/api/findings/H-MDPPA0001-AVIS-001/follow-ups')
       .set('Cookie', 'compliance_session_id=session-1')
       .set('x-csrf-token', 'csrf-token-1')
       .send({ followUpType: 'Closure Verification', followUpDate: '2026-04-03T10:00:00.000Z', findingClosed: true, effectivenessConfirmed: true, percentComplete: 100 });
     sent.length = 0; // discard the "evidence review pending" notification from creation
 
     const response = await request(app)
-      .patch('/api/findings/MDPP001-AYVIS-01/follow-ups/FU-MDPP001AYVIS-01-01/evidence-review')
+      .patch('/api/findings/H-MDPPA0001-AVIS-001/follow-ups/S-MDPPA0001-AVIS001-01/evidence-review')
       .set('Cookie', 'compliance_session_id=session-1')
       .set('x-csrf-token', 'csrf-token-1')
       .send({ decision: 'Adequate' });
@@ -1605,14 +1605,14 @@ describe('Findings and CAP API notifications', () => {
     const { app } = await buildApp({ roles: ['inspector'], notificationService: service });
 
     await request(app)
-      .post('/api/findings/MDPP001-AYVIS-01/follow-ups')
+      .post('/api/findings/H-MDPPA0001-AVIS-001/follow-ups')
       .set('Cookie', 'compliance_session_id=session-1')
       .set('x-csrf-token', 'csrf-token-1')
       .send({ followUpType: 'Progress Review', followUpDate: '2026-04-03T10:00:00.000Z', percentComplete: 40 });
     sent.length = 0;
 
     const response = await request(app)
-      .patch('/api/findings/MDPP001-AYVIS-01/follow-ups/FU-MDPP001AYVIS-01-01/evidence-review')
+      .patch('/api/findings/H-MDPPA0001-AVIS-001/follow-ups/S-MDPPA0001-AVIS001-01/evidence-review')
       .set('Cookie', 'compliance_session_id=session-1')
       .set('x-csrf-token', 'csrf-token-1')
       .send({ decision: 'Inadequate', notes: 'Missing photos' });
@@ -1628,7 +1628,7 @@ describe('Findings and CAP API notifications', () => {
     fixture.findingNode.properties['vso:findingStatus'] = 'Pending Closure Approval';
 
     const response = await request(app)
-      .patch('/api/findings/MDPP001-AYVIS-01/closure-review')
+      .patch('/api/findings/H-MDPPA0001-AVIS-001/closure-review')
       .set('Cookie', 'compliance_session_id=session-1')
       .set('x-csrf-token', 'csrf-token-1')
       .send({ decision: 'approve' });
@@ -1645,7 +1645,7 @@ describe('Findings and CAP API notifications', () => {
     fixture.findingNode.properties['vso:findingStatus'] = 'Pending Closure Approval';
 
     const response = await request(app)
-      .patch('/api/findings/MDPP001-AYVIS-01/closure-review')
+      .patch('/api/findings/H-MDPPA0001-AVIS-001/closure-review')
       .set('Cookie', 'compliance_session_id=session-1')
       .set('x-csrf-token', 'csrf-token-1')
       .send({ decision: 'reject' });
@@ -1661,7 +1661,7 @@ describe('Findings and CAP API notifications', () => {
     const { app } = await buildApp({ roles: ['cap_entry'], notificationService: service });
 
     const response = await request(app)
-      .post('/api/findings/MDPP001-AYVIS-01/deadline-extension-requests')
+      .post('/api/findings/H-MDPPA0001-AVIS-001/deadline-extension-requests')
       .set('Cookie', 'compliance_session_id=session-1')
       .set('x-csrf-token', 'csrf-token-1')
       .send({ requestedResolutionDeadline: '2026-06-01' });
@@ -1678,7 +1678,7 @@ describe('Findings and CAP API notifications', () => {
     fixture.findingNode.properties['vso:requestedResolutionDeadline'] = '2026-06-01';
 
     const response = await request(app)
-      .patch('/api/findings/MDPP001-AYVIS-01/deadline-extension-review')
+      .patch('/api/findings/H-MDPPA0001-AVIS-001/deadline-extension-review')
       .set('Cookie', 'compliance_session_id=session-1')
       .set('x-csrf-token', 'csrf-token-1')
       .send({ decision: 'Accepted' });

@@ -13,8 +13,11 @@
     </div>
     <div class="input-group">
       <div class="grid-cell1 grid-item">
-        <label for="inspectionType">Inspection Type:</label>
-        <input id="inspectionType" type="text" v-model="inspectionData.inspectionType" :disabled="appState != 'editing'" placeholder="e.g. Ramp Inspection" />
+        <label for="activityTypeId">Activity Type:</label>
+        <select id="activityTypeId" v-model="inspectionData.activityTypeId" :disabled="appState != 'editing'">
+          <option value="">Select an activity type</option>
+          <option v-for="type in activityTypeStore.activityTypes" :key="type.id" :value="type.id">{{ type.code }} — {{ type.name }}</option>
+        </select>
       </div>
       <div class="grid-cell2 grid-item text-area">
         <label for="objective">Objective:</label>
@@ -111,6 +114,7 @@ import { useSiteVisitStore } from '@/stores/siteVisitStore';
 import { useInspectedProviderStore } from '@/stores/inspectedProviderStore';
 import { useInspectedSpecialtyStore } from '@/stores/inspectedSpecialtyStore';
 import { useLocationStore } from '@/stores/locationStore';
+import { useActivityTypeStore } from '@/stores/activityTypeStore';
 import { useToast } from 'vue-toastification';
 import { apiEntityCRUD } from '@/services/apiServices';
 import { INSPECTION_STATUS, canAssignServices, canEditBasicValues } from '@/utils/siteVisitStatus';
@@ -129,6 +133,7 @@ const siteVisitStore = useSiteVisitStore();
 const inspectedProviderStore = useInspectedProviderStore();
 const iSpecialtyStore = useInspectedSpecialtyStore();
 const locationStore = useLocationStore();
+const activityTypeStore = useActivityTypeStore();
 const toast = useToast();
 
 const appState = ref('viewing');
@@ -154,7 +159,7 @@ const schedulesChanged = ref(false);
 
 const inspectionData = ref({
   id: null,
-  inspectionType: '',
+  activityTypeId: '',
   objective: '',
   scope: '',
   inspectedProviderName: '',
@@ -165,6 +170,7 @@ const editingSchedules = ref([]);
 onMounted(async () => {
   if (!siteVisitId || !providerId) return;
   try {
+    await activityTypeStore.refreshActivityTypes();
     let siteVisit = siteVisitStore.siteVisits.find((sv) => sv.id === siteVisitId);
     if (!siteVisit) {
       await siteVisitStore.refreshSiteVisits();
@@ -199,7 +205,7 @@ onMounted(async () => {
     if (list.length > 0) {
       inspectionData.value = { ...list[0] };
     } else {
-      await inspectionStore.addInspection(siteVisitId, inspectedProviderId, {}, siteVisitCode);
+      await inspectionStore.addInspection(siteVisitId, inspectedProviderId, {});
       await inspectionStore.getInspections(inspectedProviderId);
       const created = inspectionStore.getForInspectedProvider(inspectedProviderId);
       if (created.length > 0) {
@@ -363,7 +369,7 @@ const saveSchedules = async () => {
 const saveInspection = async () => {
   try {
     if (!inspectionData.value.id) {
-      await inspectionStore.addInspection(siteVisitId, inspectedProviderId, inspectionData.value, siteVisitCode);
+      await inspectionStore.addInspection(siteVisitId, inspectedProviderId, inspectionData.value);
     } else {
       await inspectionStore.updateInspection(inspectionData.value, inspectedProviderId);
     }

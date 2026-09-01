@@ -33,7 +33,8 @@ describe('InspectionManager.vue (per-provider)', () => {
       getInspections: vi.fn().mockResolvedValue([]),
       getForSiteVisit: vi.fn(() => [{
         id: 'INSP1', siteVisitId: 'SV1', inspectedProviderId: 'P1',
-        inspectionType: 'Ramp', objective: 'Obj', scope: 'Scope',
+        activityTypeId: 'AT1', activityTypeCode: 'A', activityTypeName: 'Auditoria',
+        objective: 'Obj', scope: 'Scope',
       }]),
       addInspection: vi.fn(),
       updateInspection: vi.fn(),
@@ -58,7 +59,8 @@ describe('InspectionManager.vue (per-provider)', () => {
     const wrapper = mount(InspectionManager, {
       global: { stubs: { BaseManager: { template: '<div><slot /></div>' }, SiteVisitHeader: { template: '<div class="sitevisit-header"></div>' } } },
     });
-    expect(wrapper.find('input#inspectionType').exists()).toBe(true);
+    expect(wrapper.find('select#activityTypeId').exists()).toBe(true);
+    expect(wrapper.find('input#inspectionType').exists()).toBe(false);
     expect(wrapper.find('textarea#objective').exists()).toBe(true);
   });
 
