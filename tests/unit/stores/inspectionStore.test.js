@@ -129,7 +129,11 @@ describe('Inspection Store (per-provider)', () => {
         .find(([method, entity]) => method === 'update' && entity === 'Inspection');
 
       // The letter is baked into the code, so a type change must regenerate it.
-      expect(updateCall[3].code).toBe('AV-MDSD-A-0004');
+      // The scan must exclude INSP1's own current row (it's the record being
+      // regenerated) - the mock's Inspection query only ever returns
+      // [mockInspection] (INSP1 itself), so with self excluded there are no
+      // other MDSD/A inspections and the sequence restarts at 1.
+      expect(updateCall[3].code).toBe('AV-MDSD-A-0001');
     });
 
     it('never re-mints the Activity code once the inspection has left Created', async () => {

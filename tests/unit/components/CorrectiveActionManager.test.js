@@ -502,8 +502,8 @@ describe('CorrectiveActionManager.vue', () => {
     const wrapper = mountComponent();
     await wrapper.vm.$nextTick();
 
-    const firstFile = new File(['x'], 'first.pdf');
-    const secondFile = new File(['y'], 'second.pdf');
+    const firstFile = new File(['x'], 'first.pdf', { type: 'application/pdf' });
+    const secondFile = new File(['y'], 'second.pdf', { type: 'application/pdf' });
 
     wrapper.vm.onEvidenceFileChange({ target: { files: [firstFile], value: '' } }, 'rca');
     wrapper.vm.onEvidenceFileChange({ target: { files: [secondFile], value: '' } }, 'rca');

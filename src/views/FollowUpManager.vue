@@ -168,7 +168,7 @@
 
         <div class="form-field field-span-2">
           <label for="followEvidenceFiles">Attach Evidence (optional)</label>
-          <input id="followEvidenceFiles" type="file" multiple @change="onEvidenceFileChange" />
+          <input id="followEvidenceFiles" type="file" multiple :accept="EVIDENCE_FILE_ACCEPT" @change="onEvidenceFileChange" />
           <div v-if="stagedEvidenceFiles.length" class="evidence-list">
             <ul>
               <li v-for="(file, index) in stagedEvidenceFiles" :key="`${file.name}-${index}`">
@@ -199,6 +199,7 @@ import ScopePicker from '@/components/common/ScopePicker.vue';
 import { useFollowUpStore } from '@/stores/followUpStore';
 import { useAuthStore } from '@/stores/authStore';
 import { apiFollowUpEvidenceContentUrl } from '@/services/apiServices';
+import { EVIDENCE_FILE_ACCEPT, validateEvidenceFile } from '@/utils/evidenceFile';
 
 const route = useRoute();
 const followUpStore = useFollowUpStore();
@@ -287,8 +288,22 @@ async function loadFollowUps() {
 }
 
 function onEvidenceFileChange(event) {
+  searchErrorMessage.value = '';
   const selectedFiles = Array.from(event.target.files || []);
-  stagedEvidenceFiles.value = [...stagedEvidenceFiles.value, ...selectedFiles];
+  const accepted = [];
+  const rejectedMessages = [];
+  for (const file of selectedFiles) {
+    const validationError = validateEvidenceFile(file);
+    if (validationError) {
+      rejectedMessages.push(validationError);
+    } else {
+      accepted.push(file);
+    }
+  }
+  if (rejectedMessages.length) {
+    searchErrorMessage.value = rejectedMessages.join(' ');
+  }
+  stagedEvidenceFiles.value = [...stagedEvidenceFiles.value, ...accepted];
   // Clear the input so choosing the same file again still fires 'change'
   // (each selection is appended to the staged list above, not replaced).
   event.target.value = '';
