@@ -18,6 +18,8 @@ const {
   parseCapId,
   parseFindingId,
   buildCapIdFromFinding,
+  FINDING_ID_SHAPE,
+  CAP_ID_SHAPE,
 } = require('../domain/idFormats.cjs');
 const {
   FINDING_STATUS,
@@ -472,7 +474,7 @@ async function performCapCreate({
 }) {
   const findingIdParts = parseFindingId(finding.findingId);
   if (!findingIdParts) {
-    return { error: { status: 400, code: 'CAP_BAD_REQUEST', message: 'Finding ID does not match expected format XXXXNNN-YYY-MM' } };
+    return { error: { status: 400, code: 'CAP_BAD_REQUEST', message: `Finding ID does not match expected format ${FINDING_ID_SHAPE}` } };
   }
 
   let effectiveCapId = capId ? String(capId).trim().toUpperCase() : '';
@@ -488,7 +490,7 @@ async function performCapCreate({
       const siblingCapId = siblingCap?.properties?.['vso:capId'];
       const parsedCap = parseCapId(siblingCapId);
       if (!parsedCap) continue;
-      if (parsedCap.compactInspectionId !== findingIdParts.compactInspectionId) continue;
+      if (parsedCap.compactActivityCode !== findingIdParts.compactActivityCode) continue;
       if (parsedCap.specialtyCode !== findingIdParts.specialtyCode) continue;
       if (parsedCap.findingSequence !== findingIdParts.findingSequence) continue;
       if (parsedCap.capSequence > maxCapSequence) {
@@ -503,10 +505,10 @@ async function performCapCreate({
   } else {
     const parsedCap = parseCapId(effectiveCapId);
     if (!parsedCap) {
-      return { error: { status: 400, code: 'CAP_BAD_REQUEST', message: 'capId must match CA-XXXXNNNYYY-MM-SS' } };
+      return { error: { status: 400, code: 'CAP_BAD_REQUEST', message: `capId must match ${CAP_ID_SHAPE}` } };
     }
     if (
-      parsedCap.compactInspectionId !== findingIdParts.compactInspectionId ||
+      parsedCap.compactActivityCode !== findingIdParts.compactActivityCode ||
       parsedCap.specialtyCode !== findingIdParts.specialtyCode ||
       parsedCap.findingSequence !== findingIdParts.findingSequence
     ) {

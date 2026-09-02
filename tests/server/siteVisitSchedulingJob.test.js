@@ -2,7 +2,11 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { createRequire } from 'node:module';
 
 const require = createRequire(import.meta.url);
-const { runSiteVisitSchedulingSync, computeNextSiteVisitCode } = require('../../server/jobs/siteVisitSchedulingJob.cjs');
+const {
+  runSiteVisitSchedulingSync,
+  computeNextSiteVisitCode,
+  computeNextActivityCode,
+} = require('../../server/jobs/siteVisitSchedulingJob.cjs');
 const { createNotificationService } = require('../../server/notifications/notificationService.cjs');
 const { InMemoryNotificationRepository } = require('../setup/mocks/InMemoryNotificationRepository.cjs');
 
@@ -15,11 +19,17 @@ function buildAlfrescoClient() {
   };
 }
 
-function buildNodeRedClient({ cadences = [], location, siteVisits = [] } = {}) {
+const ACTIVITY_TYPES = [
+  { id: 'at-a', code: 'A', name: 'Auditoria' },
+  { id: 'at-i', code: 'I', name: 'Inspeccion' },
+  { id: 'at-m', code: 'M', name: 'Monitoreo' },
+];
+
+function buildNodeRedClient({ cadences = [], location, siteVisits = [], inspections = [] } = {}) {
   const state = {
     cadences: new Map(cadences.map((c) => [c.id, { ...c }])),
     siteVisits: [...siteVisits],
-    inspections: [],
+    inspections: [...inspections],
     idCounter: 0,
   };
 
@@ -35,6 +45,15 @@ function buildNodeRedClient({ cadences = [], location, siteVisits = [] } = {}) {
       }
       if (entity === 'SiteVisit') {
         const list = state.siteVisits.filter((sv) => sv.locationId === data.locationId);
+        return { total: list.length, list };
+      }
+      if (entity === 'Inspection') {
+        // Inspection carries no locationId, so the job fetches the whole
+        // active set and filters on the parsed activity code.
+        return { total: state.inspections.length, list: [...state.inspections] };
+      }
+      if (entity === 'ActivityType') {
+        const list = ACTIVITY_TYPES.filter((t) => t.id === data.id);
         return { total: list.length, list };
       }
       return { total: 0, list: [] };
@@ -73,16 +92,57 @@ function buildNotificationService() {
 const LOCATION = { id: 'loc-1', name: 'Main Airport', icaoCode: 'MDPP' };
 
 describe('computeNextSiteVisitCode', () => {
-  it('starts at 001 when there are no existing site visits', () => {
-    expect(computeNextSiteVisitCode({ locationIcaoCode: 'MDPP', existingSiteVisits: [] })).toBe('MDPP-001');
+  it('starts at 01 when there are no existing site visits', () => {
+    expect(computeNextSiteVisitCode({ locationIcaoCode: 'MDPP', year: 2026, existingSiteVisits: [] }))
+      .toBe('V-MDPP-2026-01');
   });
 
   it('continues the sequence, ignoring codes from other locations', () => {
     const code = computeNextSiteVisitCode({
       locationIcaoCode: 'MDPP',
-      existingSiteVisits: [{ code: 'MDPP-001' }, { code: 'MDPP-003' }, { code: 'MDCY-005' }],
+      year: 2026,
+      existingSiteVisits: [{ code: 'V-MDPP-2026-01' }, { code: 'V-MDPP-2026-03' }, { code: 'V-MDCY-2026-05' }],
     });
-    expect(code).toBe('MDPP-004');
+    expect(code).toBe('V-MDPP-2026-04');
+  });
+
+  it('resets the sequence per year at the same location', () => {
+    const code = computeNextSiteVisitCode({
+      locationIcaoCode: 'MDPP',
+      year: 2026,
+      existingSiteVisits: [{ code: 'V-MDPP-2025-07' }, { code: 'V-MDPP-2025-08' }],
+    });
+    expect(code).toBe('V-MDPP-2026-01');
+  });
+});
+
+describe('computeNextActivityCode', () => {
+  it('starts at 0001 when there are no existing activities', () => {
+    expect(computeNextActivityCode({ locationIcaoCode: 'MDPP', activityTypeCode: 'A', existingInspections: [] }))
+      .toBe('AV-MDPP-A-0001');
+  });
+
+  it('scopes the sequence by location AND activity type letter', () => {
+    const code = computeNextActivityCode({
+      locationIcaoCode: 'MDPP',
+      activityTypeCode: 'A',
+      existingInspections: [
+        { code: 'AV-MDPP-A-0001' },
+        { code: 'AV-MDPP-A-0004' },
+        { code: 'AV-MDPP-I-0009' },
+        { code: 'AV-MDCY-A-0007' },
+      ],
+    });
+    expect(code).toBe('AV-MDPP-A-0005');
+  });
+
+  it('does not reset the sequence per year', () => {
+    const code = computeNextActivityCode({
+      locationIcaoCode: 'MDPP',
+      activityTypeCode: 'M',
+      existingInspections: [{ code: 'AV-MDPP-M-0012' }],
+    });
+    expect(code).toBe('AV-MDPP-M-0013');
   });
 });
 
@@ -112,7 +172,7 @@ describe('runSiteVisitSchedulingSync', () => {
         inspectedProviderName: 'Provider 1',
         specialtyId: 'specialty-1',
         specialtyName: 'VIG',
-        inspectionType: 'Audit',
+        activityTypeId: 'at-a',
       }],
     });
     const { service, sent } = buildNotificationService();
@@ -128,12 +188,17 @@ describe('runSiteVisitSchedulingSync', () => {
 
     expect(result.created).toBe(1);
     expect(nodeRedClient.state.siteVisits).toHaveLength(1);
-    expect(nodeRedClient.state.siteVisits[0].code).toBe('MDPP-001');
+    expect(nodeRedClient.state.siteVisits[0].code).toBe('V-MDPP-2026-01');
     expect(nodeRedClient.state.siteVisits[0].status).toBe('Created');
     expect(nodeRedClient.state.inspections).toHaveLength(1);
     expect(nodeRedClient.state.inspections[0].inspectedProviderId).toBe('provider-1');
-    expect(nodeRedClient.state.inspections[0].inspectionType).toBe('Audit');
+    expect(nodeRedClient.state.inspections[0].activityTypeId).toBe('at-a');
     expect(nodeRedClient.state.inspections[0].siteVisitId).toBe(nodeRedClient.state.siteVisits[0].id);
+
+    // The Activity is coded independently of its parent SiteVisit — the two
+    // no longer share a code.
+    expect(nodeRedClient.state.inspections[0].code).toBe('AV-MDPP-A-0001');
+    expect(nodeRedClient.state.inspections[0].code).not.toBe(nodeRedClient.state.siteVisits[0].code);
 
     const updatedCadence = nodeRedClient.state.cadences.get('cadence-1');
     expect(updatedCadence.lastScheduledDate).toBe('2026-08-15');
@@ -141,10 +206,10 @@ describe('runSiteVisitSchedulingSync', () => {
 
     expect(sent).toHaveLength(1);
     expect(sent[0].to).toBe('planners@example.com');
-    expect(sent[0].text).toContain('MDPP-001');
+    expect(sent[0].text).toContain('V-MDPP-2026-01');
   });
 
-  it('defaults inspectionType to "Inspection" when the cadence does not specify one', async () => {
+  it('defaults the activity type letter to I when the cadence does not specify one', async () => {
     const alfrescoClient = buildAlfrescoClient();
     const nodeRedClient = buildNodeRedClient({
       location: LOCATION,
@@ -157,7 +222,8 @@ describe('runSiteVisitSchedulingSync', () => {
 
     await runSiteVisitSchedulingSync({ alfrescoClient, nodeRedClient, username: 'u', password: 'p', notificationService: service, now: () => NOW });
 
-    expect(nodeRedClient.state.inspections[0].inspectionType).toBe('Inspection');
+    expect(nodeRedClient.state.inspections[0].code).toBe('AV-MDPP-I-0001');
+    expect(nodeRedClient.state.inspections[0].activityTypeId).toBeNull();
   });
 
   it('does not fire a cadence whose nextDueDate is still in the future', async () => {
@@ -182,7 +248,7 @@ describe('runSiteVisitSchedulingSync', () => {
     const alfrescoClient = buildAlfrescoClient();
     const nodeRedClient = buildNodeRedClient({
       location: LOCATION,
-      siteVisits: [{ locationId: 'loc-1', code: 'MDPP-001' }, { locationId: 'loc-1', code: 'MDPP-002' }],
+      siteVisits: [{ locationId: 'loc-1', code: 'V-MDPP-2026-01' }, { locationId: 'loc-1', code: 'V-MDPP-2026-02' }],
       cadences: [{
         id: 'cadence-1', active: true, nextDueDate: '2026-08-10', intervalMonths: 12,
         locationId: 'loc-1', inspectedProviderId: 'provider-1',
@@ -192,7 +258,26 @@ describe('runSiteVisitSchedulingSync', () => {
 
     await runSiteVisitSchedulingSync({ alfrescoClient, nodeRedClient, username: 'u', password: 'p', notificationService: service, now: () => NOW });
 
-    expect(nodeRedClient.state.siteVisits.at(-1).code).toBe('MDPP-003');
+    expect(nodeRedClient.state.siteVisits.at(-1).code).toBe('V-MDPP-2026-03');
+  });
+
+  it('continues the activity sequence independently of the site visit sequence', async () => {
+    const alfrescoClient = buildAlfrescoClient();
+    const nodeRedClient = buildNodeRedClient({
+      location: LOCATION,
+      siteVisits: [{ locationId: 'loc-1', code: 'V-MDPP-2026-01' }],
+      inspections: [{ code: 'AV-MDPP-A-0006' }, { code: 'AV-MDPP-I-0002' }],
+      cadences: [{
+        id: 'cadence-1', active: true, nextDueDate: '2026-08-10', intervalMonths: 12,
+        locationId: 'loc-1', inspectedProviderId: 'provider-1', activityTypeId: 'at-a',
+      }],
+    });
+    const { service } = buildNotificationService();
+
+    await runSiteVisitSchedulingSync({ alfrescoClient, nodeRedClient, username: 'u', password: 'p', notificationService: service, now: () => NOW });
+
+    expect(nodeRedClient.state.siteVisits.at(-1).code).toBe('V-MDPP-2026-02');
+    expect(nodeRedClient.state.inspections.at(-1).code).toBe('AV-MDPP-A-0007');
   });
 
   it('skips a due cadence whose location is missing an ICAO code, without crashing the whole sweep', async () => {

@@ -31,7 +31,7 @@ describe('notificationService.notify', () => {
       channel: 'in_app',
       recipient: 'alice',
       subject: 'CAP submitted',
-      body: 'A CAP was submitted for MDPP001-AYVIS-01',
+      body: 'A CAP was submitted for H-MDPPA0001-AVIS-001',
     });
 
     expect(result.status).toBe('sent');
@@ -47,7 +47,7 @@ describe('notificationService.notify', () => {
       channel: 'email',
       recipient: 'oversight-team@example.com',
       subject: 'Finding overdue',
-      body: 'Finding MDPP001-AYVIS-01 is overdue',
+      body: 'Finding H-MDPPA0001-AVIS-001 is overdue',
       isCritical: true,
     });
 

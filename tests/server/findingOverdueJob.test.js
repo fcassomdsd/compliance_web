@@ -12,7 +12,7 @@ function buildAlfrescoClient({ findingStatus, resolutionDeadline, findingReviewS
   const nodes = findingNodes || [{
     id: 'finding-node-1',
     properties: {
-      'vso:findingId': 'MDPP001-AYVIS-01',
+      'vso:findingId': 'H-MDPPA0001-AVIS-001',
       'vso:findingStatus': findingStatus,
       'vso:resolutionDeadline': resolutionDeadline,
       'vso:providerName': 'Provider 1',
@@ -73,7 +73,7 @@ describe('runFindingOverdueSync case escalation', () => {
     expect(result.updated).toBe(1);
     expect(sent).toHaveLength(1);
     expect(sent[0].to).toBe('oversight-team@example.com');
-    expect(sent[0].subject).toContain('MDPP001-AYVIS-01');
+    expect(sent[0].subject).toContain('H-MDPPA0001-AVIS-001');
     expect(sent[0].subject).toContain('finding resolution');
   });
 
@@ -138,9 +138,9 @@ describe('runFindingOverdueSync pending-review digest', () => {
   it('sends one aggregate digest listing all findings pending review', async () => {
     const alfrescoClient = buildAlfrescoClient({
       findingNodes: [
-        { id: 'f1', properties: { 'vso:findingId': 'MDPP001-AYVIS-01', 'vso:findingStatus': 'Open', 'vso:findingReviewStatus': 'Pending Review', 'vso:providerName': 'Provider 1' } },
-        { id: 'f2', properties: { 'vso:findingId': 'MDPP001-AYVIS-02', 'vso:findingStatus': 'Open', 'vso:findingReviewStatus': 'Pending Review', 'vso:providerName': 'Provider 2' } },
-        { id: 'f3', properties: { 'vso:findingId': 'MDPP001-AYVIS-03', 'vso:findingStatus': 'Open', 'vso:findingReviewStatus': 'Confirmed', 'vso:providerName': 'Provider 3' } },
+        { id: 'f1', properties: { 'vso:findingId': 'H-MDPPA0001-AVIS-001', 'vso:findingStatus': 'Open', 'vso:findingReviewStatus': 'Pending Review', 'vso:providerName': 'Provider 1' } },
+        { id: 'f2', properties: { 'vso:findingId': 'H-MDPPA0001-AVIS-002', 'vso:findingStatus': 'Open', 'vso:findingReviewStatus': 'Pending Review', 'vso:providerName': 'Provider 2' } },
+        { id: 'f3', properties: { 'vso:findingId': 'H-MDPPA0001-AVIS-003', 'vso:findingStatus': 'Open', 'vso:findingReviewStatus': 'Confirmed', 'vso:providerName': 'Provider 3' } },
       ],
     });
     const { service, sent } = buildNotificationService();
@@ -157,9 +157,9 @@ describe('runFindingOverdueSync pending-review digest', () => {
     expect(sent).toHaveLength(1);
     expect(sent[0].to).toBe('inspectors@example.com');
     expect(sent[0].subject).toContain('2 finding');
-    expect(sent[0].text).toContain('MDPP001-AYVIS-01');
-    expect(sent[0].text).toContain('MDPP001-AYVIS-02');
-    expect(sent[0].text).not.toContain('MDPP001-AYVIS-03');
+    expect(sent[0].text).toContain('H-MDPPA0001-AVIS-001');
+    expect(sent[0].text).toContain('H-MDPPA0001-AVIS-002');
+    expect(sent[0].text).not.toContain('H-MDPPA0001-AVIS-003');
   });
 
   it('sends no digest when nothing is pending review', async () => {

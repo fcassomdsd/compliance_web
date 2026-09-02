@@ -20,7 +20,7 @@ Pseudo-rule:
 | Route | Name | requiresAuth | requiredRoles | Notes |
 |---|---|---:|---|---|
 | /inspection | inspection | true | inspector, admin | Main inspection management |
-| /assign-inspectors | assignInspectors | true | planner, admin | Assignment workflow |
+| /assign-inspectors | assignInspectors | true | assigner, admin | Assignment workflow. Formerly scoped to a specialty subset by AGA/SNA/VA Alfresco-group membership; that domain-based scoping was retired along with the domain grouping itself — an assigner now sees/acts on all specialties. |
 | /checklist | checklist | true | inspector, planner, admin | Checklist access |
 | /inspection-plan | inspectionPlan | true | planner, admin | Planning route |
 | /inspection-report | inspectionReport | true | reporter, admin | Reporting route |
@@ -61,6 +61,7 @@ Pseudo-rule:
 3. planner: assignment and planning operations
 4. reporter: report generation and report views
 5. cap_entry: corrective action entry operations
+6. assigner: inspector-to-specialty assignment workflow (`/assign-inspectors`) — undocumented until now; the actual guard has used this role, not `planner`, since the Assign Inspectors view shipped
 
 ## 5. Mapping Source
 

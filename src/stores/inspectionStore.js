@@ -1,6 +1,66 @@
 import { defineStore } from 'pinia';
 import { apiEntityCRUD } from '@/services/apiServices';
 import { INSPECTION_STATUS } from '@/utils/siteVisitStatus';
+import {
+  DEFAULT_ACTIVITY_TYPE_CODE,
+  buildActivityCode,
+  nextActivitySequence,
+} from '@/utils/documentCodes';
+
+// Resolves the 1-letter activity type code that goes into the Activity code.
+// Falls back to "I" (Inspeccion) when the record is created before a type has
+// been chosen — see InspectionManager.vue's auto-create on mount.
+async function resolveActivityTypeCode(data) {
+  const direct = String(data?.activityTypeCode || '').trim().toUpperCase();
+  if (/^[A-Z]$/.test(direct)) return direct;
+
+  const activityTypeId = data?.activityTypeId;
+  if (activityTypeId) {
+    try {
+      const { data: typeQuery } = await apiEntityCRUD('query', 'ActivityType', null, { id: activityTypeId });
+      const code = String(typeQuery?.list?.[0]?.code || '').trim().toUpperCase();
+      if (/^[A-Z]$/.test(code)) return code;
+    } catch {
+      // Fall through to the default below.
+    }
+  }
+
+  return DEFAULT_ACTIVITY_TYPE_CODE;
+}
+
+// The Activity code is independent of its parent SiteVisit's code: it is
+// scoped by the visit location's ICAO code and the activity type letter, with
+// a continuous 4-digit sequence that does not reset per year.
+//
+// excludeInspectionId must be passed when regenerating an existing
+// Inspection's code (e.g. on activity-type change) — otherwise the record's
+// own current row is still present in the scan and counts itself toward the
+// max, inflating the sequence by one.
+async function generateActivityCode(siteVisitId, activityTypeCode, excludeInspectionId = null) {
+  const { data: siteVisitQuery } = await apiEntityCRUD('query', 'SiteVisit', null, { id: siteVisitId });
+  const siteVisit = siteVisitQuery?.list?.[0];
+  if (!siteVisit) {
+    throw new Error('Could not find site visit for activity code generation');
+  }
+
+  const { data: locationQuery } = await apiEntityCRUD('query', 'Location', null, { id: siteVisit.locationId });
+  const locationIcaoCode = locationQuery?.list?.[0]?.icaoCode?.trim().toUpperCase();
+  if (!locationIcaoCode || locationIcaoCode.length !== 4) {
+    throw new Error('Site visit location has an invalid ICAO code');
+  }
+
+  // Inspection carries no locationId, so the scan cannot be filtered
+  // server-side — fetch the active set and filter on the parsed code.
+  const { data: inspectionQuery } = await apiEntityCRUD('query', 'Inspection', null, { deleted: false });
+  const all = Array.isArray(inspectionQuery?.list) ? inspectionQuery.list : [];
+  const existing = excludeInspectionId ? all.filter((i) => i.id !== excludeInspectionId) : all;
+
+  return buildActivityCode({
+    icaoCode: locationIcaoCode,
+    activityTypeCode,
+    sequence: nextActivitySequence(existing, locationIcaoCode, activityTypeCode),
+  });
+}
 
 export const useInspectionStore = defineStore('inspection', {
 
@@ -11,14 +71,15 @@ export const useInspectionStore = defineStore('inspection', {
 
   actions: {
 
-    async addInspection(siteVisitId, inspectedProviderId, data, siteVisitCode = '') {
+    async addInspection(siteVisitId, inspectedProviderId, data) {
       try {
+        const activityTypeCode = await resolveActivityTypeCode(data);
         const addData = {
           siteVisitId,
           inspectedProviderId,
-          code: siteVisitCode,
+          code: await generateActivityCode(siteVisitId, activityTypeCode),
           status: INSPECTION_STATUS.CREATED,
-          inspectionType: data.inspectionType || '',
+          activityTypeId: data.activityTypeId || null,
           objective: data.objective || '',
           scope: data.scope || '',
         };
@@ -61,10 +122,25 @@ export const useInspectionStore = defineStore('inspection', {
         const updateId = inspectionToUpdate.id;
         const updateData = {};
         for (const key of Object.keys(inspectionToUpdate)) {
-          if (key !== 'id' && key !== 'siteVisitId' && key !== 'inspectedProviderId') {
+          if (key !== 'id' && key !== 'siteVisitId' && key !== 'inspectedProviderId' && key !== 'code') {
             updateData[key] = inspectionToUpdate[key];
           }
         }
+
+        // The activity type letter is baked into the Activity code, so a type
+        // change has to re-mint it. Only safe while the inspection is still at
+        // "Created" — past that, checklists/findings already cite the code.
+        if ('activityTypeId' in updateData) {
+          const { data: currentQuery } = await apiEntityCRUD('query', 'Inspection', null, { id: updateId });
+          const current = currentQuery?.list?.[0];
+          const typeChanged = current && (current.activityTypeId || null) !== (updateData.activityTypeId || null);
+
+          if (typeChanged && current.status === INSPECTION_STATUS.CREATED) {
+            const activityTypeCode = await resolveActivityTypeCode(updateData);
+            updateData.code = await generateActivityCode(current.siteVisitId, activityTypeCode, updateId);
+          }
+        }
+
         await apiEntityCRUD('update', 'Inspection', updateId, updateData);
         await this.getInspections(inspectedProviderId);
       } catch (error) {
@@ -100,7 +176,9 @@ export const useInspectionStore = defineStore('inspection', {
           siteVisitId: entity.siteVisitId,
           inspectedProviderId: entity.inspectedProviderId,
           status: entity.status || INSPECTION_STATUS.CREATED,
-          inspectionType: entity.inspectionType || '',
+          activityTypeId: entity.activityTypeId || '',
+          activityTypeCode: entity.activityTypeCode || '',
+          activityTypeName: entity.activityTypeName || '',
           objective: entity.objective || '',
           scope: entity.scope || '',
           code: entity.code || '',

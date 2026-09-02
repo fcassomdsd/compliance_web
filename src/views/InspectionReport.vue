@@ -34,8 +34,8 @@
           <textarea id="scp" v-model="reportFields.scope" disabled />
         </div>
         <div class="grid-cell7 grid-item">
-          <label for="typ">Inspection Type:</label>
-          <input id="typ" v-model="reportFields.inspectionType" disabled />
+          <label for="typ">Activity Type:</label>
+          <input id="typ" v-model="reportFields.activityTypeName" disabled />
         </div>
         <div class="grid-cell8 grid-item"></div>
       </template>
@@ -121,7 +121,8 @@ const loading = ref(false);
 const reportFields = reactive({
   objective: '',
   scope: '',
-  inspectionType: '',
+  activityTypeId: '',
+  activityTypeName: '',
   description: '',
   conclusion: '',
 });
@@ -164,7 +165,8 @@ const selectInspection = async (inspection) => {
 const clearReportFields = () => {
   reportFields.objective = '';
   reportFields.scope = '';
-  reportFields.inspectionType = '';
+  reportFields.activityTypeId = '';
+  reportFields.activityTypeName = '';
   reportFields.description = '';
   reportFields.conclusion = '';
 };
@@ -185,7 +187,8 @@ const onProviderChange = async () => {
       const insp = inspections[0];
       reportFields.objective = insp.objective || '';
       reportFields.scope = insp.scope || '';
-      reportFields.inspectionType = insp.inspectionType || '';
+      reportFields.activityTypeId = insp.activityTypeId || '';
+      reportFields.activityTypeName = insp.activityTypeName || '';
       reportFields.description = insp.description || '';
       reportFields.conclusion = insp.conclusion || '';
     }
@@ -212,7 +215,7 @@ const generateReport = async () => {
           conclusion: reportFields.conclusion,
           objective: reportFields.objective,
           scope: reportFields.scope,
-          inspectionType: reportFields.inspectionType,
+          activityTypeId: reportFields.activityTypeId,
         }, providerInsp.id);
       }
     }

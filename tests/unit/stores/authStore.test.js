@@ -3,7 +3,7 @@ import { createPinia, setActivePinia } from 'pinia';
 
 import { useAuthStore } from '@/stores/authStore';
 import { authLogin, authLogout, authSession } from '@/services/authServices';
-import { apiAssignmentGroup, apiInspectorByAlfrescoUser } from '@/services/apiServices';
+import { apiInspectorByAlfrescoUser } from '@/services/apiServices';
 
 vi.mock('@/services/authServices');
 vi.mock('@/services/apiServices');
@@ -139,14 +139,10 @@ describe('authStore', () => {
     expect(store.groups).toEqual(['GROUP_U-VSO-IN_Assigner', 'GROUP_U-VSO-IN_AssignerAGA']);
   });
 
-  it('refreshDomainContext loads inspector profile and assigner specialties', async () => {
+  it('refreshDomainContext loads the inspector profile', async () => {
     vi.mocked(apiInspectorByAlfrescoUser).mockResolvedValue({
       status: 200,
       data: { id: 'I1', name: 'Fernando', specialties: [{ id: 'S1', name: 'Spec 1' }] },
-    });
-    vi.mocked(apiAssignmentGroup).mockResolvedValue({
-      status: 200,
-      data: { specialties: [{ id: 'S1', name: 'Spec 1' }, { id: 'S2', name: 'Spec 2' }] },
     });
 
     const store = useAuthStore();
@@ -158,14 +154,32 @@ describe('authStore', () => {
     await store.refreshDomainContext();
 
     expect(apiInspectorByAlfrescoUser).toHaveBeenCalledWith('fernando.casso');
-    expect(apiAssignmentGroup).toHaveBeenCalledWith('GROUP_U-VSO-IN_AssignerAGA');
     expect(store.inspectorProfile?.id).toBe('I1');
-    expect(Array.from(store.assignerSpecialtyIds)).toEqual(['S1', 'S2']);
+  });
+
+  it('refreshDomainContext no longer derives a specialty scope from assigner domain groups', async () => {
+    vi.mocked(apiInspectorByAlfrescoUser).mockResolvedValue({
+      status: 200,
+      data: { id: 'I1', name: 'Fernando' },
+    });
+
+    const store = useAuthStore();
+    store.authenticated = true;
+    store.user = { username: 'fernando.casso' };
+    store.roles = ['assigner'];
+    store.groups = ['GROUP_U-VSO-IN_Assigner', 'GROUP_U-VSO-IN_AssignerAGA'];
+
+    await store.refreshDomainContext();
+
+    // The AGA/SNA/VA assigner-domain grouping has been retired platform-wide:
+    // assigners now act on the full flat specialty list, so no group-derived
+    // narrowing is computed or exposed at all.
+    expect(store.assignerSpecialties).toBeUndefined();
+    expect(store.assignerSpecialtyIds).toBeUndefined();
   });
 
   it('refreshDomainContext tolerates optional lookup failures', async () => {
     vi.mocked(apiInspectorByAlfrescoUser).mockRejectedValue(new Error('boom'));
-    vi.mocked(apiAssignmentGroup).mockRejectedValue(new Error('boom'));
 
     const store = useAuthStore();
     store.authenticated = true;
@@ -175,7 +189,6 @@ describe('authStore', () => {
 
     await expect(store.refreshDomainContext()).resolves.toBeUndefined();
     expect(store.inspectorProfile).toBeNull();
-    expect(store.assignerSpecialties).toEqual([]);
   });
 
   it('init rethrows non-401 auth session failures', async () => {

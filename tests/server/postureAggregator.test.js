@@ -17,7 +17,7 @@ const NOW = new Date('2026-04-03T10:00:00.000Z');
 
 function baseFinding(overrides = {}) {
   return {
-    findingId: 'MDPP001-AYVIS-01',
+    findingId: 'H-MDPPA0001-AVIS-001',
     findingStatus: FINDING_STATUS.OPEN,
     findingSeverity: 'B',
     riskClassification: 'Medium',

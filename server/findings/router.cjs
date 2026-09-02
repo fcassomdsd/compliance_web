@@ -10,7 +10,7 @@ const {
   getFollowUpReportsForFinding,
   listEvidenceForSection,
 } = require('../domain/alfrescoMappers.cjs');
-const { parseFollowUpId, buildFollowUpIdFromFinding } = require('../domain/idFormats.cjs');
+const { parseFollowUpId, buildFollowUpIdFromFinding, buildFindingId } = require('../domain/idFormats.cjs');
 const { computeDeadlinesForSeverity } = require('./severityDeadlines.cjs');
 const { FINDING_STATUS } = require('../domain/statusRules.cjs');
 const { computeEffectiveFindingStatus } = require('../domain/statusRules.cjs');
@@ -288,7 +288,11 @@ function findingIdFromFollowUpId(followUpId) {
   if (!parsed) {
     return null;
   }
-  return `${parsed.compactInspectionId}-${parsed.specialtyCode}-${String(parsed.findingSequence).padStart(2, '0')}`;
+  return buildFindingId({
+    compactActivityCode: parsed.compactActivityCode,
+    specialtyCode: parsed.specialtyCode,
+    findingSequence: parsed.findingSequence,
+  });
 }
 
 function applyFindingFilters({ findings, status, capOverdueOnly, solutionOverdueOnly, reviewStatus }) {

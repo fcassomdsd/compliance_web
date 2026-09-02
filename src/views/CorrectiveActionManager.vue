@@ -111,7 +111,7 @@
           </ul>
         </div>
         <div v-if="isCapEditableStatus(capStore.selectedCap.acceptanceStatus)" class="evidence-upload">
-          <input type="file" @change="onEvidenceFileChange($event, 'rcaDetail')" />
+          <input type="file" :accept="EVIDENCE_FILE_ACCEPT" @change="onEvidenceFileChange($event, 'rcaDetail')" />
           <BaseButton variant="ghost" size="sm" :disabled="!rcaDetailEvidenceFile || capStore.loading" @click="uploadDetailEvidence('rca')">Upload RCA Evidence</BaseButton>
         </div>
       </div>
@@ -142,7 +142,7 @@
           </ul>
         </div>
         <div v-if="isCapEditableStatus(capStore.selectedCap.acceptanceStatus)" class="evidence-upload">
-          <input type="file" @change="onEvidenceFileChange($event, 'riskDetail')" />
+          <input type="file" :accept="EVIDENCE_FILE_ACCEPT" @change="onEvidenceFileChange($event, 'riskDetail')" />
           <BaseButton variant="ghost" size="sm" :disabled="!riskDetailEvidenceFile || capStore.loading" @click="uploadDetailEvidence('risk-assessment')">Upload Risk Assessment Evidence</BaseButton>
         </div>
       </div>
@@ -168,7 +168,7 @@
           </ul>
         </div>
         <div v-if="isCapEditableStatus(capStore.selectedCap.acceptanceStatus)" class="evidence-upload">
-          <input type="file" @change="onEvidenceFileChange($event, 'containmentDetail')" />
+          <input type="file" :accept="EVIDENCE_FILE_ACCEPT" @change="onEvidenceFileChange($event, 'containmentDetail')" />
           <BaseButton variant="ghost" size="sm" :disabled="!containmentDetailEvidenceFile || capStore.loading" @click="uploadDetailEvidence('containment')">Upload Containment Evidence</BaseButton>
         </div>
       </div>
@@ -302,7 +302,7 @@
             </div>
             <div class="form-field" v-if="editMode.type !== 'notAccepted'">
               <label for="rcaEvidence">Evidence of RCA</label>
-              <input id="rcaEvidence" type="file" multiple @change="onEvidenceFileChange($event, 'rca')" />
+              <input id="rcaEvidence" type="file" multiple :accept="EVIDENCE_FILE_ACCEPT" @change="onEvidenceFileChange($event, 'rca')" />
               <div v-if="rcaEvidenceFiles.length" class="evidence-list">
                 <ul>
                   <li v-for="(file, index) in rcaEvidenceFiles" :key="`${file.name}-${index}`">
@@ -351,7 +351,7 @@
             </div>
             <div class="form-field" v-if="editMode.type !== 'notAccepted'">
               <label for="raEvidence">Evidence</label>
-              <input id="raEvidence" type="file" multiple @change="onEvidenceFileChange($event, 'risk')" />
+              <input id="raEvidence" type="file" multiple :accept="EVIDENCE_FILE_ACCEPT" @change="onEvidenceFileChange($event, 'risk')" />
               <div v-if="riskEvidenceFiles.length" class="evidence-list">
                 <ul>
                   <li v-for="(file, index) in riskEvidenceFiles" :key="`${file.name}-${index}`">
@@ -381,7 +381,7 @@
           </div>
           <div class="form-field" v-if="editMode.type !== 'notAccepted'">
             <label for="containmentEvidence">Evidence</label>
-            <input id="containmentEvidence" type="file" multiple @change="onEvidenceFileChange($event, 'containment')" />
+            <input id="containmentEvidence" type="file" multiple :accept="EVIDENCE_FILE_ACCEPT" @change="onEvidenceFileChange($event, 'containment')" />
             <div v-if="containmentEvidenceFiles.length" class="evidence-list">
               <ul>
                 <li v-for="(file, index) in containmentEvidenceFiles" :key="`${file.name}-${index}`">
@@ -477,6 +477,7 @@
     </div>
 
     <p v-if="capStore.error" class="error-message">{{ capStore.error }}</p>
+    <p v-if="evidenceFileError" class="error-message">{{ evidenceFileError }}</p>
     <p v-if="message" class="success-message">{{ message }}</p>
 
     <ModalWindow
@@ -510,12 +511,14 @@ import { useCapStore } from '@/stores/capStore';
 import { useAuthStore } from '@/stores/authStore';
 import { formatDate } from '@/utils/formatDate';
 import { apiCapEvidenceContentUrl } from '@/services/apiServices';
+import { EVIDENCE_FILE_ACCEPT, validateEvidenceFile } from '@/utils/evidenceFile';
 
 const route = useRoute();
 const capStore = useCapStore();
 const authStore = useAuthStore();
 
 const message = ref('');
+const evidenceFileError = ref('');
 const showSubmit = ref(false);
 
 // Editing a CAP has two entirely different mechanisms depending on where
@@ -601,19 +604,34 @@ const riskDetailEvidenceFile = ref(null);
 const containmentDetailEvidenceFile = ref(null);
 
 function onEvidenceFileChange(event, target) {
+  evidenceFileError.value = '';
   const selectedFiles = Array.from(event.target.files || []);
+  const accepted = [];
+  const rejectedMessages = [];
+  for (const file of selectedFiles) {
+    const validationError = validateEvidenceFile(file);
+    if (validationError) {
+      rejectedMessages.push(validationError);
+    } else {
+      accepted.push(file);
+    }
+  }
+  if (rejectedMessages.length) {
+    evidenceFileError.value = rejectedMessages.join(' ');
+  }
+
   if (target === 'rca') {
-    rcaEvidenceFiles.value = [...rcaEvidenceFiles.value, ...selectedFiles];
+    rcaEvidenceFiles.value = [...rcaEvidenceFiles.value, ...accepted];
   } else if (target === 'risk') {
-    riskEvidenceFiles.value = [...riskEvidenceFiles.value, ...selectedFiles];
+    riskEvidenceFiles.value = [...riskEvidenceFiles.value, ...accepted];
   } else if (target === 'containment') {
-    containmentEvidenceFiles.value = [...containmentEvidenceFiles.value, ...selectedFiles];
+    containmentEvidenceFiles.value = [...containmentEvidenceFiles.value, ...accepted];
   } else if (target === 'rcaDetail') {
-    rcaDetailEvidenceFile.value = selectedFiles[0] || null;
+    rcaDetailEvidenceFile.value = accepted[0] || null;
   } else if (target === 'riskDetail') {
-    riskDetailEvidenceFile.value = selectedFiles[0] || null;
+    riskDetailEvidenceFile.value = accepted[0] || null;
   } else if (target === 'containmentDetail') {
-    containmentDetailEvidenceFile.value = selectedFiles[0] || null;
+    containmentDetailEvidenceFile.value = accepted[0] || null;
   }
   // Clear the input so choosing the same file again still fires 'change'
   // (each selection is appended to the staged list above, not replaced).

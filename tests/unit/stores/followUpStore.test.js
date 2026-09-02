@@ -35,7 +35,7 @@ describe('followUpStore', () => {
 
   it('createFollowUp returns API payload and tracks errors', async () => {
     const payload = {
-      findingId: 'MDPP001-AYVIS-01',
+      findingId: 'H-MDPPA0001-AVIS-001',
       payload: { followUpType: 'Progress Review', percentComplete: 25 },
       csrfToken: 'csrf-token',
     };
@@ -43,7 +43,7 @@ describe('followUpStore', () => {
 
     await expect(store.createFollowUp(payload)).resolves.toEqual({ followUpReport: { followUpId: 'FU-X' } });
     expect(apiCreateFindingFollowUp).toHaveBeenCalledWith(
-      'MDPP001-AYVIS-01',
+      'H-MDPPA0001-AVIS-001',
       { followUpType: 'Progress Review', percentComplete: 25 },
       'csrf-token'
     );
@@ -56,8 +56,8 @@ describe('followUpStore', () => {
   it('uploadFollowUpEvidence returns API payload and tracks errors', async () => {
     const file = new File(['x'], 'evidence.pdf');
     const args = {
-      findingId: 'MDPP001-AYVIS-01',
-      followUpId: 'FU-MDPP001AYVIS-01-01',
+      findingId: 'H-MDPPA0001-AVIS-001',
+      followUpId: 'S-MDPPA0001-AVIS001-01',
       file,
       evidenceRole: 'Progress Evidence',
       collectionMethod: 'Remote',
@@ -67,8 +67,8 @@ describe('followUpStore', () => {
 
     await expect(store.uploadFollowUpEvidence(args)).resolves.toEqual({ evidence: { nodeId: 'ev-1' } });
     expect(apiUploadFollowUpEvidence).toHaveBeenCalledWith(
-      'MDPP001-AYVIS-01',
-      'FU-MDPP001AYVIS-01-01',
+      'H-MDPPA0001-AVIS-001',
+      'S-MDPPA0001-AVIS001-01',
       file,
       'Progress Evidence',
       'Remote',

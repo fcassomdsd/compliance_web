@@ -46,9 +46,10 @@
           <input id="cadenceIntervalMonths" v-model.number="form.intervalMonths" type="number" min="1" />
         </div>
         <div class="form-field">
-          <label for="cadenceInspectionType">Inspection Type</label>
-          <select id="cadenceInspectionType" v-model="form.inspectionType">
-            <option v-for="type in inspectionTypes" :key="type" :value="type">{{ type }}</option>
+          <label for="cadenceActivityType">Activity Type</label>
+          <select id="cadenceActivityType" v-model="form.activityTypeId">
+            <option value="">Select an activity type</option>
+            <option v-for="type in activityTypeStore.activityTypes" :key="type.id" :value="type.id">{{ type.code }} — {{ type.name }}</option>
           </select>
         </div>
         <div class="form-field">
@@ -78,6 +79,7 @@
           <th>Provider</th>
           <th>Specialty</th>
           <th>Location</th>
+          <th>Activity Type</th>
           <th>Interval (months)</th>
           <th>Next Due Date</th>
           <th>Active</th>
@@ -90,6 +92,7 @@
           <td>{{ cadence.inspectedProviderName || cadence.inspectedProviderId }}</td>
           <td>{{ cadence.specialtyName || cadence.specialtyId }}</td>
           <td>{{ cadence.locationName || cadence.locationId }}</td>
+          <td>{{ activityTypeLabel(cadence) }}</td>
           <td>{{ cadence.intervalMonths }}</td>
           <td>{{ formatDate(cadence.nextDueDate) || '-' }}</td>
           <td>{{ cadence.active ? 'Yes' : 'No' }}</td>
@@ -112,16 +115,22 @@ import BaseButton from '@/components/base/BaseButton.vue';
 import LoadingSpinner from '@/components/base/LoadingSpinner.vue';
 import { useInspectionCadenceStore } from '@/stores/inspectionCadenceStore';
 import { useLocationStore } from '@/stores/locationStore';
+import { useActivityTypeStore } from '@/stores/activityTypeStore';
 import { formatDate } from '@/utils/formatDate';
 
 const cadenceStore = useInspectionCadenceStore();
 const locationStore = useLocationStore();
+const activityTypeStore = useActivityTypeStore();
 
 const message = ref('');
 const errorMessage = ref('');
 const appState = ref('viewing');
 
-const inspectionTypes = ['Audit', 'Inspection', 'Monitoring', 'Event analysis', 'Document Review'];
+function activityTypeLabel(cadence) {
+  if (cadence.activityTypeName) return cadence.activityTypeName;
+  const activityType = activityTypeStore.getActivityTypeById(cadence.activityTypeId);
+  return activityType ? activityType.name : (cadence.activityTypeId || '-');
+}
 
 function emptyForm() {
   return {
@@ -132,7 +141,7 @@ function emptyForm() {
     specialtyId: '',
     locationId: '',
     intervalMonths: 12,
-    inspectionType: 'Inspection',
+    activityTypeId: '',
     lastScheduledDate: '',
     nextDueDate: '',
     active: true,
@@ -147,6 +156,7 @@ const isFormValid = computed(() => {
     form.inspectedProviderId &&
     form.specialtyId &&
     form.locationId &&
+    form.activityTypeId &&
     form.intervalMonths &&
     form.nextDueDate
   );
@@ -166,7 +176,7 @@ function editCadence(cadence) {
     specialtyId: cadence.specialtyId || '',
     locationId: cadence.locationId || '',
     intervalMonths: cadence.intervalMonths || 12,
-    inspectionType: cadence.inspectionType || 'Inspection',
+    activityTypeId: cadence.activityTypeId || '',
     lastScheduledDate: cadence.lastScheduledDate || '',
     nextDueDate: cadence.nextDueDate || '',
     active: Boolean(cadence.active),
@@ -187,7 +197,7 @@ function buildPayload() {
     specialtyId: form.specialtyId,
     locationId: form.locationId,
     intervalMonths: form.intervalMonths,
-    inspectionType: form.inspectionType,
+    activityTypeId: form.activityTypeId,
     lastScheduledDate: form.lastScheduledDate || null,
     nextDueDate: form.nextDueDate,
     active: form.active,
@@ -233,6 +243,7 @@ onMounted(async () => {
     cadenceStore.refreshCadences(),
     cadenceStore.refreshPickerOptions(),
     locationStore.refreshLocations(),
+    activityTypeStore.refreshActivityTypes(),
   ]);
 });
 </script>
