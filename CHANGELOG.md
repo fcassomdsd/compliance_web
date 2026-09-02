@@ -5,12 +5,23 @@ All notable changes to this project will be documented in this file.
 ## [Unreleased]
 
 ### Added
+- **Client-side evidence file validation**: `src/utils/evidenceFile.js` mirrors the server's MIME allowlist and 15MB size limit, and is now checked at file-selection time in both `FollowUpManager.vue` and `CorrectiveActionManager.vue` — an unsupported or oversized file is rejected immediately, before the parent follow-up/CAP record is ever created (previously, evidence upload was a separate step after creation, so a rejected file left a "dud" record with no evidence and no indication anything had already been created).
+- **`ActivityType` catalog support**: new `activityTypeStore.js` fetching the Nomenclatura activity-type reference entity (Auditoría/Inspección/Monitoreo/Revisión documental/Análisis de suceso, letter-coded A/I/M/D/S) dynamically, replacing a hardcoded English enum in `InspectionCadenceManager.vue` and a free-text input in `InspectionManager.vue`.
 - **Rich Corrective Action Plan (CAP) registration**: CAP submission now captures 5 required sections — Root Cause Analysis (method, main category, root cause, contributing factors, evidence upload), Risk Assessment (hazard, consequence, probability, severity, calculated risk level, tolerability level, justification, evidence upload), Corrective Actions (repeatable list with sequence number, description, priority, responsible person, deadline), Expected Residual Risk (probability, severity, risk level, justification), and Effectiveness Verification (method, indicators, projected verification date).
 - **Individually trackable corrective action items**: each action item has its own status (Open/In Progress/Closed) and closure date/notes, updatable via a new `PATCH /api/caps/:capId/actions/:sequenceNumber` endpoint independent of overall CAP acceptance status.
 - **Evidence upload for CAPs**: new `POST /api/caps/:capId/rca/evidence` and `POST /api/caps/:capId/risk-assessment/evidence` endpoints accept multipart file uploads (via `multer`, memory storage), enforcing an evidence MIME-type allowlist and a 15 MB size limit, and link the uploaded `vso:evidenceItem` node to its section via the `vso:relatedEvidence` association.
 - **`CorrectiveActionManager.vue`** redesigned with a 5-section Submit CAP form (add/remove corrective actions with auto sequence numbers) and a CAP detail view showing all sections plus per-action-item status/closure controls and evidence upload.
 - **`capStore.js`**: new `updateActionItem` and `uploadCapEvidence` actions.
 - **`apiServices.js`**: new `apiUpdateCapActionItem` and `apiUploadCapEvidence` functions.
+
+### Changed
+- **BREAKING — adopted the platform-wide Nomenclatura document-ID formats** (`V-`/`AV-`/`LV-`/`H-`/`P-`/`S-` prefixes — see root `CLAUDE.md` for the full table). `idFormats.cjs`/`documentCodes.js` rewritten accordingly.
+- **BREAKING — Activity (Inspection) codes are now independently sequenced from their parent SiteVisit's code**, instead of copying it. SiteVisit codes reset per location per year (`V-XXXX-YYYY-##`); Activity codes are scoped by location + activity-type letter and never reset (`AV-XXXX-T-####`).
+- **BREAKING — specialty catalog replaced** with a flat 16-code list (APR, AVIS, FAU, PAV, SSEI, AIM, ATS, COM, ECNS, EMET, FIS, MET, NAV, SAR, SUR, DPR), dropping the AGA/SNA/MET domain-grouping concept.
+- **Permission change**: `authStore`'s domain-based specialty-scope restriction on the `assigner` role (keyed on retired AGA/SNA/VA Alfresco groups) is removed. An `assigner` can now act across all 16 specialties instead of a domain-restricted subset. Removed the dead `specialtyStore.js` this scoping used to read from.
+
+### Fixed
+- **Activity-code sequence off-by-one**: `InspectionManager.vue` auto-creates an Inspection on mount (correct sequence), then a later save (setting the real activity type) re-scans existing Inspections to regenerate the code — the scan included the record's own current row, counting itself and inflating the sequence by one. Now excludes the record being updated.
 
 ## [0.4.0] - 2026-08-02
 
