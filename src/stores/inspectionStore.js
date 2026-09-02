@@ -31,7 +31,12 @@ async function resolveActivityTypeCode(data) {
 // The Activity code is independent of its parent SiteVisit's code: it is
 // scoped by the visit location's ICAO code and the activity type letter, with
 // a continuous 4-digit sequence that does not reset per year.
-async function generateActivityCode(siteVisitId, activityTypeCode) {
+//
+// excludeInspectionId must be passed when regenerating an existing
+// Inspection's code (e.g. on activity-type change) — otherwise the record's
+// own current row is still present in the scan and counts itself toward the
+// max, inflating the sequence by one.
+async function generateActivityCode(siteVisitId, activityTypeCode, excludeInspectionId = null) {
   const { data: siteVisitQuery } = await apiEntityCRUD('query', 'SiteVisit', null, { id: siteVisitId });
   const siteVisit = siteVisitQuery?.list?.[0];
   if (!siteVisit) {
@@ -47,7 +52,8 @@ async function generateActivityCode(siteVisitId, activityTypeCode) {
   // Inspection carries no locationId, so the scan cannot be filtered
   // server-side — fetch the active set and filter on the parsed code.
   const { data: inspectionQuery } = await apiEntityCRUD('query', 'Inspection', null, { deleted: false });
-  const existing = Array.isArray(inspectionQuery?.list) ? inspectionQuery.list : [];
+  const all = Array.isArray(inspectionQuery?.list) ? inspectionQuery.list : [];
+  const existing = excludeInspectionId ? all.filter((i) => i.id !== excludeInspectionId) : all;
 
   return buildActivityCode({
     icaoCode: locationIcaoCode,
@@ -131,7 +137,7 @@ export const useInspectionStore = defineStore('inspection', {
 
           if (typeChanged && current.status === INSPECTION_STATUS.CREATED) {
             const activityTypeCode = await resolveActivityTypeCode(updateData);
-            updateData.code = await generateActivityCode(current.siteVisitId, activityTypeCode);
+            updateData.code = await generateActivityCode(current.siteVisitId, activityTypeCode, updateId);
           }
         }
 
