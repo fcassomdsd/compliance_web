@@ -277,11 +277,11 @@ describe('apiServices', () => {
     it('calls inspection plan/report endpoints on valid payloads', async () => {
       const plan = await apiInspectionPlan(' CODE-001 ');
       expect(plan.data.method).toBe('get');
-      expect(plan.data.url).toBe('http://localhost:1880/inspectionPlan?siteVisit=CODE-001');
+      expect(plan.data.url).toBe('http://localhost:1880/inspectionPlan?siteVisit=CODE-001&locale=en');
 
       const report = await apiInspectionReport(' CODE-001 ', ' 2026-04-02 ', ' PROVIDER-1 ');
       expect(report.data.method).toBe('get');
-      expect(report.data.url).toBe('http://localhost:1880/inspectionReport?siteVisit=CODE-001&reportDate=2026-04-02&provider=PROVIDER-1');
+      expect(report.data.url).toBe('http://localhost:1880/inspectionReport?siteVisit=CODE-001&reportDate=2026-04-02&provider=PROVIDER-1&locale=en');
     });
 
     it('wraps axios failures for inspection plan/report', async () => {
