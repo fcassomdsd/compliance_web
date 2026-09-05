@@ -1,14 +1,14 @@
 <template>
-  <BaseManager title="Oversight Posture Dashboard">
+  <BaseManager :title="t('oversightPosture.title')">
     <div v-if="reportStore.error" class="error-message">{{ reportStore.error }}</div>
 
     <section class="card">
-      <h3>Scope</h3>
+      <h3>{{ t('oversightPosture.scope') }}</h3>
       <form class="scope-form" @submit.prevent="loadPosture">
         <div class="input-group">
-          <label for="providerId">Provider</label>
+          <label for="providerId">{{ t('inspectionCadence.provider') }}</label>
           <select id="providerId" v-model="scope.providerId">
-            <option value="">All providers</option>
+            <option value="">{{ t('oversightPosture.allProviders') }}</option>
             <option v-for="provider in reportStore.filterOptions.providers" :key="provider.id" :value="provider.id">
               {{ provider.name }}
             </option>
@@ -16,9 +16,9 @@
         </div>
 
         <div class="input-group">
-          <label for="locationId">Location</label>
+          <label for="locationId">{{ t('inspectionCadence.location') }}</label>
           <select id="locationId" v-model="scope.locationId">
-            <option value="">All locations</option>
+            <option value="">{{ t('oversightPosture.allLocations') }}</option>
             <option v-for="location in reportStore.filterOptions.locations" :key="location.id" :value="location.id">
               {{ location.name }}
             </option>
@@ -26,31 +26,31 @@
         </div>
 
         <div class="input-group">
-          <label for="dateFrom">From</label>
+          <label for="dateFrom">{{ t('oversightPosture.from') }}</label>
           <input id="dateFrom" v-model="dateFrom" type="date" />
         </div>
 
         <div class="input-group">
-          <label for="dateTo">To</label>
+          <label for="dateTo">{{ t('oversightPosture.to') }}</label>
           <input id="dateTo" v-model="dateTo" type="date" />
         </div>
 
-        <BaseButton type="submit" variant="primary" size="sm" :loading="reportStore.loading">Apply filters</BaseButton>
-        <BaseButton type="button" variant="secondary" size="sm" @click="resetFilters">Reset</BaseButton>
+        <BaseButton type="submit" variant="primary" size="sm" :loading="reportStore.loading">{{ t('oversightPosture.applyFilters') }}</BaseButton>
+        <BaseButton type="button" variant="secondary" size="sm" @click="resetFilters">{{ t('common.reset') }}</BaseButton>
       </form>
     </section>
 
-    <LoadingSpinner :visible="reportStore.loading" text="Loading oversight posture..." />
+    <LoadingSpinner :visible="reportStore.loading" :text="t('oversightPosture.loading')" />
 
     <template v-if="posture">
       <div class="panel-grid">
         <section class="card panel">
-          <h3>Findings by status</h3>
+          <h3>{{ t('oversightPosture.findingsByStatus') }}</h3>
           <Bar :data="statusCountsChartData" :options="categoricalChartOptions" />
           <details class="table-toggle">
-            <summary>View as table</summary>
+            <summary>{{ t('oversightPosture.viewAsTable') }}</summary>
             <table class="data-table">
-              <thead><tr><th>Status</th><th>Count</th></tr></thead>
+              <thead><tr><th>{{ t('common.status') }}</th><th>{{ t('oversightPosture.count') }}</th></tr></thead>
               <tbody>
                 <tr v-for="[status, count] in statusCountsEntries" :key="status">
                   <td>{{ status }}</td>
@@ -62,14 +62,14 @@
         </section>
 
         <section class="card panel">
-          <h3>Severity trend</h3>
+          <h3>{{ t('oversightPosture.severityTrend') }}</h3>
           <Line :data="severityTrendChartData" :options="severityTrendChartOptions" />
           <details class="table-toggle">
-            <summary>View as table</summary>
+            <summary>{{ t('oversightPosture.viewAsTable') }}</summary>
             <table class="data-table">
               <thead>
                 <tr>
-                  <th>Quarter</th>
+                  <th>{{ t('oversightPosture.quarter') }}</th>
                   <th v-for="severity in severityTrendSeries" :key="severity">{{ severity }}</th>
                 </tr>
               </thead>
@@ -86,13 +86,13 @@
         </section>
 
         <section class="card panel">
-          <h3>Overdue aging</h3>
-          <p class="stat-line">{{ posture.summary.overdueAging.totalOverdue }} finding(s) past resolution deadline</p>
+          <h3>{{ t('oversightPosture.overdueAging') }}</h3>
+          <p class="stat-line">{{ t('oversightPosture.pastDeadline', { count: posture.summary.overdueAging.totalOverdue }) }}</p>
           <Bar :data="overdueAgingChartData" :options="categoricalChartOptions" />
           <details class="table-toggle">
-            <summary>View as table</summary>
+            <summary>{{ t('oversightPosture.viewAsTable') }}</summary>
             <table class="data-table">
-              <thead><tr><th>Days overdue</th><th>Count</th></tr></thead>
+              <thead><tr><th>{{ t('oversightPosture.daysOverdue') }}</th><th>{{ t('oversightPosture.count') }}</th></tr></thead>
               <tbody>
                 <tr v-for="[bucket, count] in overdueAgingEntries" :key="bucket">
                   <td>{{ bucket }}</td>
@@ -104,17 +104,17 @@
         </section>
 
         <section class="card panel">
-          <h3>CAP cycle time</h3>
+          <h3>{{ t('oversightPosture.capCycleTime') }}</h3>
           <p class="stat-tile">
             <span class="stat-number">{{ posture.summary.capCycleTime.averageDays ?? '—' }}</span>
-            <span class="stat-label">avg. days, Open → CAP Accepted or later ({{ posture.summary.capCycleTime.sampleSize }} sample(s))</span>
+            <span class="stat-label">{{ t('oversightPosture.capCycleAvgDays', { sampleSize: posture.summary.capCycleTime.sampleSize }) }}</span>
           </p>
-          <p class="stat-note">Approximation: based on the finding's last status change, not a stored CAP acceptance date.</p>
+          <p class="stat-note">{{ t('oversightPosture.capCycleNote') }}</p>
           <Bar :data="capAcceptanceChartData" :options="categoricalChartOptions" />
           <details class="table-toggle">
-            <summary>View as table</summary>
+            <summary>{{ t('oversightPosture.viewAsTable') }}</summary>
             <table class="data-table">
-              <thead><tr><th>Acceptance status</th><th>Count</th></tr></thead>
+              <thead><tr><th>{{ t('oversightPosture.acceptanceStatus') }}</th><th>{{ t('oversightPosture.count') }}</th></tr></thead>
               <tbody>
                 <tr v-for="[status, count] in capAcceptanceEntries" :key="status">
                   <td>{{ status }}</td>
@@ -126,15 +126,15 @@
         </section>
 
         <section class="card panel panel-wide">
-          <h3>Recurring findings</h3>
-          <p v-if="posture.summary.recurrence.length === 0" class="stat-note">No repeat findings at the same location for the current scope.</p>
+          <h3>{{ t('oversightPosture.recurringFindings') }}</h3>
+          <p v-if="posture.summary.recurrence.length === 0" class="stat-note">{{ t('oversightPosture.noRecurrence') }}</p>
           <table v-else class="data-table">
             <thead>
               <tr>
-                <th>Location</th>
-                <th>Requirement breached</th>
-                <th>Occurrences</th>
-                <th>Finding IDs</th>
+                <th>{{ t('inspectionCadence.location') }}</th>
+                <th>{{ t('oversightPosture.requirementBreached') }}</th>
+                <th>{{ t('oversightPosture.occurrences') }}</th>
+                <th>{{ t('oversightPosture.findingIds') }}</th>
               </tr>
             </thead>
             <tbody>
@@ -149,14 +149,14 @@
         </section>
 
         <section class="card panel panel-wide">
-          <h3>Provider ranking (open high-risk findings)</h3>
-          <p v-if="posture.summary.providerRanking.length === 0" class="stat-note">No open findings with a provider assigned in the current scope.</p>
+          <h3>{{ t('oversightPosture.providerRanking') }}</h3>
+          <p v-if="posture.summary.providerRanking.length === 0" class="stat-note">{{ t('oversightPosture.noOpenFindings') }}</p>
           <template v-else>
             <Bar :data="providerRankingChartData" :options="providerRankingChartOptions" />
             <details class="table-toggle">
-              <summary>View as table</summary>
+              <summary>{{ t('oversightPosture.viewAsTable') }}</summary>
               <table class="data-table">
-                <thead><tr><th>Provider</th><th>Open findings</th><th>Open high-risk findings</th></tr></thead>
+                <thead><tr><th>{{ t('inspectionCadence.provider') }}</th><th>{{ t('oversightPosture.openFindings') }}</th><th>{{ t('oversightPosture.openHighRiskFindings') }}</th></tr></thead>
                 <tbody>
                   <tr v-for="entry in posture.summary.providerRanking" :key="entry.providerId">
                     <td>{{ entry.providerName }}</td>
@@ -175,6 +175,7 @@
 
 <script setup>
 import { computed, onMounted, reactive, ref } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { Bar, Line } from 'vue-chartjs';
 import {
   Chart as ChartJS,
@@ -233,6 +234,7 @@ const CAP_ACCEPTANCE_COLORS = {
   Unknown: '#cfd8dc',
 };
 
+const { t } = useI18n();
 const reportStore = useReportStore();
 const scope = reactive({ providerId: '', locationId: '' });
 const dateFrom = ref('');

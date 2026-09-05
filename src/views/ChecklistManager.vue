@@ -1,18 +1,18 @@
 <template>
-  <BaseManager title="Inspection Checklist">
+  <BaseManager :title="t('app.nav.inspectionChecklist')">
     <div class="input-group checklist-filters">
       <div class="grid-cell1 grid-item">
-        <label for="inspectionSelect">Site Visit:</label>
-        <select 
-          id="inspectionSelect" 
+        <label for="inspectionSelect">{{ t('checklistManager.siteVisit') }}</label>
+        <select
+          id="inspectionSelect"
           v-model="selectedInspectionId"
           @change="onInspectionChange"
           :disabled="loadingInspections"
         >
-          <option :value="`${NONE_VALUE}`">Choose a site visit...</option>
-          <option 
-            v-for="inspection in availableInspections" 
-            :key="inspection.id" 
+          <option :value="`${NONE_VALUE}`">{{ t('checklistManager.chooseSiteVisit') }}</option>
+          <option
+            v-for="inspection in availableInspections"
+            :key="inspection.id"
             :value="inspection.id"
           >
             {{ inspection.code }} - {{ inspection.locationName }}
@@ -20,17 +20,17 @@
         </select>
       </div>
       <div class="grid-cell2 grid-item" v-if="selectedInspectionId !== NONE_VALUE">
-        <label for="providerSelect">Provider:</label>
-        <select 
-          id="providerSelect" 
+        <label for="providerSelect">{{ t('inspectionPlan.provider') }}</label>
+        <select
+          id="providerSelect"
           v-model="selectedProviderId"
           @change="onProviderChange"
           :disabled="loading"
         >
-          <option :value="`${NONE_VALUE}`">Choose a provider...</option>
-          <option 
-            v-for="pi in providerInspections" 
-            :key="pi.id" 
+          <option :value="`${NONE_VALUE}`">{{ t('checklistManager.chooseProvider') }}</option>
+          <option
+            v-for="pi in providerInspections"
+            :key="pi.id"
             :value="pi.id"
           >
             {{ pi.serviceProviderName || pi.name || pi.serviceProviderId }}
@@ -38,34 +38,34 @@
         </select>
       </div>
       <div class="grid-cell3 grid-item" v-if="selectedProviderId !== NONE_VALUE">
-        <label for="specialtySelect">Specialty:</label>
-        <select 
-          id="specialtySelect" 
+        <label for="specialtySelect">{{ t('assignInspectors.specialty') }}</label>
+        <select
+          id="specialtySelect"
           v-model="selectedInspectedSpecialtyId"
           @change="onSpecialtyChange"
           :disabled="loading"
         >
-          <option :value="`${NONE_VALUE}`">Choose a specialty...</option>
-          <option 
-            v-for="spec in availableInspectedSpecialties" 
-            :key="spec.id" 
+          <option :value="`${NONE_VALUE}`">{{ t('checklistManager.chooseSpecialty') }}</option>
+          <option
+            v-for="spec in availableInspectedSpecialties"
+            :key="spec.id"
             :value="spec.id"
           >
             {{ spec.specialtyName }}
           </option>
         </select>
         <p v-if="isInspectorScopeFiltered" class="info-text">
-          Showing only specialties assigned to you.
+          {{ t('checklistManager.scopeFilteredHint') }}
         </p>
       </div>
       <div class="checklist-actions" v-if="selectedInspectedSpecialtyId !== NONE_VALUE">
-        <BaseButton variant="success" size="sm" @click="selectAllQuestions" :disabled="loading">Select All</BaseButton>
-        <BaseButton variant="warning" size="sm" @click="clearAllQuestions" :disabled="loading">Clear All</BaseButton>
+        <BaseButton variant="success" size="sm" @click="selectAllQuestions" :disabled="loading">{{ t('checklistManager.selectAll') }}</BaseButton>
+        <BaseButton variant="warning" size="sm" @click="clearAllQuestions" :disabled="loading">{{ t('checklistManager.clearAll') }}</BaseButton>
       </div>
     </div>
 
     <!-- Loading State -->
-    <LoadingSpinner :visible="loading" text="Loading..." />
+    <LoadingSpinner :visible="loading" :text="t('common.loading')" />
 
     <!-- Error Message -->
     <div v-if="error" class="error-message">
@@ -82,11 +82,11 @@
     <div v-if="selectedInspectedSpecialtyId !== NONE_VALUE && !loading" class="questions-section">
       <!-- No specialty selected message -->
       <div v-if="Object.keys(groupedQuestions).length === 0" class="empty-state">
-        <p>No questions available for this specialty.</p>
+        <p>{{ t('checklistManager.noQuestions') }}</p>
       </div>
 
       <!-- Questions grouped by topic -->
-      <TopicChecklistGroup 
+      <TopicChecklistGroup
         v-for="topic in sortedTopics"
         :key="topic.id"
         :topic="topic"
@@ -97,9 +97,9 @@
 
       <!-- Save Button -->
       <div v-if="Object.keys(groupedQuestions).length > 0" class="save-section">
-        <BaseButton variant="primary" @click="saveChecklist" :disabled="loading">Save Checklist</BaseButton>
+        <BaseButton variant="primary" @click="saveChecklist" :disabled="loading">{{ t('checklistManager.saveChecklist') }}</BaseButton>
         <span class="selection-info">
-          {{ selectedQuestionIds.length }} / {{ totalQuestionCount }} questions selected
+          {{ t('checklistManager.questionsSelected', { selected: selectedQuestionIds.length, total: totalQuestionCount }) }}
         </span>
       </div>
     </div>
@@ -108,6 +108,7 @@
 
 <script setup>
 import { ref, computed, onMounted } from 'vue';
+import { useI18n } from 'vue-i18n';
 import BaseManager from '@/components/base/BaseManager.vue';
 import TopicChecklistGroup from '@/components/TopicChecklistGroup.vue';
 import BaseButton from '@/components/base/BaseButton.vue';
@@ -122,6 +123,7 @@ import { useAuthStore } from '@/stores/authStore';
 import { useToast } from 'vue-toastification';
 import { isActive } from '@/utils/siteVisitStatus';
 
+const { t } = useI18n();
 const protocolQuestionStore = useProtocolQuestionStore();
 const inspectionQuestionStore = useInspectionQuestionStore();
 const inspectedSpecialtyStore = useInspectedSpecialtyStore();
@@ -235,9 +237,9 @@ const onInspectionChange = async () => {
     await inspectedProviderStore.getInspectedProviders(selectedInspectionId.value);
     providerInspections.value = inspectedProviderStore.getForInspection(selectedInspectionId.value);
   } catch (err) {
-    error.value = 'Failed to load providers: ' + err.message;
+    error.value = t('checklistManager.toast.loadProvidersError', { message: err.message });
     console.error('Error loading providers:', err);
-    toast.error('Failed to load providers');
+    toast.error(t('checklistManager.toast.loadProvidersShort'));
   } finally {
     loading.value = false;
   }
@@ -259,7 +261,7 @@ const onProviderChange = async () => {
     await inspectionStore.getInspections(selectedProviderId.value);
     const inspections = inspectionStore.getForInspectedProvider(selectedProviderId.value);
     if (inspections.length === 0) {
-      error.value = 'No inspection found for this provider. Please configure it first.';
+      error.value = t('checklistManager.toast.noInspectionFound');
       return;
     }
     const inspectionId = inspections[0].id;
@@ -281,9 +283,9 @@ const onProviderChange = async () => {
       await inspectedSpecialtyStore.loadActingInspectors({ inspectedSpecialtyId: inspectedSpecialtyIds });
     }
   } catch (err) {
-    error.value = 'Failed to load inspection specialties: ' + err.message;
+    error.value = t('checklistManager.toast.loadSpecialtiesError', { message: err.message });
     console.error('Error loading inspection:', err);
-    toast.error('Failed to load inspection specialties');
+    toast.error(t('checklistManager.toast.loadSpecialtiesShort'));
   } finally {
     loading.value = false;
   }
@@ -311,7 +313,7 @@ const onSpecialtyChange = async () => {
     );
 
     if (!inspectedSpecialty) {
-      throw new Error('Specialty not found');
+      throw new Error(t('checklistManager.toast.specialtyNotFound'));
     }
 
     // Load protocol questions for this specialty
@@ -376,9 +378,9 @@ const onSpecialtyChange = async () => {
       riskLevel: q.riskLevel || null,
     }));
   } catch (err) {
-    error.value = 'Failed to load questions: ' + err.message;
+    error.value = t('checklistManager.toast.loadQuestionsError', { message: err.message });
     console.error('Error loading questions:', err);
-    toast.error('Failed to load questions');
+    toast.error(t('checklistManager.toast.loadQuestionsShort'));
   } finally {
     loading.value = false;
   }
@@ -441,7 +443,7 @@ const saveChecklist = async () => {
     successMessage.value = null;
 
     if (selectedInspectedSpecialtyId.value === NONE_VALUE) {
-      throw new Error('No specialty selected');
+      throw new Error(t('checklistManager.toast.noSpecialtySelected'));
     }
 
     const questionsToSave = [];
@@ -483,17 +485,17 @@ const saveChecklist = async () => {
       questionsToSave,
     );
 
-    successMessage.value = `Checklist saved successfully! ${selectedQuestionIds.value.length} questions selected.`;
-    toast.success('Checklist saved successfully!');
+    successMessage.value = t('checklistManager.toast.savedWithCount', { count: selectedQuestionIds.value.length });
+    toast.success(t('checklistManager.toast.saved'));
 
     // Hide success message after 3 seconds
     setTimeout(() => {
       successMessage.value = null;
     }, 3000);
   } catch (err) {
-    error.value = 'Failed to save checklist: ' + err.message;
+    error.value = t('checklistManager.toast.saveError', { message: err.message });
     console.error('Error saving checklist:', err);
-    toast.error('Failed to save checklist');
+    toast.error(t('checklistManager.toast.saveErrorShort'));
   } finally {
     loading.value = false;
   }

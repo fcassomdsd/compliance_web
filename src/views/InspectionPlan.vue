@@ -1,25 +1,25 @@
 <template>
-  <BaseManager title="Inspection Plan">
+  <BaseManager :title="t('inspectionPlan.title')">
     <div class="input-group">
       <div class="grid-cell1 grid-item">
-        <label for="selectedInspection">Selected Site Visit:</label>
-        <input id="selectedInspection" type="text" :value="selectedInspection?.code || 'None'" disabled />
+        <label for="selectedInspection">{{ t('inspectionPlan.selectedSiteVisit') }}</label>
+        <input id="selectedInspection" type="text" :value="selectedInspection?.code || t('inspectionPlan.none')" disabled />
       </div>
       <div class="grid-cell2 grid-item">
-        <label for="locationName">Location:</label>
+        <label for="locationName">{{ t('inspectionPlan.location') }}</label>
         <input id="locationName" type="text" :value="selectedInspection?.locationName || ''" disabled />
       </div>
       <div class="grid-cell3 grid-item">
-        <label for="providerSelect">Provider:</label>
+        <label for="providerSelect">{{ t('inspectionPlan.provider') }}</label>
         <select id="providerSelect" v-model="selectedProviderId" :disabled="!selectedInspection">
-          <option value="">Select a provider</option>
+          <option value="">{{ t('inspectionPlan.selectProvider') }}</option>
           <option v-for="pi in providerInspections" :key="pi.id" :value="pi.id">
             {{ pi.serviceProviderName || pi.name || pi.id }}
           </option>
         </select>
       </div>
       <div class="input-buttons">
-        <BaseButton id="generateBtn" variant="primary" :disabled="!canGenerate || loading" :loading="loading" @click="generatePlan">Generate Plan</BaseButton>
+        <BaseButton id="generateBtn" variant="primary" :disabled="!canGenerate || loading" :loading="loading" @click="generatePlan">{{ t('inspectionPlan.generatePlan') }}</BaseButton>
       </div>
     </div>
     <LoadingSpinner :visible="loading" />
@@ -34,10 +34,10 @@
         </colgroup>
         <thead>
           <tr>
-            <th>Code</th>
-            <th>Location</th>
-            <th>Start Date</th>
-            <th>Actions</th>
+            <th>{{ t('inspectionPlan.table.code') }}</th>
+            <th>{{ t('inspectionPlan.location') }}</th>
+            <th>{{ t('inspectionPlan.table.startDate') }}</th>
+            <th>{{ t('common.actions') }}</th>
           </tr>
         </thead>
         <tbody>
@@ -48,7 +48,7 @@
             <td>{{ formatDate(inspection.startDate) }}</td>
             <td class="actions-cell">
               <div>
-                <BaseButton :id="`select-${inspection.id}`" variant="ghost" size="sm" :icon="viewImg" alt="Select" @click="selectInspection(inspection)" />
+                <BaseButton :id="`select-${inspection.id}`" variant="ghost" size="sm" :icon="viewImg" :alt="t('common.view')" @click="selectInspection(inspection)" />
               </div>
             </td>
           </tr>
@@ -60,6 +60,7 @@
 
 <script setup>
 import { computed, ref, onMounted } from 'vue';
+import { useI18n } from 'vue-i18n';
 import BaseManager from '@/components/base/BaseManager.vue';
 import BaseButton from '@/components/base/BaseButton.vue';
 import LoadingSpinner from '@/components/base/LoadingSpinner.vue';
@@ -72,6 +73,7 @@ import { isActive } from '@/utils/siteVisitStatus';
 import { formatDate } from '@/utils/formatDate';
 import viewImg from '@/assets/images/icons/view.png';
 
+const { t } = useI18n();
 const siteVisitStore = useSiteVisitStore();
 const inspectedProviderStore = useInspectedProviderStore();
 const authStore = useAuthStore();
@@ -117,10 +119,10 @@ const generatePlan = async () => {
   loading.value = true;
   try {
     await apiInspectionPlan(selectedInspection.value.code, selectedProviderId.value);
-    toast.success('Inspection plan generated successfully.');
+    toast.success(t('inspectionPlan.toast.generateSuccess'));
     await siteVisitStore.refreshSiteVisits();
   } catch (error) {
-    toast.error('Could not generate inspection plan: ' + error.message);
+    toast.error(t('inspectionPlan.toast.generateError', { message: error.message }));
   } finally {
     loading.value = false;
   }

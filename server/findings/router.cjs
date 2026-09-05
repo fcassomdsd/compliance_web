@@ -28,6 +28,7 @@ const {
 } = require('../domain/statusRules.cjs');
 const { canReviewFinding } = require('../domain/statusRules.cjs');
 const { notifyRoleInbox } = require('../notifications/roleNotify.cjs');
+const { buildNotificationMessage } = require('../notifications/messages.cjs');
 
 const FINDINGS_LIBRARY_PATH = "Sites/vigilancia-de-la-so/documentLibrary/Vigilancia/Hallazgos";
 
@@ -667,8 +668,7 @@ function createFindingsRouter({ auth, alfrescoClient, notificationService, nodeR
           notificationService,
           envVar: 'INSPECTOR_NOTIFICATIONS_EMAIL',
           eventType: 'evidence_review_pending',
-          subject: `Follow-up evidence needs review: ${finding.findingId}`,
-          body: `Follow-up ${followUpId} was submitted for finding ${finding.findingId} and its evidence needs review.`,
+          ...buildNotificationMessage('evidence_review_pending', { findingId: finding.findingId, followUpId }),
           context: { findingId: finding.findingId, followUpId },
         });
 
@@ -769,8 +769,7 @@ function createFindingsRouter({ auth, alfrescoClient, notificationService, nodeR
               notificationService,
               envVar: 'INSPECTOR_NOTIFICATIONS_EMAIL',
               eventType: 'closure_pending_approval',
-              subject: `Finding closure awaiting approval: ${req.params.findingId}`,
-              body: `Finding ${req.params.findingId} has effective closure evidence and is awaiting a reviewer's closure approval.`,
+              ...buildNotificationMessage('closure_pending_approval', { findingId: req.params.findingId }),
               context: { findingId: req.params.findingId, followUpId: req.params.followUpId },
             });
           }
@@ -779,8 +778,11 @@ function createFindingsRouter({ auth, alfrescoClient, notificationService, nodeR
             notificationService,
             envVar: 'INSPECTOR_NOTIFICATIONS_EMAIL',
             eventType: 'evidence_inadequate',
-            subject: `Follow-up evidence needs resubmission: ${req.params.findingId}`,
-            body: `Follow-up ${req.params.followUpId} for finding ${req.params.findingId} was marked inadequate${notes ? `: ${notes}` : '.'}`,
+            ...buildNotificationMessage('evidence_inadequate', {
+              findingId: req.params.findingId,
+              followUpId: req.params.followUpId,
+              notesSuffix: notes ? `: ${notes}` : '.',
+            }),
             context: { findingId: req.params.findingId, followUpId: req.params.followUpId },
           });
         }
@@ -1071,8 +1073,7 @@ function createFindingsRouter({ auth, alfrescoClient, notificationService, nodeR
             notificationService,
             envVar: 'CAP_ENTRY_NOTIFICATIONS_EMAIL',
             eventType: 'finding_closed',
-            subject: `Finding closed: ${req.params.findingId}`,
-            body: `Finding ${req.params.findingId} has been reviewed and formally closed.`,
+            ...buildNotificationMessage('finding_closed', { findingId: req.params.findingId }),
             context: { findingId: req.params.findingId },
           });
         } else {
@@ -1080,8 +1081,7 @@ function createFindingsRouter({ auth, alfrescoClient, notificationService, nodeR
             notificationService,
             envVar: 'INSPECTOR_NOTIFICATIONS_EMAIL',
             eventType: 'closure_rejected',
-            subject: `Finding closure rejected: ${req.params.findingId}`,
-            body: `Finding ${req.params.findingId}'s closure was rejected and requires further follow-up work.`,
+            ...buildNotificationMessage('closure_rejected', { findingId: req.params.findingId }),
             context: { findingId: req.params.findingId },
           });
         }
@@ -1142,8 +1142,10 @@ function createFindingsRouter({ auth, alfrescoClient, notificationService, nodeR
           notificationService,
           envVar: 'INSPECTOR_NOTIFICATIONS_EMAIL',
           eventType: 'deadline_extension_requested',
-          subject: `Deadline extension requested: ${req.params.findingId}`,
-          body: `A resolution-deadline extension to ${requestedResolutionDeadline} was requested for finding ${req.params.findingId}.`,
+          ...buildNotificationMessage('deadline_extension_requested', {
+            findingId: req.params.findingId,
+            requestedResolutionDeadline,
+          }),
           context: { findingId: req.params.findingId, requestedResolutionDeadline },
         });
 
@@ -1199,8 +1201,10 @@ function createFindingsRouter({ auth, alfrescoClient, notificationService, nodeR
           notificationService,
           envVar: 'CAP_ENTRY_NOTIFICATIONS_EMAIL',
           eventType: 'deadline_extension_reviewed',
-          subject: `Deadline extension ${decision.toLowerCase()}: ${req.params.findingId}`,
-          body: `The requested resolution-deadline extension for finding ${req.params.findingId} was ${decision.toLowerCase()}.`,
+          ...buildNotificationMessage('deadline_extension_reviewed', {
+            findingId: req.params.findingId,
+            decisionLabel: decision.toLowerCase(),
+          }),
           context: { findingId: req.params.findingId, decision },
         });
 

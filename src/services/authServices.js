@@ -56,6 +56,22 @@ export async function authLogout(csrfToken = null) {
   }
 }
 
+export async function authSetLocale(locale, csrfToken = null) {
+  try {
+    const result = await axios({
+      method: 'post',
+      url: `${authApiServer}/locale`,
+      data: { locale },
+      headers: csrfToken ? { 'x-csrf-token': csrfToken } : {},
+      withCredentials: true,
+    });
+
+    return { data: result.data, status: result.status };
+  } catch (error) {
+    throw new Error('authSetLocale: ' + error.message);
+  }
+}
+
 export async function authTicket(csrfToken) {
   try {
     if (!csrfToken) {

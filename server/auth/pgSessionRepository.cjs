@@ -142,6 +142,17 @@ class PgSessionRepository {
     );
   }
 
+  async updateSessionMetadata(sessionId, metadata) {
+    await this.pool.query(
+      `
+      UPDATE auth_session
+      SET metadata_json = $2::jsonb
+      WHERE session_id = $1
+      `,
+      [sessionId, JSON.stringify(metadata || {})]
+    );
+  }
+
   async rotateSession(oldSessionId, nextSession) {
     const client = await this.pool.connect();
     try {

@@ -1,89 +1,89 @@
 <template>
-  <BaseManager title="Inspection Cadences">
+  <BaseManager :title="t('app.nav.inspectionCadences')">
     <p v-if="message" class="success-message">{{ message }}</p>
     <p v-if="errorMessage" class="error-message">{{ errorMessage }}</p>
 
     <div class="detail-buttons">
-      <BaseButton variant="secondary" size="sm" :disabled="appState === 'editing'" @click="startAdd">+ New Cadence</BaseButton>
+      <BaseButton variant="secondary" size="sm" :disabled="appState === 'editing'" @click="startAdd">{{ t('inspectionCadence.newCadence') }}</BaseButton>
     </div>
 
     <section v-if="appState === 'editing'" class="card">
-      <h3>{{ form.id ? 'Edit Cadence' : 'New Cadence' }}</h3>
+      <h3>{{ form.id ? t('inspectionCadence.editCadence') : t('inspectionCadence.newCadenceTitle') }}</h3>
       <div class="form-grid">
         <div class="form-field">
-          <label for="cadenceName">Name</label>
+          <label for="cadenceName">{{ t('common.name') }}</label>
           <input id="cadenceName" v-model="form.name" type="text" />
         </div>
         <div class="form-field">
-          <label for="cadenceActive">Active</label>
+          <label for="cadenceActive">{{ t('inspectionCadence.active') }}</label>
           <input id="cadenceActive" v-model="form.active" type="checkbox" />
         </div>
 
         <div class="form-field">
-          <label for="cadenceProvider">Provider</label>
+          <label for="cadenceProvider">{{ t('inspectionCadence.provider') }}</label>
           <select id="cadenceProvider" v-model="form.inspectedProviderId">
-            <option value="">Select a provider</option>
+            <option value="">{{ t('inspectionPlan.selectProvider') }}</option>
             <option v-for="provider in cadenceStore.providerOptions" :key="provider.id" :value="provider.id">{{ provider.name }}</option>
           </select>
         </div>
         <div class="form-field">
-          <label for="cadenceSpecialty">Specialty</label>
+          <label for="cadenceSpecialty">{{ t('assignInspectors.specialty') }}</label>
           <select id="cadenceSpecialty" v-model="form.specialtyId">
-            <option value="">Select a specialty</option>
+            <option value="">{{ t('inspectionCadence.selectSpecialty') }}</option>
             <option v-for="specialty in cadenceStore.specialtyOptions" :key="specialty.id" :value="specialty.id">{{ specialty.name }}</option>
           </select>
         </div>
         <div class="form-field">
-          <label for="cadenceLocation">Location</label>
+          <label for="cadenceLocation">{{ t('inspectionCadence.location') }}</label>
           <select id="cadenceLocation" v-model="form.locationId">
-            <option value="">Select a location</option>
+            <option value="">{{ t('inspectionCadence.selectLocation') }}</option>
             <option v-for="location in locationStore.locations" :key="location.id" :value="location.id">{{ location.name }}</option>
           </select>
         </div>
 
         <div class="form-field">
-          <label for="cadenceIntervalMonths">Interval (months)</label>
+          <label for="cadenceIntervalMonths">{{ t('inspectionCadence.intervalMonths') }}</label>
           <input id="cadenceIntervalMonths" v-model.number="form.intervalMonths" type="number" min="1" />
         </div>
         <div class="form-field">
-          <label for="cadenceActivityType">Activity Type</label>
+          <label for="cadenceActivityType">{{ t('inspectionCadence.activityType') }}</label>
           <select id="cadenceActivityType" v-model="form.activityTypeId">
-            <option value="">Select an activity type</option>
+            <option value="">{{ t('inspectionCadence.selectActivityType') }}</option>
             <option v-for="type in activityTypeStore.activityTypes" :key="type.id" :value="type.id">{{ type.code }} — {{ type.name }}</option>
           </select>
         </div>
         <div class="form-field">
-          <label for="cadenceLastScheduledDate">Last Scheduled Date</label>
+          <label for="cadenceLastScheduledDate">{{ t('inspectionCadence.lastScheduledDate') }}</label>
           <input id="cadenceLastScheduledDate" v-model="form.lastScheduledDate" type="date" />
         </div>
         <div class="form-field">
-          <label for="cadenceNextDueDate">Next Due Date</label>
+          <label for="cadenceNextDueDate">{{ t('inspectionCadence.nextDueDate') }}</label>
           <input id="cadenceNextDueDate" v-model="form.nextDueDate" type="date" />
         </div>
 
         <div class="form-field field-span-2">
-          <label for="cadenceDescription">Description</label>
+          <label for="cadenceDescription">{{ t('common.description') }}</label>
           <textarea id="cadenceDescription" v-model="form.description" rows="2" />
         </div>
       </div>
       <div class="form-actions">
-        <BaseButton variant="ghost" @click="cancelEdit">Cancel</BaseButton>
-        <BaseButton variant="primary" :disabled="cadenceStore.loading || !isFormValid" @click="saveCadence">Save</BaseButton>
+        <BaseButton variant="ghost" @click="cancelEdit">{{ t('common.cancel') }}</BaseButton>
+        <BaseButton variant="primary" :disabled="cadenceStore.loading || !isFormValid" @click="saveCadence">{{ t('common.save') }}</BaseButton>
       </div>
     </section>
 
     <table class="data-table">
       <thead>
         <tr>
-          <th>Name</th>
-          <th>Provider</th>
-          <th>Specialty</th>
-          <th>Location</th>
-          <th>Activity Type</th>
-          <th>Interval (months)</th>
-          <th>Next Due Date</th>
-          <th>Active</th>
-          <th>Actions</th>
+          <th>{{ t('common.name') }}</th>
+          <th>{{ t('inspectionCadence.provider') }}</th>
+          <th>{{ t('assignInspectors.specialty') }}</th>
+          <th>{{ t('inspectionCadence.location') }}</th>
+          <th>{{ t('inspectionCadence.activityType') }}</th>
+          <th>{{ t('inspectionCadence.intervalMonths') }}</th>
+          <th>{{ t('inspectionCadence.nextDueDate') }}</th>
+          <th>{{ t('inspectionCadence.active') }}</th>
+          <th>{{ t('common.actions') }}</th>
         </tr>
       </thead>
       <tbody>
@@ -95,10 +95,10 @@
           <td>{{ activityTypeLabel(cadence) }}</td>
           <td>{{ cadence.intervalMonths }}</td>
           <td>{{ formatDate(cadence.nextDueDate) || '-' }}</td>
-          <td>{{ cadence.active ? 'Yes' : 'No' }}</td>
+          <td>{{ cadence.active ? t('common.yes') : t('common.no') }}</td>
           <td>
-            <BaseButton variant="ghost" size="sm" :disabled="appState === 'editing'" @click="editCadence(cadence)">Edit</BaseButton>
-            <BaseButton variant="ghost" size="sm" :disabled="appState === 'editing' || cadenceStore.loading" @click="removeCadence(cadence)">Delete</BaseButton>
+            <BaseButton variant="ghost" size="sm" :disabled="appState === 'editing'" @click="editCadence(cadence)">{{ t('common.edit') }}</BaseButton>
+            <BaseButton variant="ghost" size="sm" :disabled="appState === 'editing' || cadenceStore.loading" @click="removeCadence(cadence)">{{ t('common.delete') }}</BaseButton>
           </td>
         </tr>
       </tbody>
@@ -110,6 +110,7 @@
 
 <script setup>
 import { reactive, ref, computed, onMounted } from 'vue';
+import { useI18n } from 'vue-i18n';
 import BaseManager from '@/components/base/BaseManager.vue';
 import BaseButton from '@/components/base/BaseButton.vue';
 import LoadingSpinner from '@/components/base/LoadingSpinner.vue';
@@ -118,6 +119,7 @@ import { useLocationStore } from '@/stores/locationStore';
 import { useActivityTypeStore } from '@/stores/activityTypeStore';
 import { formatDate } from '@/utils/formatDate';
 
+const { t } = useI18n();
 const cadenceStore = useInspectionCadenceStore();
 const locationStore = useLocationStore();
 const activityTypeStore = useActivityTypeStore();
@@ -210,31 +212,31 @@ async function saveCadence() {
   try {
     if (form.id) {
       await cadenceStore.updateCadence(form.id, buildPayload());
-      message.value = 'Cadence updated.';
+      message.value = t('inspectionCadence.toast.updated');
     } else {
       await cadenceStore.addCadence(buildPayload());
-      message.value = 'Cadence created.';
+      message.value = t('inspectionCadence.toast.created');
     }
     Object.assign(form, emptyForm());
     appState.value = 'viewing';
   } catch (error) {
     console.error('Cadence save failed:', error);
-    errorMessage.value = error?.message || 'Could not save cadence. Please try again.';
+    errorMessage.value = error?.message || t('inspectionCadence.toast.saveError');
   }
 }
 
 async function removeCadence(cadence) {
-  if (!confirm(`Delete cadence "${cadence.name}"? This cannot be undone.`)) {
+  if (!confirm(t('inspectionCadence.confirmDelete', { name: cadence.name }))) {
     return;
   }
   message.value = '';
   errorMessage.value = '';
   try {
     await cadenceStore.deleteCadence(cadence.id);
-    message.value = 'Cadence deleted.';
+    message.value = t('inspectionCadence.toast.deleted');
   } catch (error) {
     console.error('Cadence delete failed:', error);
-    errorMessage.value = error?.message || 'Could not delete cadence. Please try again.';
+    errorMessage.value = error?.message || t('inspectionCadence.toast.deleteError');
   }
 }
 

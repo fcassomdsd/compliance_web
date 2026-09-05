@@ -1,4 +1,26 @@
+import { watch } from 'vue';
 import { useAuthStore } from '@/stores/authStore';
+import i18n, { detectBrowserLocale, resolveSupportedLocale } from '@/i18n';
+
+function watchLocale(authStore) {
+  let appliedBrowserFallback = false;
+
+  watch(
+    () => authStore.locale,
+    (rawLocale) => {
+      const sessionLocale = resolveSupportedLocale(rawLocale);
+      if (sessionLocale) {
+        i18n.global.locale.value = sessionLocale;
+        return;
+      }
+      if (!appliedBrowserFallback) {
+        appliedBrowserFallback = true;
+        i18n.global.locale.value = detectBrowserLocale();
+      }
+    },
+    { immediate: true }
+  );
+}
 
 function getRequiredRoles(to) {
   return to.matched
@@ -61,6 +83,9 @@ export async function requireRole(to, authStore) {
 }
 
 export function applyAuthGuards(router, getAuthStore = () => useAuthStore()) {
+  const localeWatchedStore = getAuthStore();
+  watchLocale(localeWatchedStore);
+
   router.beforeEach(async (to) => {
     const authStore = getAuthStore();
 

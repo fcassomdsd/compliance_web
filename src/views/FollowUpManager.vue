@@ -1,11 +1,11 @@
 <template>
-  <BaseManager title="Follow-ups">
+  <BaseManager :title="t('app.nav.followUps')">
     <section class="card">
-      <h3>Follow-up Listing</h3>
+      <h3>{{ t('followUpManager.listing') }}</h3>
       <ScopePicker
         v-model="scope"
         mode="follow-ups"
-        title="Follow-up Scope"
+        :title="t('followUpManager.scope')"
         :loading="followUpStore.loading"
         :show-provider-id="true"
         :show-status="true"
@@ -22,14 +22,14 @@
       <table class="data-table">
         <thead>
           <tr>
-            <th>Follow-up ID</th>
-            <th>Finding ID</th>
-            <th>Type</th>
-            <th>Location Code</th>
-            <th>Specialty</th>
-            <th>Percent Complete</th>
-            <th>Inherited CAP</th>
-            <th>Evidence Review</th>
+            <th>{{ t('followUpManager.followUpId') }}</th>
+            <th>{{ t('findingManager.findingId') }}</th>
+            <th>{{ t('common.type') }}</th>
+            <th>{{ t('followUpManager.locationCode') }}</th>
+            <th>{{ t('assignInspectors.specialty') }}</th>
+            <th>{{ t('followUpManager.percentComplete') }}</th>
+            <th>{{ t('followUpManager.inheritedCap') }}</th>
+            <th>{{ t('followUpManager.evidenceReview') }}</th>
             <th></th>
           </tr>
         </thead>
@@ -43,144 +43,144 @@
             <td>{{ followUp.percentComplete ?? '-' }}</td>
             <td>{{ followUp.inheritedCapId || '-' }}</td>
             <td>{{ followUp.evidenceReviewStatus || '-' }}</td>
-            <td><BaseButton variant="ghost" size="sm" @click="viewFollowUp(followUp)">View</BaseButton></td>
+            <td><BaseButton variant="ghost" size="sm" @click="viewFollowUp(followUp)">{{ t('common.view') }}</BaseButton></td>
           </tr>
         </tbody>
       </table>
     </section>
 
     <section v-if="selectedFollowUp" class="card detail-panel">
-      <h3>Follow-up Detail: {{ selectedFollowUp.followUpId }}</h3>
-      <BaseButton variant="ghost" size="sm" @click="closeFollowUpDetail">Close</BaseButton>
-      <p><strong>Finding ID:</strong> {{ selectedFollowUp.findingId || '-' }}</p>
-      <p><strong>Type:</strong> {{ selectedFollowUp.followUpType || '-' }}</p>
-      <p><strong>Follow-up date:</strong> {{ selectedFollowUp.followUpDate || '-' }}</p>
-      <p><strong>Percent complete:</strong> {{ selectedFollowUp.percentComplete ?? '-' }}</p>
-      <p><strong>Inherited CAP:</strong> {{ selectedFollowUp.inheritedCapId || '-' }}</p>
-      <p><strong>Finding closed:</strong> {{ selectedFollowUp.findingClosed ? 'Yes' : 'No' }}</p>
-      <p><strong>Effectiveness confirmed:</strong> {{ selectedFollowUp.effectivenessConfirmed ? 'Yes' : 'No' }}</p>
-      <p><strong>Evidence review status:</strong> {{ selectedFollowUp.evidenceReviewStatus || '-' }}</p>
+      <h3>{{ t('followUpManager.detail') }}: {{ selectedFollowUp.followUpId }}</h3>
+      <BaseButton variant="ghost" size="sm" @click="closeFollowUpDetail">{{ t('common.close') }}</BaseButton>
+      <p><strong>{{ t('findingManager.findingId') }}:</strong> {{ selectedFollowUp.findingId || '-' }}</p>
+      <p><strong>{{ t('common.type') }}:</strong> {{ selectedFollowUp.followUpType || '-' }}</p>
+      <p><strong>{{ t('followUpManager.followUpDate') }}:</strong> {{ selectedFollowUp.followUpDate || '-' }}</p>
+      <p><strong>{{ t('followUpManager.percentComplete') }}:</strong> {{ selectedFollowUp.percentComplete ?? '-' }}</p>
+      <p><strong>{{ t('followUpManager.inheritedCap') }}:</strong> {{ selectedFollowUp.inheritedCapId || '-' }}</p>
+      <p><strong>{{ t('followUpManager.findingClosed') }}:</strong> {{ selectedFollowUp.findingClosed ? t('common.yes') : t('common.no') }}</p>
+      <p><strong>{{ t('followUpManager.effectivenessConfirmed') }}:</strong> {{ selectedFollowUp.effectivenessConfirmed ? t('common.yes') : t('common.no') }}</p>
+      <p><strong>{{ t('followUpManager.evidenceReviewStatus') }}:</strong> {{ selectedFollowUp.evidenceReviewStatus || '-' }}</p>
       <template v-if="selectedFollowUp.evidenceReviewedBy">
-        <p><strong>Reviewed by:</strong> {{ selectedFollowUp.evidenceReviewedBy }} on {{ selectedFollowUp.evidenceReviewDate || '-' }}</p>
-        <p v-if="selectedFollowUp.evidenceReviewNotes"><strong>Review notes:</strong> {{ selectedFollowUp.evidenceReviewNotes }}</p>
+        <p><strong>{{ t('followUpManager.reviewedBy') }}:</strong> {{ selectedFollowUp.evidenceReviewedBy }} {{ t('followUpManager.on') }} {{ selectedFollowUp.evidenceReviewDate || '-' }}</p>
+        <p v-if="selectedFollowUp.evidenceReviewNotes"><strong>{{ t('followUpManager.reviewNotes') }}:</strong> {{ selectedFollowUp.evidenceReviewNotes }}</p>
       </template>
 
       <div v-if="selectedFollowUp.evidence?.length" class="evidence-list">
-        <p class="evidence-list-title"><strong>Attachments</strong></p>
+        <p class="evidence-list-title"><strong>{{ t('followUpManager.attachments') }}</strong></p>
         <ul>
           <li v-for="item in selectedFollowUp.evidence" :key="item.nodeId">
             <span class="evidence-name">{{ item.name }}</span>
             <span class="evidence-meta">{{ item.evidenceRole || '-' }} &middot; {{ item.collectionMethod || '-' }}</span>
-            <BaseButton variant="ghost" size="sm" @click="viewFollowUpEvidence(item)">View</BaseButton>
+            <BaseButton variant="ghost" size="sm" @click="viewFollowUpEvidence(item)">{{ t('common.view') }}</BaseButton>
           </li>
         </ul>
       </div>
-      <p v-else class="evidence-list-empty">No evidence attached.</p>
+      <p v-else class="evidence-list-empty">{{ t('findingManager.noEvidence') }}</p>
 
       <div v-if="selectedFollowUp.evidenceReviewStatus === 'Pending Review'" class="evidence-review-panel">
-        <BaseButton variant="secondary" size="sm" :class="{ 'push-button-active': showEvidenceReviewForm }" @click="showEvidenceReviewForm = !showEvidenceReviewForm">Review Evidence</BaseButton>
+        <BaseButton variant="secondary" size="sm" :class="{ 'push-button-active': showEvidenceReviewForm }" @click="showEvidenceReviewForm = !showEvidenceReviewForm">{{ t('followUpManager.reviewEvidence') }}</BaseButton>
         <div v-if="showEvidenceReviewForm" class="form-grid">
           <div class="form-field">
-            <label for="evidenceReviewDecision">Decision</label>
+            <label for="evidenceReviewDecision">{{ t('findingManager.decision') }}</label>
             <select id="evidenceReviewDecision" v-model="evidenceReviewForm.decision">
-              <option value="Adequate">Adequate</option>
-              <option value="Inadequate">Inadequate</option>
+              <option value="Adequate">{{ t('followUpManager.adequate') }}</option>
+              <option value="Inadequate">{{ t('followUpManager.inadequate') }}</option>
             </select>
           </div>
           <div class="form-field field-span-2">
-            <label for="evidenceReviewNotes">Notes</label>
+            <label for="evidenceReviewNotes">{{ t('followUpManager.notes') }}</label>
             <textarea id="evidenceReviewNotes" v-model="evidenceReviewForm.notes" rows="2" />
           </div>
           <div class="form-actions">
-            <BaseButton variant="primary" @click="reviewEvidence" :disabled="followUpStore.loading">Apply Decision</BaseButton>
+            <BaseButton variant="primary" @click="reviewEvidence" :disabled="followUpStore.loading">{{ t('findingManager.applyDecision') }}</BaseButton>
           </div>
         </div>
       </div>
     </section>
 
     <div class="detail-buttons">
-      <BaseButton variant="secondary" size="sm" :class="{ 'push-button-active': showForm }" @click="showForm = !showForm">Register Follow-up</BaseButton>
+      <BaseButton variant="secondary" size="sm" :class="{ 'push-button-active': showForm }" @click="showForm = !showForm">{{ t('followUpManager.registerFollowUp') }}</BaseButton>
     </div>
 
     <section v-if="showForm" class="card">
-      <h3>Register Follow-up</h3>
+      <h3>{{ t('followUpManager.registerFollowUp') }}</h3>
       <div class="form-grid">
         <div class="form-field">
-          <label for="followFindingId">Finding ID</label>
+          <label for="followFindingId">{{ t('findingManager.findingId') }}</label>
           <input id="followFindingId" v-model="form.findingId" type="text" />
         </div>
 
         <div class="form-field">
-          <label for="followType">Follow-up Type</label>
+          <label for="followType">{{ t('followUpManager.followUpType') }}</label>
           <select id="followType" v-model="form.followUpType">
             <option v-for="type in followUpTypes" :key="type" :value="type">{{ type }}</option>
           </select>
         </div>
 
         <div class="form-field">
-          <label for="followInheritedCapId">Inherited CAP ID (optional)</label>
+          <label for="followInheritedCapId">{{ t('followUpManager.inheritedCapIdOptional') }}</label>
           <input id="followInheritedCapId" v-model="form.inheritedCapId" type="text" />
         </div>
 
         <div class="form-field">
-          <label for="followDate">Follow-up Date</label>
+          <label for="followDate">{{ t('followUpManager.followUpDate') }}</label>
           <input id="followDate" v-model="form.followUpDate" type="datetime-local" />
         </div>
 
         <div class="form-field">
-          <label for="followPercent">Percent Complete</label>
+          <label for="followPercent">{{ t('followUpManager.percentComplete') }}</label>
           <input id="followPercent" v-model.number="form.percentComplete" type="number" min="0" max="100" />
         </div>
 
         <div class="form-field">
-          <label for="followClosed">Finding Closed</label>
+          <label for="followClosed">{{ t('followUpManager.findingClosed') }}</label>
           <input id="followClosed" v-model="form.findingClosed" type="checkbox" />
         </div>
 
         <div class="form-field">
-          <label for="followEffective">Effectiveness Confirmed</label>
+          <label for="followEffective">{{ t('followUpManager.effectivenessConfirmed') }}</label>
           <input id="followEffective" v-model="form.effectivenessConfirmed" type="checkbox" />
         </div>
 
         <div class="form-field">
-          <label for="followClosureDate">Closure Date</label>
+          <label for="followClosureDate">{{ t('followUpManager.closureDate') }}</label>
           <input id="followClosureDate" v-model="form.followUpClosureDate" type="date" />
         </div>
 
         <div class="form-field">
-          <label for="followMethod">Verification Method</label>
+          <label for="followMethod">{{ t('followUpManager.verificationMethod') }}</label>
           <input id="followMethod" v-model="form.closureVerificationMethod" type="text" />
         </div>
 
         <div class="form-field">
-          <label for="followEvidenceRole">Evidence Role</label>
+          <label for="followEvidenceRole">{{ t('followUpManager.evidenceRole') }}</label>
           <select id="followEvidenceRole" v-model="form.evidenceRole">
             <option v-for="role in followUpEvidenceRoles" :key="role" :value="role">{{ role }}</option>
           </select>
         </div>
 
         <div class="form-field">
-          <label for="followEvidenceCollectionMethod">Evidence Collection Method</label>
+          <label for="followEvidenceCollectionMethod">{{ t('followUpManager.evidenceCollectionMethod') }}</label>
           <select id="followEvidenceCollectionMethod" v-model="form.collectionMethod">
             <option v-for="collectionMethod in followUpEvidenceCollectionMethods" :key="collectionMethod" :value="collectionMethod">{{ collectionMethod }}</option>
           </select>
         </div>
 
         <div class="form-field field-span-2">
-          <label for="followEvidenceFiles">Attach Evidence (optional)</label>
+          <label for="followEvidenceFiles">{{ t('followUpManager.attachEvidenceOptional') }}</label>
           <input id="followEvidenceFiles" type="file" multiple :accept="EVIDENCE_FILE_ACCEPT" @change="onEvidenceFileChange" />
           <div v-if="stagedEvidenceFiles.length" class="evidence-list">
             <ul>
               <li v-for="(file, index) in stagedEvidenceFiles" :key="`${file.name}-${index}`">
                 <span class="evidence-name">{{ file.name }}</span>
-                <BaseButton variant="ghost" size="sm" @click="removeStagedEvidence(index)">Remove</BaseButton>
+                <BaseButton variant="ghost" size="sm" @click="removeStagedEvidence(index)">{{ t('followUpManager.remove') }}</BaseButton>
               </li>
             </ul>
           </div>
         </div>
       </div>
       <div class="form-actions">
-        <BaseButton variant="primary" @click="createFollowUp" :disabled="followUpStore.loading">Create Follow-up</BaseButton>
+        <BaseButton variant="primary" @click="createFollowUp" :disabled="followUpStore.loading">{{ t('followUpManager.createFollowUp') }}</BaseButton>
       </div>
     </section>
 
@@ -192,6 +192,7 @@
 
 <script setup>
 import { reactive, ref, onMounted, watch } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { useRoute } from 'vue-router';
 import BaseManager from '@/components/base/BaseManager.vue';
 import BaseButton from '@/components/base/BaseButton.vue';
@@ -201,6 +202,7 @@ import { useAuthStore } from '@/stores/authStore';
 import { apiFollowUpEvidenceContentUrl } from '@/services/apiServices';
 import { EVIDENCE_FILE_ACCEPT, validateEvidenceFile } from '@/utils/evidenceFile';
 
+const { t } = useI18n();
 const route = useRoute();
 const followUpStore = useFollowUpStore();
 const authStore = useAuthStore();
@@ -283,7 +285,7 @@ async function loadFollowUps() {
   } catch (error) {
     // Store keeps the canonical error string used by the view.
     console.error('Follow-up search failed:', error);
-    searchErrorMessage.value = 'Could not load follow-ups. Adjust the scope and try again.';
+    searchErrorMessage.value = t('followUpManager.toast.loadError');
   }
 }
 
@@ -350,7 +352,7 @@ async function createFollowUp() {
       await uploadStagedEvidence({ findingId: form.findingId, followUpId: createdFollowUpId });
     }
 
-    message.value = 'Follow-up report created.';
+    message.value = t('followUpManager.toast.created');
     form.inheritedCapId = '';
     form.followUpDate = '';
     form.percentComplete = 0;
@@ -362,7 +364,7 @@ async function createFollowUp() {
     await loadFollowUps();
   } catch (error) {
     console.error('Follow-up creation failed:', error);
-    searchErrorMessage.value = error?.message || 'Could not create follow-up. Please try again.';
+    searchErrorMessage.value = error?.message || t('followUpManager.toast.createError');
   }
 }
 
@@ -399,13 +401,13 @@ async function reviewEvidence() {
       notes: evidenceReviewForm.notes,
       csrfToken: authStore.csrfToken,
     });
-    message.value = 'Evidence review applied.';
+    message.value = t('followUpManager.toast.evidenceReviewApplied');
     showEvidenceReviewForm.value = false;
     closeFollowUpDetail();
     await loadFollowUps();
   } catch (error) {
     console.error('Evidence review failed:', error);
-    searchErrorMessage.value = error?.message || 'Could not apply evidence review. Please try again.';
+    searchErrorMessage.value = error?.message || t('followUpManager.toast.evidenceReviewError');
   }
 }
 

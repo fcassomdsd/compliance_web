@@ -77,7 +77,7 @@ class InMemorySessionRepository {
     return Array.from(roleSet).sort();
   }
 
-  async updateSessionRoles(sessionId, { roles, lastRoleRefreshAt }) {
+  async updateSessionRoles(sessionId, { roles, lastRoleRefreshAt, metadata }) {
     const current = this.sessions.get(sessionId);
     if (!current) {
       return;
@@ -87,6 +87,19 @@ class InMemorySessionRepository {
       ...current,
       roles,
       lastRoleRefreshAt,
+      metadata: metadata || current.metadata || {},
+    });
+  }
+
+  async updateSessionMetadata(sessionId, metadata) {
+    const current = this.sessions.get(sessionId);
+    if (!current) {
+      return;
+    }
+
+    this.sessions.set(sessionId, {
+      ...current,
+      metadata: metadata || {},
     });
   }
 }

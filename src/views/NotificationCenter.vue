@@ -1,24 +1,24 @@
 <template>
-  <BaseManager title="Notifications">
+  <BaseManager :title="t('notificationCenter.title')">
     <p v-if="notificationStore.error" class="error-message">{{ notificationStore.error }}</p>
 
     <section class="card">
       <div class="list-header">
-        <h3>My Notifications</h3>
+        <h3>{{ t('notificationCenter.myNotifications') }}</h3>
         <label class="unread-toggle">
           <input type="checkbox" v-model="unreadOnly" @change="loadNotifications" />
-          Unread only
+          {{ t('notificationCenter.unreadOnly') }}
         </label>
       </div>
 
       <table class="data-table">
         <thead>
           <tr>
-            <th>Subject</th>
-            <th>Body</th>
-            <th>Received</th>
-            <th>Status</th>
-            <th>Actions</th>
+            <th>{{ t('notificationCenter.table.subject') }}</th>
+            <th>{{ t('notificationCenter.table.body') }}</th>
+            <th>{{ t('notificationCenter.table.received') }}</th>
+            <th>{{ t('common.status') }}</th>
+            <th>{{ t('common.actions') }}</th>
           </tr>
         </thead>
         <tbody>
@@ -26,9 +26,9 @@
             <td>{{ item.subject }}</td>
             <td>{{ item.body }}</td>
             <td>{{ formatDate(item.createdAt) || '-' }}</td>
-            <td>{{ item.readAt ? 'Read' : 'Unread' }}</td>
+            <td>{{ item.readAt ? t('notificationCenter.read') : t('notificationCenter.unread') }}</td>
             <td>
-              <BaseButton v-if="!item.readAt" variant="ghost" size="sm" :disabled="notificationStore.loading" @click="markRead(item.id)">Mark read</BaseButton>
+              <BaseButton v-if="!item.readAt" variant="ghost" size="sm" :disabled="notificationStore.loading" @click="markRead(item.id)">{{ t('notificationCenter.markRead') }}</BaseButton>
             </td>
           </tr>
         </tbody>
@@ -36,16 +36,16 @@
     </section>
 
     <section v-if="authStore.hasRole('admin')" class="card">
-      <h3>Critical Delivery Failures</h3>
-      <p class="helper-text">Notifications marked critical that failed delivery after exhausting retries.</p>
+      <h3>{{ t('notificationCenter.criticalFailures') }}</h3>
+      <p class="helper-text">{{ t('notificationCenter.criticalFailuresHelp') }}</p>
       <table class="data-table">
         <thead>
           <tr>
-            <th>Event Type</th>
-            <th>Recipient</th>
-            <th>Subject</th>
-            <th>Attempts</th>
-            <th>Last Attempt</th>
+            <th>{{ t('notificationCenter.table.eventType') }}</th>
+            <th>{{ t('notificationCenter.table.recipient') }}</th>
+            <th>{{ t('notificationCenter.table.subject') }}</th>
+            <th>{{ t('notificationCenter.table.attempts') }}</th>
+            <th>{{ t('notificationCenter.table.lastAttempt') }}</th>
           </tr>
         </thead>
         <tbody>
@@ -66,6 +66,7 @@
 
 <script setup>
 import { ref, onMounted } from 'vue';
+import { useI18n } from 'vue-i18n';
 import BaseManager from '@/components/base/BaseManager.vue';
 import BaseButton from '@/components/base/BaseButton.vue';
 import LoadingSpinner from '@/components/base/LoadingSpinner.vue';
@@ -73,6 +74,7 @@ import { useNotificationStore } from '@/stores/notificationStore';
 import { useAuthStore } from '@/stores/authStore';
 import { formatDate } from '@/utils/formatDate';
 
+const { t } = useI18n();
 const notificationStore = useNotificationStore();
 const authStore = useAuthStore();
 const unreadOnly = ref(false);

@@ -1,21 +1,21 @@
 <template>
-  <BaseManager title="Provider History">
+  <BaseManager :title="t('providerHistory.title')">
     <section class="card">
-      <h3>Look Up Provider History</h3>
+      <h3>{{ t('providerHistory.lookUp') }}</h3>
       <div class="form-grid">
         <div class="form-field">
-          <label for="providerSelect">Provider</label>
+          <label for="providerSelect">{{ t('inspectionPlan.provider') }}</label>
           <select id="providerSelect" v-model="providerId">
-            <option value="">Select a provider</option>
+            <option value="">{{ t('inspectionPlan.selectProvider') }}</option>
             <option v-for="provider in providerHistoryStore.providerOptions" :key="provider.id" :value="provider.id">{{ provider.name }}</option>
           </select>
         </div>
         <div class="form-field">
-          <label for="yearInput">Year (optional)</label>
+          <label for="yearInput">{{ t('providerHistory.yearOptional') }}</label>
           <input id="yearInput" v-model="year" type="text" placeholder="e.g. 2026" />
         </div>
       </div>
-      <BaseButton variant="primary" :disabled="!providerId || providerHistoryStore.loading" @click="loadReport">Search</BaseButton>
+      <BaseButton variant="primary" :disabled="!providerId || providerHistoryStore.loading" @click="loadReport">{{ t('common.search') }}</BaseButton>
     </section>
 
     <p v-if="providerHistoryStore.error" class="error-message">{{ providerHistoryStore.error }}</p>
@@ -23,12 +23,12 @@
     <template v-if="providerHistoryStore.report">
       <section class="card">
         <h3>{{ providerHistoryStore.report.providerName || providerHistoryStore.report.providerId }}</h3>
-        <p><strong>Year scope:</strong> {{ providerHistoryStore.report.year }}</p>
-        <p><strong>Total records:</strong> {{ providerHistoryStore.report.summary?.total ?? 0 }}</p>
+        <p><strong>{{ t('providerHistory.yearScope') }}</strong> {{ providerHistoryStore.report.year }}</p>
+        <p><strong>{{ t('providerHistory.totalRecords') }}</strong> {{ providerHistoryStore.report.summary?.total ?? 0 }}</p>
 
         <div class="split-grid">
           <div class="section-card">
-            <h4 class="section-title">By Type</h4>
+            <h4 class="section-title">{{ t('providerHistory.byType') }}</h4>
             <ul class="kv-list">
               <li v-for="(count, type) in providerHistoryStore.report.summary?.byType" :key="type">
                 <span>{{ type }}</span><span>{{ count }}</span>
@@ -36,7 +36,7 @@
             </ul>
           </div>
           <div class="section-card">
-            <h4 class="section-title">By Status</h4>
+            <h4 class="section-title">{{ t('common.status') }}</h4>
             <ul class="kv-list">
               <li v-for="(count, status) in providerHistoryStore.report.summary?.byStatus" :key="status">
                 <span>{{ status }}</span><span>{{ count }}</span>
@@ -44,7 +44,7 @@
             </ul>
           </div>
           <div class="section-card">
-            <h4 class="section-title">By Location</h4>
+            <h4 class="section-title">{{ t('providerHistory.byLocation') }}</h4>
             <ul class="kv-list">
               <li v-for="(count, location) in providerHistoryStore.report.summary?.byLocation" :key="location">
                 <span>{{ location }}</span><span>{{ count }}</span>
@@ -52,7 +52,7 @@
             </ul>
           </div>
           <div class="section-card">
-            <h4 class="section-title">By Year</h4>
+            <h4 class="section-title">{{ t('providerHistory.byYear') }}</h4>
             <ul class="kv-list">
               <li v-for="entry in providerHistoryStore.report.summary?.byYear" :key="entry.year">
                 <span>{{ entry.year }}</span><span>{{ entry.count }}</span>
@@ -63,14 +63,14 @@
       </section>
 
       <section v-if="providerHistoryStore.report.summary?.openFindings?.length" class="card">
-        <h3>Open Findings</h3>
+        <h3>{{ t('providerHistory.openFindings') }}</h3>
         <table class="data-table">
           <thead>
             <tr>
-              <th>Finding ID</th>
-              <th>Status</th>
-              <th>Inspection</th>
-              <th>Resolution Deadline</th>
+              <th>{{ t('providerHistory.table.findingId') }}</th>
+              <th>{{ t('common.status') }}</th>
+              <th>{{ t('providerHistory.table.inspection') }}</th>
+              <th>{{ t('providerHistory.table.resolutionDeadline') }}</th>
             </tr>
           </thead>
           <tbody>
@@ -85,16 +85,16 @@
       </section>
 
       <section class="card">
-        <h3>Records by Inspection</h3>
+        <h3>{{ t('providerHistory.recordsByInspection') }}</h3>
         <div v-for="(items, inspectionId) in providerHistoryStore.report.byInspection" :key="inspectionId" class="sub-section">
           <h4>{{ inspectionId }}</h4>
           <table class="data-table">
             <thead>
               <tr>
-                <th>Type</th>
-                <th>Reference</th>
-                <th>Status</th>
-                <th>Date</th>
+                <th>{{ t('common.type') }}</th>
+                <th>{{ t('providerHistory.table.reference') }}</th>
+                <th>{{ t('common.status') }}</th>
+                <th>{{ t('common.date') }}</th>
               </tr>
             </thead>
             <tbody>
@@ -116,12 +116,14 @@
 
 <script setup>
 import { ref, onMounted } from 'vue';
+import { useI18n } from 'vue-i18n';
 import BaseManager from '@/components/base/BaseManager.vue';
 import BaseButton from '@/components/base/BaseButton.vue';
 import LoadingSpinner from '@/components/base/LoadingSpinner.vue';
 import { useProviderHistoryStore } from '@/stores/providerHistoryStore';
 import { formatDate } from '@/utils/formatDate';
 
+const { t } = useI18n();
 const providerHistoryStore = useProviderHistoryStore();
 const providerId = ref('');
 const year = ref('');
