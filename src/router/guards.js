@@ -83,11 +83,15 @@ export async function requireRole(to, authStore) {
 }
 
 export function applyAuthGuards(router, getAuthStore = () => useAuthStore()) {
-  const localeWatchedStore = getAuthStore();
-  watchLocale(localeWatchedStore);
+  let localeWatchStarted = false;
 
   router.beforeEach(async (to) => {
     const authStore = getAuthStore();
+
+    if (!localeWatchStarted) {
+      localeWatchStarted = true;
+      watchLocale(authStore);
+    }
 
     const authResult = await requireAuth(to, authStore);
     if (authResult !== true) {
