@@ -290,6 +290,36 @@ function isCapEditable(acceptanceStatus) {
   return acceptanceStatus === CAP_ACCEPTANCE_STATUS.NOT_ACCEPTED;
 }
 
+const CAP_CRITERION_RESPONSE = Object.freeze({
+  SI: 'Sí',
+  NO: 'No',
+  NOT_APPLICABLE: 'No aplica',
+});
+
+function isValidCriterionResponse(value) {
+  return Object.values(CAP_CRITERION_RESPONSE).includes(value);
+}
+
+// A CAP's manual evaluation (IDAC-PAC-EVAL-01) is complete once every
+// applicable binary criterion in the catalog has a recorded response.
+// CONTAINMENT.* criteria are skipped when the CAP has no containment
+// measures section, mirroring the same optional-section rule already
+// applied to validateContainmentMeasures in caps/router.cjs. Returns the
+// list of missing criterion codes (empty = complete) so callers can surface
+// exactly what's left, rather than just a boolean.
+function getMissingCapEvaluationCriteria(criteriaCatalog, savedCriteria = [], { hasContainment = true } = {}) {
+  const responseByCode = new Map(savedCriteria.map((row) => [row.criterionCode, row.criterionResponse]));
+  return criteriaCatalog
+    .filter((entry) => entry.kind === 'binary')
+    .filter((entry) => hasContainment || entry.section !== 'CONTAINMENT')
+    .filter((entry) => !isValidCriterionResponse(responseByCode.get(entry.code)))
+    .map((entry) => entry.code);
+}
+
+function isCapEvaluationComplete(criteriaCatalog, savedCriteria, options) {
+  return getMissingCapEvaluationCriteria(criteriaCatalog, savedCriteria, options).length === 0;
+}
+
 module.exports = {
   FINDING_STATUS,
   CAP_ACCEPTANCE_STATUS,
@@ -322,4 +352,8 @@ module.exports = {
   FINDING_REVIEW_STATUS,
   canReviewFinding,
   isFindingReviewConfirmed,
+  CAP_CRITERION_RESPONSE,
+  isValidCriterionResponse,
+  getMissingCapEvaluationCriteria,
+  isCapEvaluationComplete,
 };

@@ -4,6 +4,19 @@ import { createPinia, setActivePinia } from 'pinia';
 import CorrectiveActionManager from '@/views/CorrectiveActionManager.vue';
 import { useCapStore } from '@/stores/capStore';
 import { useAuthStore } from '@/stores/authStore';
+import { CAP_EVALUATION_CRITERIA } from '@/utils/capEvaluationCriteria';
+
+// Fills every applicable binary criterion with 'Sí' so the manual-evaluation
+// completeness gate in confirmReview() doesn't block tests that aren't
+// specifically exercising that gate. CONTAINMENT criteria are excluded since
+// none of the selectedCap fixtures below include containmentMeasures.
+function fillCompleteEvaluation(wrapper) {
+  for (const entry of CAP_EVALUATION_CRITERIA) {
+    if (entry.kind === 'binary' && entry.section !== 'CONTAINMENT') {
+      wrapper.vm.evaluationAnswers[entry.code].response = 'Sí';
+    }
+  }
+}
 
 vi.mock('../../../src/stores/capStore');
 vi.mock('../../../src/stores/authStore');
@@ -48,6 +61,7 @@ describe('CorrectiveActionManager.vue', () => {
       deleteDraft: vi.fn().mockResolvedValue(undefined),
       submitDraft: vi.fn().mockResolvedValue({ cap: { capId: 'CAP-20' } }),
       reviewCap: vi.fn().mockResolvedValue({ ok: true }),
+      saveCapEvaluation: vi.fn().mockResolvedValue({ evaluation: { criteria: [] } }),
       fetchCapDetail: vi.fn().mockResolvedValue(undefined),
       updateActionItem: vi.fn().mockResolvedValue(undefined),
       uploadCapEvidence: vi.fn().mockResolvedValue(undefined),
@@ -340,11 +354,53 @@ describe('CorrectiveActionManager.vue', () => {
     await wrapper.vm.$nextTick();
 
     await wrapper.vm.startReview('CAP-20');
+    fillCompleteEvaluation(wrapper);
     wrapper.vm.reviewDecision = 'Not Accepted';
     await wrapper.vm.confirmReview();
 
     expect(mockCapStore.reviewCap).not.toHaveBeenCalled();
     expect(wrapper.vm.reviewValidationError).toContain('reason is required');
+  });
+
+  it('confirmReview blocks the decision while the manual PAC evaluation is incomplete', async () => {
+    mockCapStore.selectedCap = { capId: 'CAP-20', acceptanceStatus: 'Pending review' };
+    const wrapper = mountComponent();
+    await wrapper.vm.$nextTick();
+
+    await wrapper.vm.startReview('CAP-20');
+    await wrapper.vm.confirmReview();
+
+    expect(mockCapStore.reviewCap).not.toHaveBeenCalled();
+    expect(wrapper.vm.reviewValidationError).toContain('manual PAC evaluation');
+  });
+
+  it('disables the Confirm Review button until the manual PAC evaluation is complete', async () => {
+    mockCapStore.selectedCap = { capId: 'CAP-20', acceptanceStatus: 'Pending review' };
+    const wrapper = mountComponent();
+    await wrapper.vm.$nextTick();
+
+    await wrapper.vm.startReview('CAP-20');
+    await wrapper.vm.$nextTick();
+
+    const confirmButton = wrapper.findAll('button').find((button) => button.text() === 'Confirm Review');
+    expect(confirmButton.attributes('disabled')).toBeDefined();
+
+    fillCompleteEvaluation(wrapper);
+    await wrapper.vm.$nextTick();
+
+    expect(confirmButton.attributes('disabled')).toBeUndefined();
+  });
+
+  it('does not render a standalone Save evaluation button', async () => {
+    mockCapStore.selectedCap = { capId: 'CAP-20', acceptanceStatus: 'Pending review' };
+    const wrapper = mountComponent();
+    await wrapper.vm.$nextTick();
+
+    await wrapper.vm.startReview('CAP-20');
+    await wrapper.vm.$nextTick();
+
+    const saveButton = wrapper.findAll('button').find((button) => button.text() === 'Save evaluation');
+    expect(saveButton).toBeUndefined();
   });
 
   it('confirmReview sends the decision and reason, then exits review mode and refreshes', async () => {
@@ -353,10 +409,12 @@ describe('CorrectiveActionManager.vue', () => {
     await wrapper.vm.$nextTick();
 
     await wrapper.vm.startReview('CAP-20');
+    fillCompleteEvaluation(wrapper);
     wrapper.vm.reviewDecision = 'Not Accepted';
     wrapper.vm.reviewReason = 'Root cause does not explain the finding';
     await wrapper.vm.confirmReview();
 
+    expect(mockCapStore.saveCapEvaluation).toHaveBeenCalled();
     expect(mockCapStore.reviewCap).toHaveBeenCalledWith({
       capId: 'CAP-20',
       acceptanceStatus: 'Not Accepted',
