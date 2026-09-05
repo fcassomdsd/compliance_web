@@ -1,11 +1,11 @@
 <template>
-  <BaseManager title="Corrective Actions">
+  <BaseManager :title="t('app.nav.correctiveActions')">
     <section class="card">
-      <h3>CAP Listing</h3>
+      <h3>{{ t('capManager.listing') }}</h3>
       <ScopePicker
         v-model="scope"
         mode="caps"
-        title="CAP Scope"
+        :title="t('capManager.scope')"
         :loading="capStore.loading"
         :presets="capScopePresets"
         :show-finding-id="false"
@@ -27,11 +27,11 @@
       <table class="data-table">
         <thead>
           <tr>
-            <th>CAP ID</th>
-            <th>Acceptance Status</th>
-            <th>Responsible Entity</th>
-            <th>Due Date</th>
-            <th>Actions</th>
+            <th>{{ t('capManager.capId') }}</th>
+            <th>{{ t('capManager.acceptanceStatus') }}</th>
+            <th>{{ t('capManager.responsibleEntity') }}</th>
+            <th>{{ t('capManager.dueDate') }}</th>
+            <th>{{ t('common.actions') }}</th>
           </tr>
         </thead>
         <tbody>
@@ -41,9 +41,9 @@
             <td>{{ cap.responsibleEntity }}</td>
             <td>{{ formatDate(cap.dueDate) || '-' }}</td>
             <td>
-              <BaseButton variant="ghost" size="sm" @click="viewCap(cap.capId)">View</BaseButton>
-              <BaseButton v-if="isCapEditableStatus(cap.acceptanceStatus)" variant="ghost" size="sm" @click="editCap(cap)">Edit</BaseButton>
-              <BaseButton v-if="isCapReviewable(cap.acceptanceStatus)" variant="ghost" size="sm" @click="startReview(cap.capId)">Review</BaseButton>
+              <BaseButton variant="ghost" size="sm" @click="viewCap(cap.capId)">{{ t('common.view') }}</BaseButton>
+              <BaseButton v-if="isCapEditableStatus(cap.acceptanceStatus)" variant="ghost" size="sm" @click="editCap(cap)">{{ t('common.edit') }}</BaseButton>
+              <BaseButton v-if="isCapReviewable(cap.acceptanceStatus)" variant="ghost" size="sm" @click="startReview(cap.capId)">{{ t('findingManager.review') }}</BaseButton>
             </td>
           </tr>
         </tbody>
@@ -51,13 +51,13 @@
     </section>
 
     <section v-if="capStore.drafts.length" class="card">
-      <h3>My Draft CAPs</h3>
+      <h3>{{ t('capManager.myDrafts') }}</h3>
       <table class="data-table">
         <thead>
           <tr>
-            <th>Finding ID</th>
-            <th>Last Saved</th>
-            <th>Actions</th>
+            <th>{{ t('findingManager.findingId') }}</th>
+            <th>{{ t('capManager.lastSaved') }}</th>
+            <th>{{ t('common.actions') }}</th>
           </tr>
         </thead>
         <tbody>
@@ -65,8 +65,8 @@
             <td>{{ draft.findingId }}</td>
             <td>{{ formatDate(draft.updatedAt) || '-' }}</td>
             <td>
-              <BaseButton variant="ghost" size="sm" @click="editDraft(draft)">Edit</BaseButton>
-              <BaseButton variant="ghost" size="sm" :disabled="capStore.loading" @click="deleteDraftAction(draft.draftId)">Delete</BaseButton>
+              <BaseButton variant="ghost" size="sm" @click="editDraft(draft)">{{ t('common.edit') }}</BaseButton>
+              <BaseButton variant="ghost" size="sm" :disabled="capStore.loading" @click="deleteDraftAction(draft.draftId)">{{ t('common.delete') }}</BaseButton>
             </td>
           </tr>
         </tbody>
@@ -74,118 +74,118 @@
     </section>
 
     <section v-if="capStore.selectedCap" class="card detail-panel">
-      <h3>CAP Detail: {{ capStore.selectedCap.capId }}</h3>
-      <BaseButton v-if="isCapEditableStatus(capStore.selectedCap.acceptanceStatus)" variant="ghost" size="sm" @click="editCap(capStore.selectedCap)">Edit</BaseButton>
-      <BaseButton v-if="isCapReviewable(capStore.selectedCap.acceptanceStatus) && !reviewMode" variant="ghost" size="sm" @click="startReview(capStore.selectedCap.capId)">Review</BaseButton>
-      <BaseButton variant="ghost" size="sm" @click="closeCapDetail">Close</BaseButton>
-      <p><strong>Acceptance status:</strong> {{ capStore.selectedCap.acceptanceStatus || '-' }}</p>
-      <p><strong>Due date:</strong> {{ formatDate(capStore.selectedCap.dueDate) || '-' }}</p>
-      <p><strong>Action items:</strong> {{ capStore.selectedCap.correctiveActions?.length || 0 }}</p>
-      <p><strong>Follow-up reports:</strong> {{ capStore.selectedCap.followUpReports?.length || 0 }}</p>
+      <h3>{{ t('capManager.capDetail') }}: {{ capStore.selectedCap.capId }}</h3>
+      <BaseButton v-if="isCapEditableStatus(capStore.selectedCap.acceptanceStatus)" variant="ghost" size="sm" @click="editCap(capStore.selectedCap)">{{ t('common.edit') }}</BaseButton>
+      <BaseButton v-if="isCapReviewable(capStore.selectedCap.acceptanceStatus) && !reviewMode" variant="ghost" size="sm" @click="startReview(capStore.selectedCap.capId)">{{ t('findingManager.review') }}</BaseButton>
+      <BaseButton variant="ghost" size="sm" @click="closeCapDetail">{{ t('common.close') }}</BaseButton>
+      <p><strong>{{ t('capManager.acceptanceStatus') }}:</strong> {{ capStore.selectedCap.acceptanceStatus || '-' }}</p>
+      <p><strong>{{ t('capManager.dueDate') }}:</strong> {{ formatDate(capStore.selectedCap.dueDate) || '-' }}</p>
+      <p><strong>{{ t('capManager.actionItems') }}:</strong> {{ capStore.selectedCap.correctiveActions?.length || 0 }}</p>
+      <p><strong>{{ t('capManager.followUpReports') }}:</strong> {{ capStore.selectedCap.followUpReports?.length || 0 }}</p>
       <template v-if="capStore.selectedCap.capReviewedBy">
-        <p><strong>Reviewed by:</strong> {{ capStore.selectedCap.capReviewedBy }} on {{ formatDate(capStore.selectedCap.capReviewDate) || '-' }}</p>
-        <p v-if="capStore.selectedCap.capReviewReason"><strong>Review reason:</strong> {{ capStore.selectedCap.capReviewReason }}</p>
+        <p><strong>{{ t('followUpManager.reviewedBy') }}:</strong> {{ capStore.selectedCap.capReviewedBy }} {{ t('followUpManager.on') }} {{ formatDate(capStore.selectedCap.capReviewDate) || '-' }}</p>
+        <p v-if="capStore.selectedCap.capReviewReason"><strong>{{ t('capManager.reviewReason') }}:</strong> {{ capStore.selectedCap.capReviewReason }}</p>
       </template>
 
       <div v-if="capStore.selectedCap.rootCauseAnalysis" class="sub-section">
-        <h4>Root Cause Analysis</h4>
-        <p><strong>Method:</strong> {{ capStore.selectedCap.rootCauseAnalysis.method || '-' }}</p>
-        <p v-if="capStore.selectedCap.rootCauseAnalysis.otherMethodDescription"><strong>Other method:</strong> {{ capStore.selectedCap.rootCauseAnalysis.otherMethodDescription }}</p>
-        <p><strong>Main category:</strong> {{ capStore.selectedCap.rootCauseAnalysis.mainCategory || '-' }}</p>
-        <p><strong>Root cause:</strong> {{ capStore.selectedCap.rootCauseAnalysis.rootCause || '-' }}</p>
-        <p><strong>Contributing factors:</strong> {{ capStore.selectedCap.rootCauseAnalysis.contributingFactors || '-' }}</p>
+        <h4>{{ t('capManager.rootCauseAnalysis') }}</h4>
+        <p><strong>{{ t('capManager.method') }}:</strong> {{ capStore.selectedCap.rootCauseAnalysis.method || '-' }}</p>
+        <p v-if="capStore.selectedCap.rootCauseAnalysis.otherMethodDescription"><strong>{{ t('capManager.otherMethod') }}:</strong> {{ capStore.selectedCap.rootCauseAnalysis.otherMethodDescription }}</p>
+        <p><strong>{{ t('capManager.mainCategory') }}:</strong> {{ capStore.selectedCap.rootCauseAnalysis.mainCategory || '-' }}</p>
+        <p><strong>{{ t('capManager.rootCause') }}:</strong> {{ capStore.selectedCap.rootCauseAnalysis.rootCause || '-' }}</p>
+        <p><strong>{{ t('capManager.contributingFactors') }}:</strong> {{ capStore.selectedCap.rootCauseAnalysis.contributingFactors || '-' }}</p>
         <div v-if="capStore.selectedCap.rootCauseAnalysis.evidence?.length" class="evidence-list">
-          <p class="evidence-list-title"><strong>Attachments</strong></p>
+          <p class="evidence-list-title"><strong>{{ t('followUpManager.attachments') }}</strong></p>
           <ul>
             <li v-for="item in capStore.selectedCap.rootCauseAnalysis.evidence" :key="item.nodeId">
               <span class="evidence-name">{{ item.name }}</span>
-              <BaseButton variant="ghost" size="sm" @click="viewEvidence(item)">View</BaseButton>
+              <BaseButton variant="ghost" size="sm" @click="viewEvidence(item)">{{ t('common.view') }}</BaseButton>
               <BaseButton
                 v-if="isCapEditableStatus(capStore.selectedCap.acceptanceStatus)"
                 variant="ghost"
                 size="sm"
                 :disabled="capStore.loading"
                 @click="confirmRemoveEvidence(item)"
-              >Remove</BaseButton>
+              >{{ t('followUpManager.remove') }}</BaseButton>
             </li>
           </ul>
         </div>
         <div v-if="isCapEditableStatus(capStore.selectedCap.acceptanceStatus)" class="evidence-upload">
           <input type="file" :accept="EVIDENCE_FILE_ACCEPT" @change="onEvidenceFileChange($event, 'rcaDetail')" />
-          <BaseButton variant="ghost" size="sm" :disabled="!rcaDetailEvidenceFile || capStore.loading" @click="uploadDetailEvidence('rca')">Upload RCA Evidence</BaseButton>
+          <BaseButton variant="ghost" size="sm" :disabled="!rcaDetailEvidenceFile || capStore.loading" @click="uploadDetailEvidence('rca')">{{ t('capManager.uploadRcaEvidence') }}</BaseButton>
         </div>
       </div>
 
       <div v-if="capStore.selectedCap.riskAssessment" class="sub-section">
-        <h4>Risk Assessment</h4>
-        <p><strong>Identified hazard:</strong> {{ capStore.selectedCap.riskAssessment.identifiedHazard || '-' }}</p>
-        <p><strong>Potential consequence:</strong> {{ capStore.selectedCap.riskAssessment.potentialConsequence || '-' }}</p>
-        <p><strong>Probability:</strong> {{ capStore.selectedCap.riskAssessment.probability || '-' }}</p>
-        <p><strong>Severity:</strong> {{ capStore.selectedCap.riskAssessment.severity || '-' }}</p>
-        <p><strong>Calculated risk level:</strong> {{ capStore.selectedCap.riskAssessment.calculatedRiskLevel || '-' }}</p>
-        <p><strong>Tolerability level:</strong> {{ capStore.selectedCap.riskAssessment.tolerabilityLevel || '-' }}</p>
-        <p><strong>Justification:</strong> {{ capStore.selectedCap.riskAssessment.justification || '-' }}</p>
+        <h4>{{ t('capManager.riskAssessment') }}</h4>
+        <p><strong>{{ t('capManager.identifiedHazard') }}:</strong> {{ capStore.selectedCap.riskAssessment.identifiedHazard || '-' }}</p>
+        <p><strong>{{ t('capManager.potentialConsequence') }}:</strong> {{ capStore.selectedCap.riskAssessment.potentialConsequence || '-' }}</p>
+        <p><strong>{{ t('capManager.probability') }}:</strong> {{ capStore.selectedCap.riskAssessment.probability || '-' }}</p>
+        <p><strong>{{ t('capManager.severity') }}:</strong> {{ capStore.selectedCap.riskAssessment.severity || '-' }}</p>
+        <p><strong>{{ t('capManager.calculatedRiskLevel') }}:</strong> {{ capStore.selectedCap.riskAssessment.calculatedRiskLevel || '-' }}</p>
+        <p><strong>{{ t('capManager.tolerabilityLevel') }}:</strong> {{ capStore.selectedCap.riskAssessment.tolerabilityLevel || '-' }}</p>
+        <p><strong>{{ t('capManager.justification') }}:</strong> {{ capStore.selectedCap.riskAssessment.justification || '-' }}</p>
         <div v-if="capStore.selectedCap.riskAssessment.evidence?.length" class="evidence-list">
-          <p class="evidence-list-title"><strong>Attachments</strong></p>
+          <p class="evidence-list-title"><strong>{{ t('followUpManager.attachments') }}</strong></p>
           <ul>
             <li v-for="item in capStore.selectedCap.riskAssessment.evidence" :key="item.nodeId">
               <span class="evidence-name">{{ item.name }}</span>
-              <BaseButton variant="ghost" size="sm" @click="viewEvidence(item)">View</BaseButton>
+              <BaseButton variant="ghost" size="sm" @click="viewEvidence(item)">{{ t('common.view') }}</BaseButton>
               <BaseButton
                 v-if="isCapEditableStatus(capStore.selectedCap.acceptanceStatus)"
                 variant="ghost"
                 size="sm"
                 :disabled="capStore.loading"
                 @click="confirmRemoveEvidence(item)"
-              >Remove</BaseButton>
+              >{{ t('followUpManager.remove') }}</BaseButton>
             </li>
           </ul>
         </div>
         <div v-if="isCapEditableStatus(capStore.selectedCap.acceptanceStatus)" class="evidence-upload">
           <input type="file" :accept="EVIDENCE_FILE_ACCEPT" @change="onEvidenceFileChange($event, 'riskDetail')" />
-          <BaseButton variant="ghost" size="sm" :disabled="!riskDetailEvidenceFile || capStore.loading" @click="uploadDetailEvidence('risk-assessment')">Upload Risk Assessment Evidence</BaseButton>
+          <BaseButton variant="ghost" size="sm" :disabled="!riskDetailEvidenceFile || capStore.loading" @click="uploadDetailEvidence('risk-assessment')">{{ t('capManager.uploadRiskEvidence') }}</BaseButton>
         </div>
       </div>
 
       <div v-if="capStore.selectedCap.containmentMeasures" class="sub-section">
-        <h4>Immediate Containment Measures</h4>
-        <p><strong>Description:</strong> {{ capStore.selectedCap.containmentMeasures.description || '-' }}</p>
-        <p><strong>Implemented:</strong> {{ formatDate(capStore.selectedCap.containmentMeasures.implementedDate) || '-' }}</p>
+        <h4>{{ t('capManager.containmentMeasures') }}</h4>
+        <p><strong>{{ t('common.description') }}</strong> {{ capStore.selectedCap.containmentMeasures.description || '-' }}</p>
+        <p><strong>{{ t('capManager.implemented') }}:</strong> {{ formatDate(capStore.selectedCap.containmentMeasures.implementedDate) || '-' }}</p>
         <div v-if="capStore.selectedCap.containmentMeasures.evidence?.length" class="evidence-list">
-          <p class="evidence-list-title"><strong>Attachments</strong></p>
+          <p class="evidence-list-title"><strong>{{ t('followUpManager.attachments') }}</strong></p>
           <ul>
             <li v-for="item in capStore.selectedCap.containmentMeasures.evidence" :key="item.nodeId">
               <span class="evidence-name">{{ item.name }}</span>
-              <BaseButton variant="ghost" size="sm" @click="viewEvidence(item)">View</BaseButton>
+              <BaseButton variant="ghost" size="sm" @click="viewEvidence(item)">{{ t('common.view') }}</BaseButton>
               <BaseButton
                 v-if="isCapEditableStatus(capStore.selectedCap.acceptanceStatus)"
                 variant="ghost"
                 size="sm"
                 :disabled="capStore.loading"
                 @click="confirmRemoveEvidence(item)"
-              >Remove</BaseButton>
+              >{{ t('followUpManager.remove') }}</BaseButton>
             </li>
           </ul>
         </div>
         <div v-if="isCapEditableStatus(capStore.selectedCap.acceptanceStatus)" class="evidence-upload">
           <input type="file" :accept="EVIDENCE_FILE_ACCEPT" @change="onEvidenceFileChange($event, 'containmentDetail')" />
-          <BaseButton variant="ghost" size="sm" :disabled="!containmentDetailEvidenceFile || capStore.loading" @click="uploadDetailEvidence('containment')">Upload Containment Evidence</BaseButton>
+          <BaseButton variant="ghost" size="sm" :disabled="!containmentDetailEvidenceFile || capStore.loading" @click="uploadDetailEvidence('containment')">{{ t('capManager.uploadContainmentEvidence') }}</BaseButton>
         </div>
       </div>
 
       <div v-if="capStore.selectedCap.correctiveActions?.length" class="sub-section">
-        <h4>Corrective Actions</h4>
+        <h4>{{ t('app.nav.correctiveActions') }}</h4>
         <table class="data-table">
           <thead>
             <tr>
               <th>#</th>
-              <th>Description</th>
-              <th>Priority</th>
-              <th>Responsible</th>
-              <th>Deadline</th>
-              <th>Status</th>
-              <th>Closure Date</th>
-              <th>Closure Notes</th>
+              <th>{{ t('common.description') }}</th>
+              <th>{{ t('capManager.priority') }}</th>
+              <th>{{ t('capManager.responsible') }}</th>
+              <th>{{ t('capManager.deadline') }}</th>
+              <th>{{ t('common.status') }}</th>
+              <th>{{ t('capManager.closureDate') }}</th>
+              <th>{{ t('capManager.closureNotes') }}</th>
               <th></th>
             </tr>
           </thead>
@@ -198,37 +198,37 @@
               <td>{{ formatDate(item.deadline) }}</td>
               <td>
                 <select v-model="item.itemStatus">
-                  <option value="Open">Open</option>
-                  <option value="In Progress">In Progress</option>
-                  <option value="Closed">Closed</option>
+                  <option value="Open">{{ t('capManager.status.open') }}</option>
+                  <option value="In Progress">{{ t('capManager.status.inProgress') }}</option>
+                  <option value="Closed">{{ t('capManager.status.closed') }}</option>
                 </select>
               </td>
               <td><input v-model="item.closureDate" type="date" :disabled="item.itemStatus !== 'Closed'" /></td>
               <td><input v-model="item.closureNotes" type="text" /></td>
-              <td><BaseButton variant="ghost" size="sm" :disabled="capStore.loading" @click="updateActionItem(item)">Update</BaseButton></td>
+              <td><BaseButton variant="ghost" size="sm" :disabled="capStore.loading" @click="updateActionItem(item)">{{ t('capManager.update') }}</BaseButton></td>
             </tr>
           </tbody>
         </table>
       </div>
 
       <div v-if="capStore.selectedCap.residualRisk" class="sub-section">
-        <h4>Expected Residual Risk</h4>
-        <p><strong>Probability:</strong> {{ capStore.selectedCap.residualRisk.probability || '-' }}</p>
-        <p><strong>Severity:</strong> {{ capStore.selectedCap.residualRisk.severity || '-' }}</p>
-        <p><strong>Residual risk level:</strong> {{ capStore.selectedCap.residualRisk.riskLevel || '-' }}</p>
-        <p><strong>Justification:</strong> {{ capStore.selectedCap.residualRisk.justification || '-' }}</p>
+        <h4>{{ t('capManager.expectedResidualRisk') }}</h4>
+        <p><strong>{{ t('capManager.probability') }}:</strong> {{ capStore.selectedCap.residualRisk.probability || '-' }}</p>
+        <p><strong>{{ t('capManager.severity') }}:</strong> {{ capStore.selectedCap.residualRisk.severity || '-' }}</p>
+        <p><strong>{{ t('capManager.residualRiskLevel') }}:</strong> {{ capStore.selectedCap.residualRisk.riskLevel || '-' }}</p>
+        <p><strong>{{ t('capManager.justification') }}:</strong> {{ capStore.selectedCap.residualRisk.justification || '-' }}</p>
       </div>
 
       <div v-if="capStore.selectedCap.effectivenessVerification" class="sub-section">
-        <h4>Effectiveness Verification</h4>
-        <p><strong>Method:</strong> {{ capStore.selectedCap.effectivenessVerification.method || '-' }}</p>
-        <p><strong>Indicators:</strong> {{ capStore.selectedCap.effectivenessVerification.indicators || '-' }}</p>
-        <p><strong>Projected verification date:</strong> {{ formatDate(capStore.selectedCap.effectivenessVerification.projectedVerificationDate) || '-' }}</p>
+        <h4>{{ t('capManager.effectivenessVerification') }}</h4>
+        <p><strong>{{ t('capManager.method') }}:</strong> {{ capStore.selectedCap.effectivenessVerification.method || '-' }}</p>
+        <p><strong>{{ t('capManager.indicators') }}:</strong> {{ capStore.selectedCap.effectivenessVerification.indicators || '-' }}</p>
+        <p><strong>{{ t('capManager.projectedVerificationDate') }}:</strong> {{ formatDate(capStore.selectedCap.effectivenessVerification.projectedVerificationDate) || '-' }}</p>
       </div>
 
       <div v-if="reviewMode" class="sub-section review-section">
-        <h4>Review this PAC</h4>
-        <h5 class="evaluation-heading">Automated completeness checks (reference only)</h5>
+        <h4>{{ t('capManager.reviewThisCap') }}</h4>
+        <h5 class="evaluation-heading">{{ t('capManager.automatedChecks') }}</h5>
         <ul class="checklist">
           <li v-for="check in reviewChecklist" :key="check.label" :class="check.met ? 'checklist-met' : 'checklist-unmet'">
             <span class="checklist-icon">{{ check.met ? '✓' : '✗' }}</span> {{ check.label }}
@@ -236,7 +236,7 @@
         </ul>
 
         <div class="manual-evaluation">
-          <h5 class="evaluation-heading">Evaluación manual del PAC (IDAC-PAC-EVAL-01)</h5>
+          <h5 class="evaluation-heading">{{ t('capManager.manualEvaluation') }}</h5>
           <div v-for="section in evaluationSections" :key="section.code" class="section-card">
             <h6 class="section-title">{{ section.title }}</h6>
             <div v-for="criterion in section.criteria" :key="criterion.code" class="evaluation-row">
@@ -256,7 +256,7 @@
                 <input
                   type="text"
                   class="evaluation-observations"
-                  placeholder="Observaciones"
+                  :placeholder="t('capManager.observations')"
                   :aria-label="`${criterion.label} observations`"
                   v-model="evaluationAnswers[criterion.code].observations"
                 />
@@ -273,188 +273,188 @@
             </div>
           </div>
           <p v-if="missingEvaluationCriteria.length" class="helper-text">
-            {{ missingEvaluationCriteria.length }} criterio(s) pendiente(s) de evaluación.
+            {{ t('capManager.pendingCriteria', { count: missingEvaluationCriteria.length }) }}
           </p>
         </div>
 
         <div class="form-grid">
           <div class="form-field">
-            <label for="reviewDecision">Decision</label>
+            <label for="reviewDecision">{{ t('findingManager.decision') }}</label>
             <select id="reviewDecision" v-model="reviewDecision">
-              <option value="Accepted">Accepted</option>
-              <option value="Not Accepted">Not Accepted</option>
+              <option value="Accepted">{{ t('findingManager.accepted') }}</option>
+              <option value="Not Accepted">{{ t('capManager.notAccepted') }}</option>
             </select>
           </div>
           <div class="form-field field-span-2">
-            <label for="reviewReason">Reason{{ reviewDecision === 'Not Accepted' ? ' (required)' : ' (optional)' }}</label>
+            <label for="reviewReason">{{ t('findingManager.reason') }}{{ reviewDecision === 'Not Accepted' ? t('capManager.required') : t('capManager.optional') }}</label>
             <textarea id="reviewReason" v-model="reviewReason" rows="2" />
           </div>
         </div>
         <p v-if="reviewValidationError" class="error-message">{{ reviewValidationError }}</p>
         <div class="form-actions">
-          <BaseButton variant="ghost" @click="cancelReview">Cancel</BaseButton>
+          <BaseButton variant="ghost" @click="cancelReview">{{ t('common.cancel') }}</BaseButton>
           <BaseButton
             variant="primary"
             :disabled="capStore.loading || missingEvaluationCriteria.length > 0"
             @click="confirmReview"
           >
-            Confirm Review
+            {{ t('findingManager.confirmReview') }}
           </BaseButton>
         </div>
       </div>
     </section>
 
     <div class="detail-buttons">
-      <BaseButton variant="secondary" size="sm" :class="{ 'push-button-active': showSubmit }" @click="showSubmit = !showSubmit">Submit CAP</BaseButton>
+      <BaseButton variant="secondary" size="sm" :class="{ 'push-button-active': showSubmit }" @click="showSubmit = !showSubmit">{{ t('capManager.submitCap') }}</BaseButton>
     </div>
 
     <div v-if="showSubmit" class="card cap-submit-panel">
       <h3>{{ panelHeading }}</h3>
       <div class="form-grid">
         <div class="form-field">
-          <label for="findingId">Finding ID</label>
+          <label for="findingId">{{ t('findingManager.findingId') }}</label>
           <input id="findingId" v-model="capForm.findingId" type="text" :disabled="editMode.type !== 'new'" />
         </div>
         <div class="form-field">
-          <label for="dueDate">Due Date</label>
+          <label for="dueDate">{{ t('capManager.dueDate') }}</label>
           <input id="dueDate" v-model="capForm.dueDate" type="date" />
         </div>
         <div class="form-field field-span-2">
-          <p class="helper-text">CAP ID is auto-generated from the finding and existing CAP sequence. Action descriptions and responsible people are captured in the action-item rows below.</p>
+          <p class="helper-text">{{ t('capManager.capIdAutoGenerated') }}</p>
         </div>
       </div>
 
       <div class="split-grid">
         <div class="section-card">
-          <h4 class="section-title">1. Root Cause Analysis</h4>
+          <h4 class="section-title">1. {{ t('capManager.rootCauseAnalysis') }}</h4>
           <div class="form-grid">
             <div class="form-field">
-              <label for="rcaMethod">Method used</label>
+              <label for="rcaMethod">{{ t('capManager.methodUsed') }}</label>
               <select id="rcaMethod" v-model="capForm.rootCauseAnalysis.method">
                 <option v-for="method in rcaMethods" :key="method" :value="method">{{ method }}</option>
               </select>
             </div>
             <div v-if="capForm.rootCauseAnalysis.method === 'Other'" class="form-field">
-              <label for="rcaOtherMethodDescription">Other method description</label>
+              <label for="rcaOtherMethodDescription">{{ t('capManager.otherMethodDescription') }}</label>
               <input id="rcaOtherMethodDescription" v-model="capForm.rootCauseAnalysis.otherMethodDescription" type="text" />
             </div>
             <div class="form-field">
-              <label for="rcaMainCategory">Main category</label>
+              <label for="rcaMainCategory">{{ t('capManager.mainCategory') }}</label>
               <input id="rcaMainCategory" v-model="capForm.rootCauseAnalysis.mainCategory" type="text" />
             </div>
             <div class="form-field field-span-2">
-              <label for="rootCause">Root cause</label>
+              <label for="rootCause">{{ t('capManager.rootCause') }}</label>
               <textarea id="rootCause" v-model="capForm.rootCauseAnalysis.rootCause" rows="2" />
             </div>
             <div class="form-field field-span-2">
-              <label for="contributingFactors">Contributing factors</label>
+              <label for="contributingFactors">{{ t('capManager.contributingFactors') }}</label>
               <textarea id="contributingFactors" v-model="capForm.rootCauseAnalysis.contributingFactors" rows="2" />
             </div>
             <div class="form-field" v-if="editMode.type !== 'notAccepted'">
-              <label for="rcaEvidence">Evidence of RCA</label>
+              <label for="rcaEvidence">{{ t('capManager.evidenceOfRca') }}</label>
               <input id="rcaEvidence" type="file" multiple :accept="EVIDENCE_FILE_ACCEPT" @change="onEvidenceFileChange($event, 'rca')" />
               <div v-if="rcaEvidenceFiles.length" class="evidence-list">
                 <ul>
                   <li v-for="(file, index) in rcaEvidenceFiles" :key="`${file.name}-${index}`">
                     <span class="evidence-name">{{ file.name }}</span>
-                    <BaseButton variant="ghost" size="sm" @click="removeStagedEvidence('rca', index)">Remove</BaseButton>
+                    <BaseButton variant="ghost" size="sm" @click="removeStagedEvidence('rca', index)">{{ t('followUpManager.remove') }}</BaseButton>
                   </li>
                 </ul>
               </div>
             </div>
             <div class="form-field field-span-2" v-else>
-              <p class="helper-text">Evidence can be attached from the CAP Detail view below.</p>
+              <p class="helper-text">{{ t('capManager.evidenceFromDetailView') }}</p>
             </div>
           </div>
         </div>
 
         <div class="section-card">
-          <h4 class="section-title">2. Risk Assessment</h4>
+          <h4 class="section-title">2. {{ t('capManager.riskAssessment') }}</h4>
           <div class="form-grid">
             <div class="form-field">
-              <label for="raHazard">Identified hazard</label>
+              <label for="raHazard">{{ t('capManager.identifiedHazard') }}</label>
               <input id="raHazard" v-model="capForm.riskAssessment.hazard" type="text" />
             </div>
             <div class="form-field">
-              <label for="raConsequence">Potential consequence</label>
+              <label for="raConsequence">{{ t('capManager.potentialConsequence') }}</label>
               <input id="raConsequence" v-model="capForm.riskAssessment.consequence" type="text" />
             </div>
             <div class="form-field">
-              <label for="raProbability">Probability</label>
+              <label for="raProbability">{{ t('capManager.probability') }}</label>
               <input id="raProbability" v-model="capForm.riskAssessment.probability" type="text" />
             </div>
             <div class="form-field">
-              <label for="raSeverity">Severity</label>
+              <label for="raSeverity">{{ t('capManager.severity') }}</label>
               <input id="raSeverity" v-model="capForm.riskAssessment.severity" type="text" />
             </div>
             <div class="form-field">
-              <label for="raCalculatedRiskLevel">Calculated risk level</label>
+              <label for="raCalculatedRiskLevel">{{ t('capManager.calculatedRiskLevel') }}</label>
               <input id="raCalculatedRiskLevel" v-model="capForm.riskAssessment.calculatedRiskLevel" type="text" />
             </div>
             <div class="form-field">
-              <label for="raTolerabilityLevel">Tolerability level</label>
+              <label for="raTolerabilityLevel">{{ t('capManager.tolerabilityLevel') }}</label>
               <input id="raTolerabilityLevel" v-model="capForm.riskAssessment.tolerabilityLevel" type="text" />
             </div>
             <div class="form-field field-span-2">
-              <label for="raJustification">Justification</label>
+              <label for="raJustification">{{ t('capManager.justification') }}</label>
               <textarea id="raJustification" v-model="capForm.riskAssessment.justification" rows="2" />
             </div>
             <div class="form-field" v-if="editMode.type !== 'notAccepted'">
-              <label for="raEvidence">Evidence</label>
+              <label for="raEvidence">{{ t('capManager.evidence') }}</label>
               <input id="raEvidence" type="file" multiple :accept="EVIDENCE_FILE_ACCEPT" @change="onEvidenceFileChange($event, 'risk')" />
               <div v-if="riskEvidenceFiles.length" class="evidence-list">
                 <ul>
                   <li v-for="(file, index) in riskEvidenceFiles" :key="`${file.name}-${index}`">
                     <span class="evidence-name">{{ file.name }}</span>
-                    <BaseButton variant="ghost" size="sm" @click="removeStagedEvidence('risk', index)">Remove</BaseButton>
+                    <BaseButton variant="ghost" size="sm" @click="removeStagedEvidence('risk', index)">{{ t('followUpManager.remove') }}</BaseButton>
                   </li>
                 </ul>
               </div>
             </div>
             <div class="form-field field-span-2" v-else>
-              <p class="helper-text">Evidence can be attached from the CAP Detail view below.</p>
+              <p class="helper-text">{{ t('capManager.evidenceFromDetailView') }}</p>
             </div>
           </div>
         </div>
       </div>
 
       <div class="section-card">
-        <h4 class="section-title">3. Immediate Containment Measures</h4>
+        <h4 class="section-title">3. {{ t('capManager.containmentMeasures') }}</h4>
         <div class="form-grid">
           <div class="form-field field-span-2">
-            <label for="containmentDescription">Description</label>
+            <label for="containmentDescription">{{ t('common.description') }}</label>
             <textarea id="containmentDescription" v-model="capForm.containmentMeasures.description" rows="2" />
           </div>
           <div class="form-field">
-            <label for="containmentImplementedDate">Implemented on</label>
+            <label for="containmentImplementedDate">{{ t('capManager.implementedOn') }}</label>
             <input id="containmentImplementedDate" v-model="capForm.containmentMeasures.implementedDate" type="date" />
           </div>
           <div class="form-field" v-if="editMode.type !== 'notAccepted'">
-            <label for="containmentEvidence">Evidence</label>
+            <label for="containmentEvidence">{{ t('capManager.evidence') }}</label>
             <input id="containmentEvidence" type="file" multiple :accept="EVIDENCE_FILE_ACCEPT" @change="onEvidenceFileChange($event, 'containment')" />
             <div v-if="containmentEvidenceFiles.length" class="evidence-list">
               <ul>
                 <li v-for="(file, index) in containmentEvidenceFiles" :key="`${file.name}-${index}`">
                   <span class="evidence-name">{{ file.name }}</span>
-                  <BaseButton variant="ghost" size="sm" @click="removeStagedEvidence('containment', index)">Remove</BaseButton>
+                  <BaseButton variant="ghost" size="sm" @click="removeStagedEvidence('containment', index)">{{ t('followUpManager.remove') }}</BaseButton>
                 </li>
               </ul>
             </div>
           </div>
           <div class="form-field field-span-2" v-else>
-            <p class="helper-text">Evidence can be attached from the CAP Detail view below.</p>
+            <p class="helper-text">{{ t('capManager.evidenceFromDetailView') }}</p>
           </div>
         </div>
       </div>
 
       <div class="section-card">
-        <h4 class="section-title">4. Corrective Actions</h4>
+        <h4 class="section-title">4. {{ t('app.nav.correctiveActions') }}</h4>
         <div class="action-item-head" aria-hidden="true">
           <span>#</span>
-          <span>Description</span>
-          <span>Priority</span>
-          <span>Responsible</span>
-          <span>Deadline</span>
+          <span>{{ t('common.description') }}</span>
+          <span>{{ t('capManager.priority') }}</span>
+          <span>{{ t('capManager.responsible') }}</span>
+          <span>{{ t('capManager.deadline') }}</span>
           <span></span>
         </div>
         <div v-for="(item, index) in capForm.correctiveActions" :key="index" class="action-item-card">
@@ -466,50 +466,50 @@
             </select>
             <input :id="`actionResponsiblePerson-${index}`" v-model="item.responsiblePerson" type="text" :aria-label="`Action ${index + 1} responsible person`" />
             <input :id="`actionDeadline-${index}`" v-model="item.deadline" type="date" :aria-label="`Action ${index + 1} deadline`" />
-            <BaseButton variant="ghost" size="sm" :disabled="capForm.correctiveActions.length <= 1" @click="removeCorrectiveAction(index)">Remove</BaseButton>
+            <BaseButton variant="ghost" size="sm" :disabled="capForm.correctiveActions.length <= 1" @click="removeCorrectiveAction(index)">{{ t('followUpManager.remove') }}</BaseButton>
           </div>
         </div>
         <div class="form-actions">
-          <BaseButton variant="ghost" size="sm" @click="addCorrectiveAction">Add corrective action</BaseButton>
+          <BaseButton variant="ghost" size="sm" @click="addCorrectiveAction">{{ t('capManager.addCorrectiveAction') }}</BaseButton>
         </div>
       </div>
 
       <div class="split-grid">
         <div class="section-card">
-          <h4 class="section-title">5. Expected Residual Risk</h4>
+          <h4 class="section-title">5. {{ t('capManager.expectedResidualRisk') }}</h4>
           <div class="form-grid">
             <div class="form-field">
-              <label for="residualProbability">Probability</label>
+              <label for="residualProbability">{{ t('capManager.probability') }}</label>
               <input id="residualProbability" v-model="capForm.residualRisk.probability" type="text" />
             </div>
             <div class="form-field">
-              <label for="residualSeverity">Severity</label>
+              <label for="residualSeverity">{{ t('capManager.severity') }}</label>
               <input id="residualSeverity" v-model="capForm.residualRisk.severity" type="text" />
             </div>
             <div class="form-field field-span-2">
-              <label for="residualRiskLevel">Residual risk level</label>
+              <label for="residualRiskLevel">{{ t('capManager.residualRiskLevel') }}</label>
               <input id="residualRiskLevel" v-model="capForm.residualRisk.riskLevel" type="text" />
             </div>
             <div class="form-field field-span-2">
-              <label for="residualJustification">Justification</label>
+              <label for="residualJustification">{{ t('capManager.justification') }}</label>
               <textarea id="residualJustification" v-model="capForm.residualRisk.justification" rows="2" />
             </div>
           </div>
         </div>
 
         <div class="section-card">
-          <h4 class="section-title">6. Effectiveness Verification</h4>
+          <h4 class="section-title">6. {{ t('capManager.effectivenessVerification') }}</h4>
           <div class="form-grid">
             <div class="form-field">
-              <label for="verificationMethod">Method</label>
+              <label for="verificationMethod">{{ t('capManager.method') }}</label>
               <input id="verificationMethod" v-model="capForm.effectivenessVerification.method" type="text" />
             </div>
             <div class="form-field">
-              <label for="verificationIndicators">Indicator(s)</label>
+              <label for="verificationIndicators">{{ t('capManager.indicatorsLabel') }}</label>
               <textarea id="verificationIndicators" v-model="capForm.effectivenessVerification.indicators" rows="2" />
             </div>
             <div class="form-field">
-              <label for="projectedVerificationDate">Projected date of verification</label>
+              <label for="projectedVerificationDate">{{ t('capManager.projectedDateOfVerification') }}</label>
               <input id="projectedVerificationDate" v-model="capForm.effectivenessVerification.projectedVerificationDate" type="date" />
             </div>
           </div>
@@ -517,12 +517,12 @@
       </div>
 
       <div class="form-actions" v-if="editMode.type === 'notAccepted'">
-        <BaseButton variant="secondary" @click="saveNotAcceptedChangesAction" :disabled="capStore.loading">Save Changes</BaseButton>
-        <BaseButton variant="primary" @click="resubmitNotAcceptedAction" :disabled="capStore.loading">Resubmit for Review</BaseButton>
+        <BaseButton variant="secondary" @click="saveNotAcceptedChangesAction" :disabled="capStore.loading">{{ t('capManager.saveChanges') }}</BaseButton>
+        <BaseButton variant="primary" @click="resubmitNotAcceptedAction" :disabled="capStore.loading">{{ t('capManager.resubmitForReview') }}</BaseButton>
       </div>
       <div class="form-actions" v-else>
-        <BaseButton variant="secondary" @click="saveDraftAction" :disabled="capStore.loading">Save Draft</BaseButton>
-        <BaseButton variant="primary" @click="submitForReviewAction" :disabled="capStore.loading">Submit for Review</BaseButton>
+        <BaseButton variant="secondary" @click="saveDraftAction" :disabled="capStore.loading">{{ t('capManager.saveDraft') }}</BaseButton>
+        <BaseButton variant="primary" @click="submitForReviewAction" :disabled="capStore.loading">{{ t('capManager.submitForReview') }}</BaseButton>
       </div>
     </div>
 
@@ -532,18 +532,18 @@
 
     <ModalWindow
       :show="showNoEvidenceConfirm"
-      titulo="No evidence attached"
-      explanation="No RCA or Risk Assessment evidence file is attached to this submission. Evidence can still be added later from the CAP Detail view, but the CAP will already be visible for review in the meantime."
-      accion="submit this CAP without evidence"
+      :titulo="t('capManager.noEvidenceTitle')"
+      :explanation="t('capManager.noEvidenceExplanation')"
+      :accion="t('capManager.noEvidenceAction')"
       @confirm="confirmSubmitWithoutEvidence"
       @cancel="cancelSubmitWithoutEvidence"
     />
 
     <ModalWindow
       :show="Boolean(evidenceToRemove)"
-      titulo="Remove evidence"
-      :explanation="`This will permanently remove '${evidenceToRemove?.name || ''}' from this CAP.`"
-      accion="remove this evidence file"
+      :titulo="t('capManager.removeEvidenceTitle')"
+      :explanation="t('capManager.removeEvidenceExplanation', { name: evidenceToRemove?.name || '' })"
+      :accion="t('capManager.removeEvidenceAction')"
       @confirm="removeEvidenceConfirmed"
       @cancel="cancelRemoveEvidence"
     />
@@ -552,6 +552,7 @@
 
 <script setup>
 import { reactive, ref, computed, onMounted } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { useRoute } from 'vue-router';
 import BaseManager from '@/components/base/BaseManager.vue';
 import BaseButton from '@/components/base/BaseButton.vue';
@@ -564,6 +565,7 @@ import { apiCapEvidenceContentUrl } from '@/services/apiServices';
 import { EVIDENCE_FILE_ACCEPT, validateEvidenceFile } from '@/utils/evidenceFile';
 import { CAP_EVALUATION_CRITERIA, CAP_EVALUATION_SECTIONS, getMissingCapEvaluationCriteria } from '@/utils/capEvaluationCriteria';
 
+const { t } = useI18n();
 const route = useRoute();
 const capStore = useCapStore();
 const authStore = useAuthStore();
@@ -590,12 +592,12 @@ function isCapReviewable(status) {
 
 const panelHeading = computed(() => {
   if (editMode.value.type === 'notAccepted') {
-    return `Edit CAP: ${editMode.value.capId}`;
+    return t('capManager.editCap', { capId: editMode.value.capId });
   }
   if (editMode.value.type === 'draft') {
-    return 'Edit Draft CAP';
+    return t('capManager.editDraftCap');
   }
-  return 'Submit CAP';
+  return t('capManager.submitCap');
 });
 
 const rcaMethods = ['5 Whys', 'Fishbone', 'BowTie', 'TapRooT', 'Barrier Analysis', 'Other'];
@@ -824,25 +826,25 @@ const reviewChecklist = computed(() => {
   ];
 
   return [
-    { label: 'Root Cause Analysis complete', met: Boolean(rca?.method && rca?.rootCause) },
-    { label: 'Risk Assessment complete', met: Boolean(risk?.identifiedHazard && risk?.potentialConsequence && risk?.justification) },
+    { label: t('capManager.checklist.rca'), met: Boolean(rca?.method && rca?.rootCause) },
+    { label: t('capManager.checklist.risk'), met: Boolean(risk?.identifiedHazard && risk?.potentialConsequence && risk?.justification) },
     // Containment measures don't apply to every finding — absent entirely
     // is not a red flag, only present-but-incomplete is.
-    { label: 'Immediate Containment Measures complete', met: !containment || Boolean(containment.description && containment.implementedDate) },
-    { label: 'At least one Corrective Action defined', met: actions.length > 0 },
-    { label: 'Every corrective action has a responsible person', met: actions.length > 0 && actions.every((item) => item.responsiblePerson) },
-    { label: 'Every corrective action has a deadline', met: actions.length > 0 && actions.every((item) => item.deadline) },
-    { label: 'Residual Risk complete', met: Boolean(residual?.justification) },
-    { label: 'Effectiveness Verification complete', met: Boolean(effectiveness?.method && effectiveness?.indicators && effectiveness?.projectedVerificationDate) },
-    { label: 'At least one evidence file attached', met: allEvidence.length > 0 },
+    { label: t('capManager.checklist.containment'), met: !containment || Boolean(containment.description && containment.implementedDate) },
+    { label: t('capManager.checklist.actionsDefined'), met: actions.length > 0 },
+    { label: t('capManager.checklist.actionsResponsible'), met: actions.length > 0 && actions.every((item) => item.responsiblePerson) },
+    { label: t('capManager.checklist.actionsDeadline'), met: actions.length > 0 && actions.every((item) => item.deadline) },
+    { label: t('capManager.checklist.residual'), met: Boolean(residual?.justification) },
+    { label: t('capManager.checklist.effectiveness'), met: Boolean(effectiveness?.method && effectiveness?.indicators && effectiveness?.projectedVerificationDate) },
+    { label: t('capManager.checklist.evidence'), met: allEvidence.length > 0 },
   ];
 });
 
 const capScopePresets = [
-  { value: 'all-caps', label: 'All CAPs' },
-  { value: 'pending-caps', label: 'Pending review' },
-  { value: 'accepted-caps', label: 'Accepted' },
-  { value: 'not-accepted-caps', label: 'Not Accepted' },
+  { value: 'all-caps', label: t('capManager.presets.all') },
+  { value: 'pending-caps', label: t('capManager.presets.pending') },
+  { value: 'accepted-caps', label: t('capManager.presets.accepted') },
+  { value: 'not-accepted-caps', label: t('capManager.presets.notAccepted') },
 ];
 
 const capAcceptanceStatuses = [
@@ -938,8 +940,8 @@ async function saveDraftAction() {
     });
     editMode.value = { type: 'draft', draftId: draft?.draftId };
     message.value = hasSelectedEvidence()
-      ? 'Draft saved. Note: selected evidence file(s) are not saved with drafts — you will need to re-attach them when you submit for review.'
-      : 'Draft saved.';
+      ? t('capManager.toast.draftSavedWithEvidenceNote')
+      : t('capManager.toast.draftSaved');
     await capStore.fetchDrafts();
   } catch (error) {
     console.error('Draft save failed:', error);
@@ -990,7 +992,7 @@ async function performSubmitForReview() {
     }
     await uploadPendingEvidence(capId);
 
-    message.value = 'CAP submitted successfully.';
+    message.value = t('capManager.toast.submitted');
     resetForm();
     await loadCaps();
     await capStore.fetchDrafts();
@@ -1010,7 +1012,7 @@ async function saveNotAcceptedChangesAction() {
       payload: buildCapPayload(),
       csrfToken: authStore.csrfToken,
     });
-    message.value = 'CAP changes saved.';
+    message.value = t('capManager.toast.changesSaved');
     await viewCap(editMode.value.capId);
     await loadCaps();
   } catch (error) {
@@ -1028,7 +1030,7 @@ async function resubmitNotAcceptedAction() {
       payload: { ...buildCapPayload(), resubmit: true },
       csrfToken: authStore.csrfToken,
     });
-    message.value = 'CAP resubmitted for review.';
+    message.value = t('capManager.toast.resubmitted');
     resetForm();
     await loadCaps();
   } catch (error) {
@@ -1083,7 +1085,7 @@ async function deleteDraftAction(draftId) {
     if (editMode.value.type === 'draft' && editMode.value.draftId === draftId) {
       resetForm();
     }
-    message.value = 'Draft discarded.';
+    message.value = t('capManager.toast.draftDiscarded');
     await capStore.fetchDrafts();
   } catch (error) {
     console.error('Draft delete failed:', error);
@@ -1103,7 +1105,7 @@ async function updateActionItem(item) {
       },
       csrfToken: authStore.csrfToken,
     });
-    message.value = `Action #${item.sequenceNumber} updated.`;
+    message.value = t('capManager.toast.actionUpdated', { sequenceNumber: item.sequenceNumber });
     await viewCap(capStore.selectedCap.capId);
   } catch (error) {
     console.error('Action item update failed:', error);
@@ -1130,7 +1132,7 @@ async function uploadDetailEvidence(section) {
       file,
       csrfToken: authStore.csrfToken,
     });
-    message.value = 'Evidence uploaded.';
+    message.value = t('capManager.toast.evidenceUploaded');
     fileRef.value = null;
     await viewCap(capStore.selectedCap.capId);
   } catch (error) {
@@ -1162,7 +1164,7 @@ async function removeEvidenceConfirmed() {
       evidenceNodeId: item.nodeId,
       csrfToken: authStore.csrfToken,
     });
-    message.value = 'Evidence removed.';
+    message.value = t('capManager.toast.evidenceRemoved');
     await viewCap(capStore.selectedCap.capId);
   } catch (error) {
     console.error('Evidence removal failed:', error);
@@ -1193,11 +1195,11 @@ async function confirmReview() {
     return;
   }
   if (missingEvaluationCriteria.value.length > 0) {
-    reviewValidationError.value = `Complete the manual PAC evaluation before applying a decision (${missingEvaluationCriteria.value.length} item(s) pending).`;
+    reviewValidationError.value = t('capManager.toast.evaluationIncomplete', { count: missingEvaluationCriteria.value.length });
     return;
   }
   if (reviewDecision.value === 'Not Accepted' && !reviewReason.value.trim()) {
-    reviewValidationError.value = 'A reason is required when a CAP is marked Not Accepted.';
+    reviewValidationError.value = t('capManager.toast.reasonRequired');
     return;
   }
   try {
@@ -1212,7 +1214,7 @@ async function confirmReview() {
       reason: reviewReason.value.trim(),
       csrfToken: authStore.csrfToken,
     });
-    message.value = 'CAP review applied.';
+    message.value = t('capManager.toast.reviewApplied');
     reviewMode.value = false;
     await viewCap(capId);
     await loadCaps();

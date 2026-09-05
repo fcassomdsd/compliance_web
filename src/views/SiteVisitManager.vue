@@ -1,71 +1,71 @@
 <template>
-  <BaseManager title="Site Visit">
+  <BaseManager :title="t('siteVisitManager.title')">
     <div class="input-group">
-      <p v-if="!locationStore.locations.length" class="error">No locations available. Please add locations first.</p>
+      <p v-if="!locationStore.locations.length" class="error">{{ t('siteVisitManager.noLocations') }}</p>
       <div class="grid-cell1 grid-item">
-        <label for="code">Site Visit Code:</label>
-        <input id="code" type="text" size="6" v-model="newSiteVisit.code" :disabled="true" placeholder="Code"/>
-      </div>      
+        <label for="code">{{ t('siteVisitManager.siteVisitCode') }}</label>
+        <input id="code" type="text" size="6" v-model="newSiteVisit.code" :disabled="true" :placeholder="t('siteVisitManager.code')"/>
+      </div>
       <div class="grid-cell2 grid-item">
-        <label for="locationId">Location:</label>
+        <label for="locationId">{{ t('inspectionCadence.location') }}</label>
         <select id="locationId" v-model="newSiteVisit.locationId" :disabled="(appState != 'editing' || isLocationLocked())">
-          <option :value="`${NONE_VALUE}`">Select a location</option>
+          <option :value="`${NONE_VALUE}`">{{ t('inspectionCadence.selectLocation') }}</option>
           <option v-for="(location, index) in locationStore.locations" :key="index" :value="location.id" >
               {{location.name }}
-          </option> 
-        </select> 
-      </div>      
+          </option>
+        </select>
+      </div>
       <div class="grid-cell3 grid-item">
-        <label for="startDate">Start Date:</label>
-        <input id="startDate" type="date" size="12" v-model="newSiteVisit.startDate" :disabled="(appState != 'editing')" placeholder="Start date" @blur="onStartDateBlur"/>
-      </div>      
+        <label for="startDate">{{ t('siteVisitManager.startDate') }}</label>
+        <input id="startDate" type="date" size="12" v-model="newSiteVisit.startDate" :disabled="(appState != 'editing')" :placeholder="t('siteVisitManager.startDatePlaceholder')" @blur="onStartDateBlur"/>
+      </div>
       <div class="grid-cell4 grid-item">
-        <label for="endDate">End Date:</label>
-        <input id="endDate" type="date" size="12" v-model="newSiteVisit.endDate" :disabled="(appState != 'editing')" placeholder="End date"/>
-      </div>      
+        <label for="endDate">{{ t('siteVisitManager.endDate') }}</label>
+        <input id="endDate" type="date" size="12" v-model="newSiteVisit.endDate" :disabled="(appState != 'editing')" :placeholder="t('siteVisitManager.endDatePlaceholder')"/>
+      </div>
       <div class="grid-cell7 grid-item">
-        <label for="status">Status:</label>
+        <label for="status">{{ t('common.status') }}</label>
         <StatusBadge :status="newSiteVisit.status" />
-      </div>      
+      </div>
       <div class="grid-cell8 grid-item">
-        <label for="mainInspector">Main Inspector:</label>
+        <label for="mainInspector">{{ t('siteVisitManager.mainInspector') }}</label>
         <select id="mainInspector" v-model="newSiteVisit.mainInspectorId" :disabled="(appState != 'editing')">
-          <option :value="`${NONE_VALUE}`">None</option>
+          <option :value="`${NONE_VALUE}`">{{ t('inspectionPlan.none') }}</option>
           <option v-for="inspector in inspectorStore.inspectors" :key="inspector.id" :value="inspector.id">
             {{ inspector.name }}
           </option>
         </select>
-      </div>      
+      </div>
       <div class="grid-cell9 grid-item">
-        <label for="secondaryInspector">Secondary Inspector:</label>
+        <label for="secondaryInspector">{{ t('siteVisitManager.secondaryInspector') }}</label>
         <select id="secondaryInspector" v-model="newSiteVisit.secondaryInspectorId" :disabled="(appState != 'editing')">
-          <option :value="`${NONE_VALUE}`">None</option>
+          <option :value="`${NONE_VALUE}`">{{ t('inspectionPlan.none') }}</option>
           <option v-for="inspector in inspectorStore.inspectors" :key="inspector.id" :value="inspector.id">
             {{ inspector.name }}
           </option>
         </select>
-      </div>      
+      </div>
       <div class="input-buttons">
-        <BaseButton id="addBtn" variant="ghost" size="sm" :icon="addImg" alt="Add" :disabled="appState != 'viewing'" @click="startAdd" />
-        <BaseButton id="editBtn" variant="ghost" size="sm" :icon="editImg" alt="Edit" :disabled="newSiteVisit.id == null || appState != 'viewing' || !canEditBasicValues(newSiteVisit.status)" @click="appState = 'editing'" />
-        <BaseButton id="saveBtn" variant="ghost" size="sm" :icon="saveImg" alt="Save" :disabled="(appState != 'editing' || !newSiteVisit.valid())" @click="saveEdit(newSiteVisit)" />
-        <BaseButton id="cancelBtn" variant="ghost" size="sm" :icon="cancelImg" alt="Cancel" :disabled="appState != 'editing'" @click="cancelEdit()" />
-        <BaseButton v-if="newSiteVisit.id && newSiteVisit.status === INSPECTION_STATUS.INACTIVE && canManageStatus" id="reactivateBtn" variant="primary" size="sm" @click="reactivateSiteVisit()">Reactivate</BaseButton>
-        <BaseButton v-if="newSiteVisit.id && canInactivate(newSiteVisit.status) && canManageStatus" id="inactivateBtn" variant="danger" size="sm" @click="inactivateSiteVisit()">Inactivate</BaseButton>
+        <BaseButton id="addBtn" variant="ghost" size="sm" :icon="addImg" :alt="t('siteVisitManager.add')" :disabled="appState != 'viewing'" @click="startAdd" />
+        <BaseButton id="editBtn" variant="ghost" size="sm" :icon="editImg" :alt="t('common.edit')" :disabled="newSiteVisit.id == null || appState != 'viewing' || !canEditBasicValues(newSiteVisit.status)" @click="appState = 'editing'" />
+        <BaseButton id="saveBtn" variant="ghost" size="sm" :icon="saveImg" :alt="t('common.save')" :disabled="(appState != 'editing' || !newSiteVisit.valid())" @click="saveEdit(newSiteVisit)" />
+        <BaseButton id="cancelBtn" variant="ghost" size="sm" :icon="cancelImg" :alt="t('common.cancel')" :disabled="appState != 'editing'" @click="cancelEdit()" />
+        <BaseButton v-if="newSiteVisit.id && newSiteVisit.status === INSPECTION_STATUS.INACTIVE && canManageStatus" id="reactivateBtn" variant="primary" size="sm" @click="reactivateSiteVisit()">{{ t('siteVisitManager.reactivate') }}</BaseButton>
+        <BaseButton v-if="newSiteVisit.id && canInactivate(newSiteVisit.status) && canManageStatus" id="inactivateBtn" variant="danger" size="sm" @click="inactivateSiteVisit()">{{ t('siteVisitManager.inactivate') }}</BaseButton>
       </div>
     </div>
     <div class="provider-group" v-if="newSiteVisit.id && newSiteVisit.id !== 'new'">
       <div class="provider-header">
-        <span class="provider-label">Providers to inspect:</span>
+        <span class="provider-label">{{ t('siteVisitManager.providersToInspect') }}</span>
       </div>
       <div class="provider-list-header">
-        <BaseButton id="addProviderBtn" variant="primary" size="sm" :disabled="appState === 'editing' || !canAssignServices(newSiteVisit.status)" @click="showProviderDropdown = !showProviderDropdown">+ Add Provider</BaseButton>
-        <span v-if="providerInspections.length === 0 && !loadingProviders" class="provider-hint">Click to select providers for this site visit.</span>
+        <BaseButton id="addProviderBtn" variant="primary" size="sm" :disabled="appState === 'editing' || !canAssignServices(newSiteVisit.status)" @click="showProviderDropdown = !showProviderDropdown">{{ t('siteVisitManager.addProvider') }}</BaseButton>
+        <span v-if="providerInspections.length === 0 && !loadingProviders" class="provider-hint">{{ t('siteVisitManager.selectProvidersHint') }}</span>
       </div>
-      <div v-if="loadingProviders" class="provider-loading"><LoadingSpinner :visible="true" size="sm" text="Loading providers..." /></div>
+      <div v-if="loadingProviders" class="provider-loading"><LoadingSpinner :visible="true" size="sm" :text="t('siteVisitManager.loadingProviders')" /></div>
       <div v-if="showProviderDropdown" class="provider-dropdown">
-        <div v-if="loadingAvailableProviders" class="provider-empty"><LoadingSpinner :visible="true" size="sm" text="Loading..." /></div>
-        <div v-else-if="availableProviders.length === 0" class="provider-empty">No service providers found for this location. Ensure location services are configured in AtroCore.</div>
+        <div v-if="loadingAvailableProviders" class="provider-empty"><LoadingSpinner :visible="true" size="sm" :text="t('common.loading')" /></div>
+        <div v-else-if="availableProviders.length === 0" class="provider-empty">{{ t('siteVisitManager.noProvidersFound') }}</div>
         <div v-for="provider in availableProviders" :key="provider.id" class="provider-option"
              @click="addProviderInspection(provider.id, provider.name); showProviderDropdown = false">
           {{ provider.name }} ({{ provider.id }})
@@ -77,12 +77,12 @@
              @click="selectedProviderId = pi.id">
           <div class="provider-card-header">
             <strong>{{ pi.serviceProviderName || pi.name || pi.serviceProviderId }}</strong>
-            <BaseButton variant="ghost" size="sm" :disabled="appState === 'editing'" @click.stop="removeProviderInspection(pi.id)">Remove</BaseButton>
+            <BaseButton variant="ghost" size="sm" :disabled="appState === 'editing'" @click.stop="removeProviderInspection(pi.id)">{{ t('followUpManager.remove') }}</BaseButton>
           </div>
           <router-link
             v-if="selectedProviderId === pi.id"
             :to="`/site-visit/${newSiteVisit.id}/provider/${pi.serviceProviderId}?code=${newSiteVisit.code}`"
-            class="provider-action-link">Manage Inspection</router-link>
+            class="provider-action-link">{{ t('siteVisitManager.manageInspection') }}</router-link>
         </div>
       </div>
     </div>
@@ -96,10 +96,10 @@
       </colgroup>
       <thead>
         <tr>
-          <th>Code</th> 
-          <th>Location</th>
-          <th>Start Date</th>
-          <th>Actions</th>
+          <th>{{ t('inspectionPlan.table.code') }}</th>
+          <th>{{ t('inspectionPlan.location') }}</th>
+          <th>{{ t('inspectionPlan.table.startDate') }}</th>
+          <th>{{ t('common.actions') }}</th>
         </tr>
       </thead>
       <tbody>
@@ -115,10 +115,10 @@
            </td>
             <td class="actions-cell">
               <div>
-                <BaseButton :id="`view-${siteVisit.id}`" variant="ghost" size="sm" :icon="viewImg" alt="View" :disabled="appState !== 'viewing'" @click="viewElement(siteVisit)" />
-                <BaseButton :id="`delete-${siteVisit.id}`" variant="ghost" size="sm" :icon="deleteImg" alt="Delete" :disabled="appState !== 'viewing'" @click="removeSiteVisit(siteVisit)" />
+                <BaseButton :id="`view-${siteVisit.id}`" variant="ghost" size="sm" :icon="viewImg" :alt="t('common.view')" :disabled="appState !== 'viewing'" @click="viewElement(siteVisit)" />
+                <BaseButton :id="`delete-${siteVisit.id}`" variant="ghost" size="sm" :icon="deleteImg" :alt="t('common.delete')" :disabled="appState !== 'viewing'" @click="removeSiteVisit(siteVisit)" />
               </div>
-          </td> 
+          </td>
         </tr>
       </tbody>
     </table>
@@ -129,6 +129,7 @@
 
 <script setup>
 import { ref, computed } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { formatDate } from '@/utils/formatDate';
 import BaseManager from '@/components/base/BaseManager.vue';
 import BaseButton from '@/components/base/BaseButton.vue';
@@ -156,6 +157,7 @@ import addImg from '@/assets/images/icons/add.png';
 import cancelImg from '@/assets/images/icons/cancel.png';
 import viewImg from '@/assets/images/icons/view.png';
 
+const { t } = useI18n();
 const store = useSiteVisitStore();
 const locationStore = useLocationStore();
 const inspectorStore = useInspectorStore();
@@ -253,9 +255,9 @@ const saveEdit = async (inspection) => {
     }
     Object.assign(newSiteVisit.value, DEFAULT_SITEVISIT);
     appState.value = 'viewing';
-    toast.success("Site visit data saved!")
+    toast.success(t('siteVisitManager.toast.saved'))
   } catch (error) {
-    toast.error("Could not save site visit data: " + error.message);
+    toast.error(t('siteVisitManager.toast.saveError', { message: error.message }));
   }
 };
 
@@ -329,51 +331,51 @@ const addProviderInspection = async (serviceProviderId, serviceProviderName) => 
     (pi) => pi.serviceProviderId === serviceProviderId,
   );
   if (exists) {
-    toast.warning("Provider already added to this site visit.");
+    toast.warning(t('siteVisitManager.toast.providerAlreadyAdded'));
     return;
   }
   try {
     await inspectedProviderStore.addInspectedProvider(newSiteVisit.value.id, serviceProviderId, serviceProviderName);
     await loadProviderInspections();
-    toast.success("Provider added");
+    toast.success(t('siteVisitManager.toast.providerAdded'));
   } catch (error) {
-    toast.error("Could not add provider: " + error.message);
+    toast.error(t('siteVisitManager.toast.providerAddError', { message: error.message }));
   }
 };
 
 const removeProviderInspection = async (providerInspectionId) => {
-  if (confirm('Remove this provider from the inspection?')) {
+  if (confirm(t('siteVisitManager.confirmRemoveProvider'))) {
     try {
       await inspectedProviderStore.removeInspectedProvider(providerInspectionId, newSiteVisit.value.id);
       await loadProviderInspections();
       if (selectedProviderId.value === providerInspectionId) {
         selectedProviderId.value = NONE_VALUE.value;
       }
-      toast.success("Provider removed");
+      toast.success(t('siteVisitManager.toast.providerRemoved'));
     } catch (error) {
-      toast.error("Could not remove provider: " + error.message);
+      toast.error(t('siteVisitManager.toast.providerRemoveError', { message: error.message }));
     }
   }
 };
 
 const removeSiteVisit = async (inspection) => {
   if (isActive(inspection.status)) {
-    if (confirm('Inactivate this site visit? It will remain in the system but will not be available for operations.')) {
+    if (confirm(t('siteVisitManager.confirmInactivate'))) {
       try {
         await store.inactivateSiteVisit(inspection.id);
-        toast.success("Site visit inactivated");
+        toast.success(t('siteVisitManager.toast.inactivated'));
       } catch (error) {
-        toast.error("Could not inactivate site visit: " + error.message);
+        toast.error(t('siteVisitManager.toast.inactivateError', { message: error.message }));
         await store.refreshSiteVisits();
       }
     }
   } else {
-    if (confirm('Permanently delete this inspection? This action cannot be undone.')) {
+    if (confirm(t('siteVisitManager.confirmDelete'))) {
       try {
         await store.deleteSiteVisit(inspection.id);
-        toast.success("Site visit permanently deleted");
+        toast.success(t('siteVisitManager.toast.deleted'));
       } catch (error) {
-        toast.error("Could not delete site visit: " + error.message);
+        toast.error(t('siteVisitManager.toast.deleteError', { message: error.message }));
         await store.refreshSiteVisits();
       }
     }
@@ -381,26 +383,26 @@ const removeSiteVisit = async (inspection) => {
 };
 
 const inactivateSiteVisit = async () => {
-  if (confirm('Inactivate this site visit? It will remain in the system but will not be available for operations.')) {
+  if (confirm(t('siteVisitManager.confirmInactivate'))) {
     try {
       await store.inactivateSiteVisit(newSiteVisit.value.id);
-      toast.success("Site visit inactivated");
+      toast.success(t('siteVisitManager.toast.inactivated'));
       Object.assign(newSiteVisit.value, store.siteVisits.find(x => x.id === newSiteVisit.value.id));
     } catch (error) {
-      toast.error("Could not inactivate site visit: " + error.message);
+      toast.error(t('siteVisitManager.toast.inactivateError', { message: error.message }));
       await store.refreshSiteVisits();
     }
   }
 };
 
 const reactivateSiteVisit = async () => {
-  if (confirm('Reactivate this site visit?')) {
+  if (confirm(t('siteVisitManager.confirmReactivate'))) {
     try {
       await store.reactivateSiteVisit(newSiteVisit.value.id);
-      toast.success("Site visit reactivated");
+      toast.success(t('siteVisitManager.toast.reactivated'));
       Object.assign(newSiteVisit.value, store.siteVisits.find(x => x.id === newSiteVisit.value.id));
     } catch (error) {
-      toast.error("Could not reactivate site visit: " + error.message);
+      toast.error(t('siteVisitManager.toast.reactivateError', { message: error.message }));
       await store.refreshSiteVisits();
     }
   }

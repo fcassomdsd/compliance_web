@@ -283,6 +283,37 @@ function createAuthRouter({ config, sessionRepository, alfrescoClient, loginRate
     return res.status(200).json(response);
   });
 
+  router.post('/locale', async (req, res) => {
+    const sessionId = req.cookies?.[config.cookieName];
+    if (!sessionId) {
+      return res.status(401).json(buildError('AUTH_SESSION_EXPIRED', 'No active session'));
+    }
+
+    const session = await sessionRepository.getSession(sessionId);
+    if (!session || isExpired(session, now())) {
+      clearAuthCookie(res, config.cookieName, config);
+      return res.status(401).json(buildError('AUTH_SESSION_EXPIRED', 'Session expired'));
+    }
+
+    const csrfHeader = readCsrfHeader(req);
+    if (csrfHeader !== session.csrfSecret) {
+      auditAuthEvent(logger, 'csrf_mismatch', { sessionId });
+      return res.status(403).json(buildError('AUTH_FORBIDDEN', 'Invalid CSRF token'));
+    }
+
+    const { locale } = req.body || {};
+    if (locale !== 'en' && locale !== 'es') {
+      return res.status(400).json(buildError('AUTH_BAD_REQUEST', 'locale must be "en" or "es"'));
+    }
+
+    await sessionRepository.updateSessionMetadata(session.sessionId, {
+      ...(session.metadata || {}),
+      locale,
+    });
+
+    return res.status(200).json({ ok: true, locale });
+  });
+
   router.post('/logout', async (req, res) => {
     const sessionId = req.cookies?.[config.cookieName];
 

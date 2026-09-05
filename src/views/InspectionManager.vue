@@ -1,5 +1,5 @@
 <template>
-  <BaseManager :title="'Inspection: ' + (inspectionData.inspectedProviderName || providerName)">
+  <BaseManager :title="t('inspectionManager.titlePrefix') + (inspectionData.inspectedProviderName || providerName)">
     <SiteVisitHeader
       :code="siteVisitCode"
       :locationName="siteVisitData.locationName"
@@ -8,48 +8,48 @@
       :providerName="providerName"
     />
     <div class="status-row" v-if="inspectionData.id">
-      <label>Status:</label>
+      <label>{{ t('common.status') }}:</label>
       <StatusBadge :status="inspectionData.status" />
     </div>
     <div class="input-group">
       <div class="grid-cell1 grid-item">
-        <label for="activityTypeId">Activity Type:</label>
+        <label for="activityTypeId">{{ t('inspectionCadence.activityType') }}:</label>
         <select id="activityTypeId" v-model="inspectionData.activityTypeId" :disabled="appState != 'editing'">
-          <option value="">Select an activity type</option>
+          <option value="">{{ t('inspectionCadence.selectActivityType') }}</option>
           <option v-for="type in activityTypeStore.activityTypes" :key="type.id" :value="type.id">{{ type.code }} — {{ type.name }}</option>
         </select>
       </div>
       <div class="grid-cell2 grid-item text-area">
-        <label for="objective">Objective:</label>
-        <textarea id="objective" v-model="inspectionData.objective" :disabled="appState != 'editing'" placeholder="Inspection objective"/>
+        <label for="objective">{{ t('inspectionReport.objective') }}</label>
+        <textarea id="objective" v-model="inspectionData.objective" :disabled="appState != 'editing'" :placeholder="t('inspectionManager.objectivePlaceholder')"/>
       </div>
        <div class="grid-cell3 grid-item text-area">
-         <label for="scope">Scope:</label>
-         <textarea id="scope" v-model="inspectionData.scope" :disabled="appState != 'editing'" placeholder="Inspection scope"/>
+         <label for="scope">{{ t('inspectionReport.scope') }}</label>
+         <textarea id="scope" v-model="inspectionData.scope" :disabled="appState != 'editing'" :placeholder="t('inspectionManager.scopePlaceholder')"/>
        </div>
        <div class="grid-cell4 grid-item text-area" v-if="inspectionData.id">
-         <label for="desc">Description:</label>
-         <textarea id="desc" v-model="inspectionData.description" disabled placeholder="Set during report generation"/>
+         <label for="desc">{{ t('common.description') }}</label>
+         <textarea id="desc" v-model="inspectionData.description" disabled :placeholder="t('inspectionManager.setDuringReport')"/>
        </div>
        <div class="grid-cell5 grid-item text-area" v-if="inspectionData.id">
-         <label for="conc">Conclusion:</label>
-         <textarea id="conc" v-model="inspectionData.conclusion" disabled placeholder="Set during report generation"/>
+         <label for="conc">{{ t('inspectionReport.conclusion') }}</label>
+         <textarea id="conc" v-model="inspectionData.conclusion" disabled :placeholder="t('inspectionManager.setDuringReport')"/>
        </div>
        <div class="input-buttons">
-        <BaseButton id="editBtn" variant="ghost" size="sm" :icon="editImg" alt="Edit" v-if="appState == 'viewing' && inspectionData.id && canEditBasicValues(inspectionData.status)" @click="startEdit" />
-        <BaseButton id="saveBtn" variant="ghost" size="sm" :icon="saveImg" alt="Save" :disabled="(appState != 'editing')" @click="saveInspection" />
-        <BaseButton id="cancelBtn" variant="ghost" size="sm" :icon="cancelImg" alt="Cancel" :disabled="appState != 'editing'" @click="cancelEdit" />
+        <BaseButton id="editBtn" variant="ghost" size="sm" :icon="editImg" :alt="t('common.edit')" v-if="appState == 'viewing' && inspectionData.id && canEditBasicValues(inspectionData.status)" @click="startEdit" />
+        <BaseButton id="saveBtn" variant="ghost" size="sm" :icon="saveImg" :alt="t('common.save')" :disabled="(appState != 'editing')" @click="saveInspection" />
+        <BaseButton id="cancelBtn" variant="ghost" size="sm" :icon="cancelImg" :alt="t('common.cancel')" :disabled="appState != 'editing'" @click="cancelEdit" />
       </div>
     </div>
     <div class="detail-group">
       <div class="detail-buttons">
-        <BaseButton id="services" variant="secondary" size="sm" :disabled="!inspectionData.id || !canAssignServices(inspectionData.status)" @click="toggleServices()">Services</BaseButton>
-        <BaseButton id="schedules" variant="secondary" size="sm" :disabled="!inspectionData.id || !canAssignServices(inspectionData.status)" @click="toggleSchedules()">Schedules</BaseButton>
+        <BaseButton id="services" variant="secondary" size="sm" :disabled="!inspectionData.id || !canAssignServices(inspectionData.status)" @click="toggleServices()">{{ t('inspectionManager.services') }}</BaseButton>
+        <BaseButton id="schedules" variant="secondary" size="sm" :disabled="!inspectionData.id || !canAssignServices(inspectionData.status)" @click="toggleSchedules()">{{ t('inspectionManager.schedules') }}</BaseButton>
       </div>
       <div id="services" class="service-group" v-show="servicesState">
         <table class="service-table">
           <colgroup><col style="width: 50%;"><col style="width: 50%;"></colgroup>
-          <thead><tr><th>Service Name</th><th>Specialty</th></tr></thead>
+          <thead><tr><th>{{ t('inspectionManager.serviceName') }}</th><th>{{ t('assignInspectors.specialty') }}</th></tr></thead>
           <tr v-for="locService in locationStore.locationServices" :key="locService.id">
             <td>{{ locService.name }}</td>
             <td>
@@ -68,20 +68,20 @@
       </div>
       <div id="schedules" class="schedule-group" v-show="schedulesState">
         <div class="schedule-form">
-          <h3>{{ editingScheduleIndex !== null ? 'Edit Schedule' : 'Add Schedule' }}</h3>
+          <h3>{{ editingScheduleIndex !== null ? t('inspectionManager.editSchedule') : t('inspectionManager.addSchedule') }}</h3>
           <div class="schedule-fields">
-            <div><label for="schedule-name">Name:</label><input id="schedule-name" type="text" v-model="currentSchedule.name" placeholder="Event name"/></div>
-            <div><label for="schedule-start">Start Date/Time:</label><input id="schedule-start" type="datetime-local" v-model="currentSchedule.startDateTime" @focus="onScheduleStartFocus" @blur="onScheduleStartBlur"/></div>
-            <div><label for="schedule-end">End Date/Time:</label><input id="schedule-end" type="datetime-local" v-model="currentSchedule.endDateTime"/></div>
-            <div><label for="schedule-place">Place:</label><input id="schedule-place" type="text" v-model="currentSchedule.place" placeholder="Event location"/></div>
+            <div><label for="schedule-name">{{ t('common.name') }}:</label><input id="schedule-name" type="text" v-model="currentSchedule.name" :placeholder="t('inspectionManager.eventName')"/></div>
+            <div><label for="schedule-start">{{ t('inspectionManager.startDateTime') }}</label><input id="schedule-start" type="datetime-local" v-model="currentSchedule.startDateTime" @focus="onScheduleStartFocus" @blur="onScheduleStartBlur"/></div>
+            <div><label for="schedule-end">{{ t('inspectionManager.endDateTime') }}</label><input id="schedule-end" type="datetime-local" v-model="currentSchedule.endDateTime"/></div>
+            <div><label for="schedule-place">{{ t('inspectionManager.place') }}:</label><input id="schedule-place" type="text" v-model="currentSchedule.place" :placeholder="t('inspectionManager.eventLocation')"/></div>
           </div>
           <div class="schedule-buttons">
-            <BaseButton variant="primary" size="sm" :disabled="!currentSchedule.name || !currentSchedule.startDateTime || !currentSchedule.endDateTime" @click="addOrUpdateSchedule">{{ editingScheduleIndex !== null ? 'Update' : 'Add' }}</BaseButton>
-            <BaseButton v-if="editingScheduleIndex !== null" variant="ghost" size="sm" @click="cancelScheduleEdit">Cancel</BaseButton>
+            <BaseButton variant="primary" size="sm" :disabled="!currentSchedule.name || !currentSchedule.startDateTime || !currentSchedule.endDateTime" @click="addOrUpdateSchedule">{{ editingScheduleIndex !== null ? t('inspectionManager.update') : t('inspectionManager.add') }}</BaseButton>
+            <BaseButton v-if="editingScheduleIndex !== null" variant="ghost" size="sm" @click="cancelScheduleEdit">{{ t('common.cancel') }}</BaseButton>
           </div>
         </div>
         <table class="schedule-table" v-if="schedules.length > 0">
-          <thead><tr><th>Name</th><th>Start</th><th>End</th><th>Place</th><th>Actions</th></tr></thead>
+          <thead><tr><th>{{ t('common.name') }}</th><th>{{ t('inspectionManager.start') }}</th><th>{{ t('inspectionManager.end') }}</th><th>{{ t('inspectionManager.place') }}</th><th>{{ t('common.actions') }}</th></tr></thead>
           <tbody>
             <tr v-for="(schedule, index) in schedules" :key="index">
               <td>{{ schedule.name }}</td>
@@ -89,14 +89,14 @@
               <td>{{ formatDateTime(schedule.endDateTime) }}</td>
               <td>{{ schedule.place || '' }}</td>
               <td>
-                <BaseButton variant="ghost" size="sm" @click="editSchedule(index)">Edit</BaseButton>
-                <BaseButton variant="ghost" size="sm" @click="deleteSchedule(index)">Delete</BaseButton>
+                <BaseButton variant="ghost" size="sm" @click="editSchedule(index)">{{ t('common.edit') }}</BaseButton>
+                <BaseButton variant="ghost" size="sm" @click="deleteSchedule(index)">{{ t('common.delete') }}</BaseButton>
               </td>
             </tr>
           </tbody>
         </table>
-        <p v-else>No schedules defined yet.</p>
-        <div class="schedule-actions"><BaseButton variant="primary" size="sm" :disabled="!schedulesChanged" @click="saveSchedules">Save All</BaseButton></div>
+        <p v-else>{{ t('inspectionManager.noSchedules') }}</p>
+        <div class="schedule-actions"><BaseButton variant="primary" size="sm" :disabled="!schedulesChanged" @click="saveSchedules">{{ t('inspectionManager.saveAll') }}</BaseButton></div>
       </div>
     </div>
   </BaseManager>
@@ -104,6 +104,7 @@
 
 <script setup>
 import { ref, computed, onMounted } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { useRoute } from 'vue-router';
 import BaseManager from '@/components/base/BaseManager.vue';
 import SiteVisitHeader from '@/components/inspection/SiteVisitHeader.vue';
@@ -123,6 +124,7 @@ import saveImg from '@/assets/images/icons/save.png';
 import cancelImg from '@/assets/images/icons/cancel.png';
 import editImg from '@/assets/images/icons/edit.png';
 
+const { t } = useI18n();
 const route = useRoute();
 const siteVisitId = route.params.siteVisitId;
 const providerId = route.params.providerId;
@@ -194,7 +196,7 @@ onMounted(async () => {
     await inspectedProviderStore.getInspectedProviders(siteVisitId);
     const target = inspectedProviderStore.getProviderByServiceProvider(siteVisitId, providerId);
     if (!target) {
-      toast.error('Provider not found for this site visit.');
+      toast.error(t('inspectionManager.toast.providerNotFound'));
       return;
     }
     inspectedProviderId = target.id;
@@ -213,7 +215,7 @@ onMounted(async () => {
       }
     }
   } catch (error) {
-    toast.error('Could not load inspection: ' + error.message);
+    toast.error(t('inspectionManager.toast.loadError', { message: error.message }));
   }
 });
 
@@ -231,7 +233,7 @@ const toggleServices = async () => {
         }
       }
     }
-    if (changed && confirm('Changes detected. Save them?')) {
+    if (changed && confirm(t('inspectionManager.confirmSaveChanges'))) {
       try {
         for (const locService of locationStore.locationServices) {
           for (const specialty of locService.specialties) {
@@ -240,10 +242,10 @@ const toggleServices = async () => {
             }
           }
         }
-        toast.success('Services saved');
+        toast.success(t('inspectionManager.toast.servicesSaved'));
         await checkAndTransitionToDefined();
       } catch (error) {
-        toast.error('Could not save services: ' + error.message);
+        toast.error(t('inspectionManager.toast.servicesSaveError', { message: error.message }));
       }
     }
   } else {
@@ -287,7 +289,7 @@ const loadSchedules = async () => {
       originalSchedules.value = JSON.parse(JSON.stringify(schedules.value));
     }
   } catch (error) {
-    toast.error('Could not load schedules: ' + error.message);
+    toast.error(t('inspectionManager.toast.schedulesLoadError', { message: error.message }));
   }
 };
 
@@ -307,7 +309,7 @@ const editSchedule = (index) => {
 };
 
 const deleteSchedule = (index) => {
-  if (confirm('Delete this schedule?')) {
+  if (confirm(t('inspectionManager.confirmDeleteSchedule'))) {
     schedules.value.splice(index, 1);
     schedulesChanged.value = true;
   }
@@ -359,10 +361,10 @@ const saveSchedules = async () => {
     }
     originalSchedules.value = JSON.parse(JSON.stringify(schedules.value));
     schedulesChanged.value = false;
-    toast.success('Schedules saved');
+    toast.success(t('inspectionManager.toast.schedulesSaved'));
     await checkAndTransitionToDefined();
   } catch (error) {
-    toast.error('Could not save schedules: ' + error.message);
+    toast.error(t('inspectionManager.toast.schedulesSaveError', { message: error.message }));
   }
 };
 
@@ -379,9 +381,9 @@ const saveInspection = async () => {
       inspectionData.value = { ...list[0] };
     }
     appState.value = 'viewing';
-    toast.success('Inspection saved');
+    toast.success(t('inspectionManager.toast.inspectionSaved'));
   } catch (error) {
-    toast.error('Could not save inspection: ' + error.message);
+    toast.error(t('inspectionManager.toast.inspectionSaveError', { message: error.message }));
   }
 };
 
@@ -417,9 +419,9 @@ const checkAndTransitionToDefined = async () => {
     try {
       await inspectionStore.updateInspectionStatus(inspectedProviderId, INSPECTION_STATUS.DEFINED);
       inspectionData.value.status = INSPECTION_STATUS.DEFINED;
-      toast.success('Inspection status updated to Defined');
+      toast.success(t('inspectionManager.toast.statusDefined'));
     } catch (error) {
-      toast.warning('Could not update status to Defined: ' + error.message);
+      toast.warning(t('inspectionManager.toast.statusDefinedError', { message: error.message }));
     }
   }
 };

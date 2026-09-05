@@ -39,6 +39,7 @@ const {
 } = require('../domain/statusRules.cjs');
 const { CAP_EVALUATION_CRITERIA } = require('../domain/capEvaluationCriteria.cjs');
 const { notifyRoleInbox } = require('../notifications/roleNotify.cjs');
+const { buildNotificationMessage } = require('../notifications/messages.cjs');
 
 const RCA_METHODS = ['5 Whys', 'Fishbone', 'BowTie', 'TapRooT', 'Barrier Analysis', 'Other'];
 const ACTION_PRIORITIES = ['High', 'Medium', 'Low'];
@@ -719,8 +720,10 @@ function createCapsRouter({ auth, alfrescoClient, capDraftRepository, notificati
           notificationService,
           envVar: 'INSPECTOR_NOTIFICATIONS_EMAIL',
           eventType: 'cap_submitted',
-          subject: `CAP submitted for review: ${finding.findingId}`,
-          body: `A corrective action plan (${result.cap?.capId || capId}) was submitted for finding ${finding.findingId} and is awaiting review.`,
+          ...buildNotificationMessage('cap_submitted', {
+            findingId: finding.findingId,
+            capId: result.cap?.capId || capId,
+          }),
           context: { findingId: finding.findingId, capId: result.cap?.capId || capId },
         });
 
@@ -932,8 +935,10 @@ function createCapsRouter({ auth, alfrescoClient, capDraftRepository, notificati
           notificationService,
           envVar: 'INSPECTOR_NOTIFICATIONS_EMAIL',
           eventType: 'cap_submitted',
-          subject: `CAP submitted for review: ${finding.findingId}`,
-          body: `A corrective action plan (${result.cap?.capId || capId}) was submitted for finding ${finding.findingId} and is awaiting review.`,
+          ...buildNotificationMessage('cap_submitted', {
+            findingId: finding.findingId,
+            capId: result.cap?.capId || capId,
+          }),
           context: { findingId: finding.findingId, capId: result.cap?.capId || capId },
         });
 
@@ -1248,9 +1253,8 @@ function createCapsRouter({ auth, alfrescoClient, capDraftRepository, notificati
           await notifyRoleInbox({
             notificationService,
             envVar: 'INSPECTOR_NOTIFICATIONS_EMAIL',
-            eventType: 'cap_submitted',
-            subject: `CAP resubmitted for review: ${req.params.capId}`,
-            body: `Corrective action plan ${req.params.capId} was resubmitted after revision and is awaiting review.`,
+            eventType: 'cap_resubmitted',
+            ...buildNotificationMessage('cap_resubmitted', { capId: req.params.capId }),
             context: { capId: req.params.capId },
           });
         }
@@ -1507,8 +1511,10 @@ function createCapsRouter({ auth, alfrescoClient, capDraftRepository, notificati
           notificationService,
           envVar: 'CAP_ENTRY_NOTIFICATIONS_EMAIL',
           eventType: 'cap_reviewed',
-          subject: `CAP ${acceptanceStatus.toLowerCase()}: ${req.params.capId}`,
-          body: `Corrective action plan ${req.params.capId} was ${acceptanceStatus.toLowerCase()} by a reviewer.`,
+          ...buildNotificationMessage('cap_reviewed', {
+            capId: req.params.capId,
+            acceptanceStatusLabel: acceptanceStatus.toLowerCase(),
+          }),
           context: { capId: req.params.capId, acceptanceStatus },
         });
 

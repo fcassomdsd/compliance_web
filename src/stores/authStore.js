@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia';
-import { authLogin, authLogout, authSession, authTicket } from '@/services/authServices';
+import { authLogin, authLogout, authSession, authTicket, authSetLocale } from '@/services/authServices';
 import { apiInspectorByAlfrescoUser, setAlfrescoTicket } from '@/services/apiServices';
 
 function extractStatusCode(error) {
@@ -18,6 +18,7 @@ export const useAuthStore = defineStore('auth', {
     inspectorProfile: null,
     session: null,
     csrfToken: null,
+    locale: null,
     error: null,
     lastCheckedAt: null,
   }),
@@ -48,6 +49,7 @@ export const useAuthStore = defineStore('auth', {
       this.groups = Array.isArray(payload?.groups) ? payload.groups : [];
       this.session = payload?.session || null;
       this.csrfToken = payload?.csrfToken || null;
+      this.locale = payload?.locale || null;
       this.error = null;
     },
 
@@ -59,7 +61,19 @@ export const useAuthStore = defineStore('auth', {
       this.inspectorProfile = null;
       this.session = null;
       this.csrfToken = null;
+      this.locale = null;
       setAlfrescoTicket(null);
+    },
+
+    async setLocale(locale) {
+      const previous = this.locale;
+      this.locale = locale;
+      try {
+        await authSetLocale(locale, this.csrfToken);
+      } catch (error) {
+        this.locale = previous;
+        throw new Error('setLocale: ' + error.message);
+      }
     },
 
     async refreshServiceTicket() {

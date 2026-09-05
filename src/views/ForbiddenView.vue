@@ -1,18 +1,20 @@
 <template>
   <section class="forbidden-view">
-    <h1>Access denied</h1>
-    <p>Your account does not have the required role for this page.</p>
+    <h1>{{ t('forbidden.title') }}</h1>
+    <p>{{ t('forbidden.message') }}</p>
     <div class="actions">
-      <RouterLink class="action-link" to="/site-visit">Go to Site Visit Manager</RouterLink>
-      <button type="button" @click="onLogout">Sign out</button>
+      <RouterLink class="action-link" to="/site-visit">{{ t('notFound.goHome') }}</RouterLink>
+      <button type="button" @click="onLogout">{{ t('forbidden.signOut') }}</button>
     </div>
   </section>
 </template>
 
 <script setup>
+import { useI18n } from 'vue-i18n';
 import { useRouter } from 'vue-router';
 import { useAuthStore } from '@/stores/authStore';
 
+const { t } = useI18n();
 const router = useRouter();
 const authStore = useAuthStore();
 

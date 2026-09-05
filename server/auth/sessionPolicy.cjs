@@ -62,6 +62,7 @@ function buildSessionResponse(session, config) {
     },
     roles: Array.isArray(session.roles) ? session.roles : [],
     groups,
+    locale: session.metadata?.locale || null,
     session: {
       issuedAt: toIso(session.createdAt),
       expiresAt: toIso(session.expiresAtIdle),

@@ -5,7 +5,7 @@ import vueParser from "vue-eslint-parser";
 
 export default [
   {
-    ignores: ["node_modules/", "dist/", ".git/", "coverage/", "*.lock.json", "package-lock.json", "package.json"]
+    ignores: ["node_modules/", "dist/", ".git/", "coverage/", "*.lock.json", "package-lock.json", "package.json", "src/i18n/locales/*.json"]
   },
   {
     files: ["src/**/*.js"],

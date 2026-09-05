@@ -132,7 +132,9 @@ Notification settings (see `NOTIFICATIONS_SQL.sql` for the schema):
 - `CAP_ENTRY_NOTIFICATIONS_EMAIL` — fixed distribution list for events the CAP submitter side needs to know about: CAP reviewed, deadline extension reviewed, finding closed
 - `PLANNER_NOTIFICATIONS_EMAIL` — fixed distribution list for auto-scheduled site visits (see below)
 
-All notification env vars are optional — each notification type is skipped (not queued) if its target env var isn't set, rather than failing.
+All notification env vars above are optional — each notification type is skipped (not queued) if its target env var isn't set, rather than failing.
+
+- `NOTIFICATION_LOCALE` (default `es`) — language (`en`/`es`) for the subject/body of internal role-inbox notifications. Unlike the vars above, this one always has an effective value and never causes a notification to be skipped — recipients are fixed shared inboxes rather than individual sessions, so there's no per-recipient locale to resolve; the whole deployment picks one language for these emails.
 
 Site visit scheduling job settings:
 

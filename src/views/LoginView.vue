@@ -1,22 +1,22 @@
 <template>
   <section class="login-view">
-    <img :src="logo" alt="Compliance Logo" class="login-logo" />
-    <h1>Operational Safety Compliance System</h1>
+    <img :src="logo" :alt="t('app.title')" class="login-logo" />
+    <h1>{{ t('app.title') }}</h1>
     <p>{{ message }}</p>
 
     <form class="login-form" @submit.prevent="onSubmit">
       <label>
-        Username
+        {{ t('login.username') }}
         <input v-model="username" type="text" autocomplete="username" required />
       </label>
 
       <label>
-        Password
+        {{ t('login.password') }}
         <input v-model="password" type="password" autocomplete="current-password" required />
       </label>
 
       <button type="submit" :disabled="authStore.loading">
-        {{ authStore.loading ? 'Signing in...' : 'Sign in' }}
+        {{ authStore.loading ? t('login.signingIn') : t('login.signIn') }}
       </button>
     </form>
 
@@ -26,10 +26,12 @@
 
 <script setup>
 import { computed, ref } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { useRoute, useRouter } from 'vue-router';
 import { useAuthStore } from '@/stores/authStore';
 import logo from '@/assets/images/logos/compliance-logo.png';
 
+const { t } = useI18n();
 const route = useRoute();
 const router = useRouter();
 const authStore = useAuthStore();
@@ -39,9 +41,9 @@ const password = ref('');
 
 const message = computed(() => {
   if (route.query.reason === 'expired') {
-    return 'Your session expired. Please sign in again.';
+    return t('login.sessionExpired');
   }
-  return 'You must sign in to access this page.';
+  return t('login.mustSignIn');
 });
 
 async function onSubmit() {

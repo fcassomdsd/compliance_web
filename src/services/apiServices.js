@@ -1,4 +1,5 @@
 import { default as axios } from 'axios';
+import i18n from '../i18n/index.js';
 
 const apiServer = 'http://localhost:1880';
 const complianceApiServer = import.meta.env.VITE_COMPLIANCE_API_BASE_URL || '/api';
@@ -234,7 +235,7 @@ export async function apiInspectionPlan(inspectionCode, inspectedProviderId = nu
     if (!inspectionCode || typeof inspectionCode !== 'string' || inspectionCode.trim().length === 0) {
       throw new Error('inspectionCode is required');
     }
-    let url = `${apiServer}/inspectionPlan?siteVisit=${encodeURIComponent(inspectionCode.trim())}`;
+    let url = `${apiServer}/inspectionPlan?siteVisit=${encodeURIComponent(inspectionCode.trim())}&locale=${encodeURIComponent(i18n.global.locale.value)}`;
     if (inspectedProviderId) {
       url += `&provider=${encodeURIComponent(inspectedProviderId)}`;
     }
@@ -262,7 +263,7 @@ export async function apiInspectionReport(inspectionCode, reportDate, servicePro
     }
     const result = await axios({
       method: 'get',
-      url: `${apiServer}/inspectionReport?siteVisit=${encodeURIComponent(inspectionCode.trim())}&reportDate=${encodeURIComponent(reportDate.trim())}&provider=${encodeURIComponent(serviceProviderId.trim())}`,
+      url: `${apiServer}/inspectionReport?siteVisit=${encodeURIComponent(inspectionCode.trim())}&reportDate=${encodeURIComponent(reportDate.trim())}&provider=${encodeURIComponent(serviceProviderId.trim())}&locale=${encodeURIComponent(i18n.global.locale.value)}`,
       headers: buildNodeRedHeaders(),
     });
     return { data: result.data, status: result.status };
