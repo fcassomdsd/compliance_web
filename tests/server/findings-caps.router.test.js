@@ -1134,12 +1134,12 @@ describe('Findings and CAP API', () => {
     };
 
     const response = await request(app)
-      .post('/api/findings/MDPP001-AYVIS-01/follow-ups')
+      .post('/api/findings/H-MDPPA0001-AVIS-001/follow-ups')
       .set('Cookie', 'compliance_session_id=session-1')
       .set('x-csrf-token', 'csrf-token-1')
       .send({
         followUpType: 'Progress Review',
-        inheritedCapId: 'CA-MDPP001AYVIS-01-01',
+        inheritedCapId: 'P-MDPPA0001-AVIS001-01',
         percentComplete: 10,
       });
 
@@ -1160,7 +1160,7 @@ describe('Findings and CAP API', () => {
     };
 
     const response = await request(app)
-      .post('/api/findings/MDPP001-AYVIS-01/follow-ups')
+      .post('/api/findings/H-MDPPA0001-AVIS-001/follow-ups')
       .set('Cookie', 'compliance_session_id=session-1')
       .set('x-csrf-token', 'csrf-token-1')
       .send({
