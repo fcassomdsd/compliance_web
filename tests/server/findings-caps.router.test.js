@@ -1674,15 +1674,21 @@ describe('Findings and CAP API', () => {
 describe('Findings and CAP API notifications', () => {
   const originalInspectorEmail = process.env.INSPECTOR_NOTIFICATIONS_EMAIL;
   const originalCapEntryEmail = process.env.CAP_ENTRY_NOTIFICATIONS_EMAIL;
+  const originalNotificationLocale = process.env.NOTIFICATION_LOCALE;
 
   beforeEach(() => {
     process.env.INSPECTOR_NOTIFICATIONS_EMAIL = 'inspectors@example.com';
     process.env.CAP_ENTRY_NOTIFICATIONS_EMAIL = 'cap-entry@example.com';
+    // These assertions check that the right event fires the right notification,
+    // not which locale is configured by default — pin it so the test stays
+    // correct regardless of NOTIFICATION_LOCALE's production default.
+    process.env.NOTIFICATION_LOCALE = 'en';
   });
 
   afterEach(() => {
     process.env.INSPECTOR_NOTIFICATIONS_EMAIL = originalInspectorEmail;
     process.env.CAP_ENTRY_NOTIFICATIONS_EMAIL = originalCapEntryEmail;
+    process.env.NOTIFICATION_LOCALE = originalNotificationLocale;
   });
 
   it('notifies inspectors when a follow-up is submitted (evidence review pending)', async () => {

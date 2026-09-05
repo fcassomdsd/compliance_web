@@ -117,7 +117,7 @@ const MESSAGES = {
 };
 
 function getNotificationLocale() {
-  const configured = String(process.env.NOTIFICATION_LOCALE || 'en').trim().toLowerCase();
+  const configured = String(process.env.NOTIFICATION_LOCALE || 'es').trim().toLowerCase();
   return configured === 'es' ? 'es' : 'en';
 }
 
