@@ -5,6 +5,7 @@ import {
   apiSubmitCap,
   apiUpdateCap,
   apiReviewCap,
+  apiSaveCapEvaluation,
   apiUpdateCapActionItem,
   apiUploadCapEvidence,
   apiDeleteCapEvidence,
@@ -154,6 +155,20 @@ export const useCapStore = defineStore('cap', {
       this.error = null;
       try {
         const { data } = await apiReviewCap(capId, acceptanceStatus, csrfToken, reason);
+        return data;
+      } catch (error) {
+        this.error = error.message;
+        throw error;
+      } finally {
+        this.loading = false;
+      }
+    },
+
+    async saveCapEvaluation({ capId, criteria, csrfToken }) {
+      this.loading = true;
+      this.error = null;
+      try {
+        const { data } = await apiSaveCapEvaluation(capId, criteria, csrfToken);
         return data;
       } catch (error) {
         this.error = error.message;

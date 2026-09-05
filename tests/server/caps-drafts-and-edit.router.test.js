@@ -6,6 +6,17 @@ const require = createRequire(import.meta.url);
 const { createApp } = require('../../server/app.cjs');
 const { InMemorySessionRepository } = require('../setup/mocks/InMemorySessionRepository.cjs');
 const { InMemoryCapDraftRepository } = require('../setup/mocks/InMemoryCapDraftRepository.cjs');
+const { CAP_EVALUATION_CRITERIA } = require('../../server/domain/capEvaluationCriteria.cjs');
+
+// The fixture CAP has no containment measures section, so a "complete"
+// evaluation for it excludes CONTAINMENT criteria — same skip rule the
+// review gate itself applies.
+function buildCompleteCapEvaluationCriteria() {
+  return CAP_EVALUATION_CRITERIA.filter((entry) => entry.kind === 'binary' && entry.section !== 'CONTAINMENT').map((entry) => ({
+    code: entry.code,
+    response: 'Sí',
+  }));
+}
 
 function buildFixture() {
   const inspectionNode = {
@@ -592,6 +603,12 @@ describe('PATCH /api/caps/:capId/review preconditions', () => {
     const { app, fixture } = await buildApp({ roles: ['inspector'] });
     fixture.capNode.properties['vso:acceptanceStatus'] = 'Pending review';
 
+    await request(app)
+      .put(`/api/caps/${fixture.capNode.properties['vso:capId']}/evaluation`)
+      .set('Cookie', 'compliance_session_id=session-1')
+      .set('x-csrf-token', 'csrf-token-1')
+      .send({ criteria: buildCompleteCapEvaluationCriteria() });
+
     const response = await request(app)
       .patch(`/api/caps/${fixture.capNode.properties['vso:capId']}/review`)
       .set('Cookie', 'compliance_session_id=session-1')
@@ -621,6 +638,12 @@ describe('PATCH /api/caps/:capId/review preconditions', () => {
   it('marks a CAP Not Accepted and records the reason', async () => {
     const { app, fixture } = await buildApp({ roles: ['inspector'] });
     fixture.capNode.properties['vso:acceptanceStatus'] = 'Pending review';
+
+    await request(app)
+      .put(`/api/caps/${fixture.capNode.properties['vso:capId']}/evaluation`)
+      .set('Cookie', 'compliance_session_id=session-1')
+      .set('x-csrf-token', 'csrf-token-1')
+      .send({ criteria: buildCompleteCapEvaluationCriteria() });
 
     const response = await request(app)
       .patch(`/api/caps/${fixture.capNode.properties['vso:capId']}/review`)

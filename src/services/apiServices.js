@@ -469,6 +469,28 @@ export async function apiReviewCap(capId, acceptanceStatus, csrfToken, reason) {
   }
 }
 
+export async function apiSaveCapEvaluation(capId, criteria, csrfToken) {
+  try {
+    if (!capId || typeof capId !== 'string') {
+      throw new Error('capId is required');
+    }
+
+    const result = await axios({
+      method: 'put',
+      url: `${complianceApiServer}/caps/${encodeURIComponent(capId)}/evaluation`,
+      data: { criteria },
+      headers: buildCsrfHeader(csrfToken),
+      withCredentials: true,
+    });
+    return { data: result.data, status: result.status };
+  } catch (error) {
+    const backendMessage = error?.response?.data?.message || error?.response?.data?.error;
+    const status = error?.response?.status;
+    const detail = backendMessage || error.message;
+    throw new Error(`apiSaveCapEvaluation: ${status ? `[${status}] ` : ''}${detail}`);
+  }
+}
+
 export async function apiUpdateCap(capId, payload, csrfToken) {
   try {
     if (!capId || typeof capId !== 'string') {

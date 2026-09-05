@@ -9,6 +9,8 @@ const {
   mapFollowUpReportNode,
   mapEvidenceItemNode,
   mapCorrectiveActionItemNode,
+  mapCapEvaluationNode,
+  getCurrentCapEvaluation,
   getCapChildSections,
   listEvidenceForSection,
   resolveFindingIdForCap,
@@ -31,7 +33,11 @@ const {
   isValidCapReviewDecision,
   isCapEditable,
   isFindingReviewConfirmed,
+  CAP_CRITERION_RESPONSE,
+  isValidCriterionResponse,
+  getMissingCapEvaluationCriteria,
 } = require('../domain/statusRules.cjs');
+const { CAP_EVALUATION_CRITERIA } = require('../domain/capEvaluationCriteria.cjs');
 const { notifyRoleInbox } = require('../notifications/roleNotify.cjs');
 
 const RCA_METHODS = ['5 Whys', 'Fishbone', 'BowTie', 'TapRooT', 'Barrier Analysis', 'Other'];
@@ -1270,6 +1276,134 @@ function createCapsRouter({ auth, alfrescoClient, capDraftRepository, notificati
     }
   );
 
+  router.put(
+    '/caps/:capId/evaluation',
+    auth.authenticate,
+    auth.authorize(['inspector', 'admin']),
+    auth.requireCsrf(),
+    async (req, res) => {
+      try {
+        const criteria = Array.isArray(req.body?.criteria) ? req.body.criteria : null;
+        if (!criteria) {
+          return res.status(400).json(buildError('CAP_EVALUATION_BAD_REQUEST', 'criteria must be an array'));
+        }
+
+        const catalogByCode = new Map(CAP_EVALUATION_CRITERIA.map((entry) => [entry.code, entry]));
+        for (const row of criteria) {
+          const entry = catalogByCode.get(row?.code);
+          if (!entry) {
+            return res.status(400).json(buildError('CAP_EVALUATION_BAD_CRITERION', `Unknown criterion code: ${row?.code}`));
+          }
+          if (entry.kind === 'binary' && row.response && !isValidCriterionResponse(row.response)) {
+            return res
+              .status(400)
+              .json(buildError('CAP_EVALUATION_BAD_RESPONSE', `${row.code} response must be one of: ${Object.values(CAP_CRITERION_RESPONSE).join(', ')}`));
+          }
+        }
+
+        const capNode = await alfrescoClient.searchCapByBusinessId({
+          ticket: req.auth.ticket,
+          capId: req.params.capId,
+        });
+        if (!capNode) {
+          return res.status(404).json(buildError('CAP_NOT_FOUND', 'Corrective action not found'));
+        }
+
+        const currentStatus = capNode?.properties?.['vso:acceptanceStatus'];
+        if (currentStatus !== CAP_ACCEPTANCE_STATUS.PENDING_REVIEW) {
+          return res.status(409).json(buildError('CAP_NOT_REVIEWABLE', 'Only CAPs in Pending review status can be evaluated'));
+        }
+
+        const existingEvaluation = await getCurrentCapEvaluation({
+          alfrescoClient,
+          ticket: req.auth.ticket,
+          capNodeId: capNode.id,
+        });
+
+        // An evaluation that already resulted in a decision is closed and
+        // historical — a new review cycle (after reject -> resubmit) always
+        // starts a fresh vso:capEvaluation node rather than reopening it.
+        const reuseExisting = Boolean(existingEvaluation && !existingEvaluation.decisionOutcome);
+        const evaluationDate = nowIsoDate(now());
+        let evaluationNodeId;
+
+        if (reuseExisting) {
+          evaluationNodeId = existingEvaluation.nodeId;
+          await alfrescoClient.updateNodeProperties({
+            ticket: req.auth.ticket,
+            nodeId: evaluationNodeId,
+            properties: {
+              'vso:evaluatedBy': req.auth.username,
+              'vso:evaluationDate': evaluationDate,
+            },
+          });
+
+          const existingCriterionNodes = await alfrescoClient.listChildrenByType({
+            ticket: req.auth.ticket,
+            parentNodeId: evaluationNodeId,
+            nodeType: 'vso:capEvaluationCriterion',
+          });
+          await Promise.all(
+            existingCriterionNodes.map((node) => alfrescoClient.deleteNode({ ticket: req.auth.ticket, nodeId: node.id }))
+          );
+        } else {
+          const createdEvaluation = await alfrescoClient.createChildNode({
+            ticket: req.auth.ticket,
+            parentNodeId: capNode.id,
+            nodeType: 'vso:capEvaluation',
+            name: `${req.params.capId}-EVAL-${evaluationDate}-${Date.now()}`,
+            associationType: 'vso:hasEvaluation',
+            properties: {
+              'vso:evaluatedBy': req.auth.username,
+              'vso:evaluationDate': evaluationDate,
+              'vso:specialtyCode': capNode.properties?.['vso:specialtyCode'],
+              'vso:specialtyId': capNode.properties?.['vso:specialtyId'],
+              'vso:specialtyName': capNode.properties?.['vso:specialtyName'],
+              'vso:providerId': capNode.properties?.['vso:providerId'],
+              'vso:providerName': capNode.properties?.['vso:providerName'],
+            },
+          });
+          evaluationNodeId = createdEvaluation.id;
+        }
+
+        await Promise.all(
+          criteria.map((row) => {
+            const entry = catalogByCode.get(row.code);
+            return alfrescoClient.createChildNode({
+              ticket: req.auth.ticket,
+              parentNodeId: evaluationNodeId,
+              nodeType: 'vso:capEvaluationCriterion',
+              name: `${req.params.capId}-EVAL-${entry.code}`,
+              associationType: 'vso:hasCriterion',
+              properties: {
+                'vso:criterionCode': entry.code,
+                'vso:criterionSection': entry.section,
+                'vso:criterionLabel': entry.label,
+                ...(row.response ? { 'vso:criterionResponse': row.response } : {}),
+                ...(row.observations ? { 'vso:criterionObservations': row.observations } : {}),
+              },
+            });
+          })
+        );
+
+        const criterionNodes = await alfrescoClient.listChildrenByType({
+          ticket: req.auth.ticket,
+          parentNodeId: evaluationNodeId,
+          nodeType: 'vso:capEvaluationCriterion',
+        });
+
+        return res.status(200).json({
+          evaluation: mapCapEvaluationNode(
+            { id: evaluationNodeId, properties: { 'vso:evaluatedBy': req.auth.username, 'vso:evaluationDate': evaluationDate } },
+            criterionNodes
+          ),
+        });
+      } catch (error) {
+        return res.status(502).json(buildError('CAP_EVALUATION_SAVE_FAILED', error.message));
+      }
+    }
+  );
+
   router.patch(
     '/caps/:capId/review',
     auth.authenticate,
@@ -1300,6 +1434,28 @@ function createCapsRouter({ auth, alfrescoClient, capDraftRepository, notificati
           return res.status(409).json(buildError('CAP_NOT_REVIEWABLE', 'Only CAPs in Pending review status can be reviewed'));
         }
 
+        const containmentNodes = await alfrescoClient.listChildrenByType({
+          ticket: req.auth.ticket,
+          parentNodeId: capNode.id,
+          nodeType: 'vso:containmentMeasures',
+        });
+        const currentEvaluation = await getCurrentCapEvaluation({
+          alfrescoClient,
+          ticket: req.auth.ticket,
+          capNodeId: capNode.id,
+        });
+        const missingCriteria = getMissingCapEvaluationCriteria(
+          CAP_EVALUATION_CRITERIA,
+          currentEvaluation?.criteria || [],
+          { hasContainment: containmentNodes.length > 0 }
+        );
+        if (missingCriteria.length > 0) {
+          return res.status(409).json({
+            ...buildError('CAP_EVALUATION_INCOMPLETE', 'The manual PAC evaluation must be completed before a decision can be applied'),
+            missingCriteria,
+          });
+        }
+
         const updatedCap = await alfrescoClient.updateNodeProperties({
           ticket: req.auth.ticket,
           nodeId: capNode.id,
@@ -1310,6 +1466,20 @@ function createCapsRouter({ auth, alfrescoClient, capDraftRepository, notificati
             ...(reason ? { 'vso:capReviewReason': reason } : {}),
           },
         });
+
+        // Closes this evaluation pass: once stamped with an outcome, it's
+        // historical, and the next "Save evaluation" call (only reachable
+        // after a Not Accepted CAP is resubmitted) starts a new one.
+        if (currentEvaluation?.nodeId) {
+          await alfrescoClient.updateNodeProperties({
+            ticket: req.auth.ticket,
+            nodeId: currentEvaluation.nodeId,
+            properties: {
+              'vso:evaluationDecisionOutcome': acceptanceStatus,
+              ...(reason ? { 'vso:evaluationDecisionReason': reason } : {}),
+            },
+          });
+        }
 
         const capDetails = await alfrescoClient.getNodeById({
           ticket: req.auth.ticket,

@@ -228,11 +228,55 @@
 
       <div v-if="reviewMode" class="sub-section review-section">
         <h4>Review this PAC</h4>
+        <h5 class="evaluation-heading">Automated completeness checks (reference only)</h5>
         <ul class="checklist">
           <li v-for="check in reviewChecklist" :key="check.label" :class="check.met ? 'checklist-met' : 'checklist-unmet'">
             <span class="checklist-icon">{{ check.met ? '✓' : '✗' }}</span> {{ check.label }}
           </li>
         </ul>
+
+        <div class="manual-evaluation">
+          <h5 class="evaluation-heading">Evaluación manual del PAC (IDAC-PAC-EVAL-01)</h5>
+          <div v-for="section in evaluationSections" :key="section.code" class="section-card">
+            <h6 class="section-title">{{ section.title }}</h6>
+            <div v-for="criterion in section.criteria" :key="criterion.code" class="evaluation-row">
+              <template v-if="criterion.kind === 'binary'">
+                <span class="evaluation-label">{{ criterion.label }}</span>
+                <div class="evaluation-response-group" role="radiogroup" :aria-label="criterion.label">
+                  <label v-for="option in criterionResponseOptions" :key="option">
+                    <input
+                      type="radio"
+                      :name="`criterion-${criterion.code}`"
+                      :value="option"
+                      v-model="evaluationAnswers[criterion.code].response"
+                    />
+                    {{ option }}
+                  </label>
+                </div>
+                <input
+                  type="text"
+                  class="evaluation-observations"
+                  placeholder="Observaciones"
+                  :aria-label="`${criterion.label} observations`"
+                  v-model="evaluationAnswers[criterion.code].observations"
+                />
+              </template>
+              <template v-else>
+                <label :for="`criterion-${criterion.code}`" class="evaluation-conclusion-label">{{ criterion.label }}</label>
+                <textarea
+                  :id="`criterion-${criterion.code}`"
+                  class="evaluation-conclusion"
+                  rows="2"
+                  v-model="evaluationAnswers[criterion.code].observations"
+                />
+              </template>
+            </div>
+          </div>
+          <p v-if="missingEvaluationCriteria.length" class="helper-text">
+            {{ missingEvaluationCriteria.length }} criterio(s) pendiente(s) de evaluación.
+          </p>
+        </div>
+
         <div class="form-grid">
           <div class="form-field">
             <label for="reviewDecision">Decision</label>
@@ -249,7 +293,13 @@
         <p v-if="reviewValidationError" class="error-message">{{ reviewValidationError }}</p>
         <div class="form-actions">
           <BaseButton variant="ghost" @click="cancelReview">Cancel</BaseButton>
-          <BaseButton variant="primary" :disabled="capStore.loading" @click="confirmReview">Confirm Review</BaseButton>
+          <BaseButton
+            variant="primary"
+            :disabled="capStore.loading || missingEvaluationCriteria.length > 0"
+            @click="confirmReview"
+          >
+            Confirm Review
+          </BaseButton>
         </div>
       </div>
     </section>
@@ -512,6 +562,7 @@ import { useAuthStore } from '@/stores/authStore';
 import { formatDate } from '@/utils/formatDate';
 import { apiCapEvidenceContentUrl } from '@/services/apiServices';
 import { EVIDENCE_FILE_ACCEPT, validateEvidenceFile } from '@/utils/evidenceFile';
+import { CAP_EVALUATION_CRITERIA, CAP_EVALUATION_SECTIONS, getMissingCapEvaluationCriteria } from '@/utils/capEvaluationCriteria';
 
 const route = useRoute();
 const capStore = useCapStore();
@@ -681,6 +732,79 @@ const reviewMode = ref(false);
 const reviewDecision = ref('Accepted');
 const reviewReason = ref('');
 const reviewValidationError = ref('');
+
+const criterionResponseOptions = ['Sí', 'No', 'No aplica'];
+const evaluationAnswers = reactive({});
+
+function resetEvaluationAnswers() {
+  for (const key of Object.keys(evaluationAnswers)) {
+    delete evaluationAnswers[key];
+  }
+  for (const entry of CAP_EVALUATION_CRITERIA) {
+    evaluationAnswers[entry.code] = { response: '', observations: '' };
+  }
+}
+
+function loadEvaluationAnswers(criteria = []) {
+  resetEvaluationAnswers();
+  for (const row of criteria) {
+    if (evaluationAnswers[row.criterionCode]) {
+      evaluationAnswers[row.criterionCode] = {
+        response: row.criterionResponse || '',
+        observations: row.criterionObservations || '',
+      };
+    }
+  }
+}
+
+// Populated eagerly (not just inside startReview) so the review panel never
+// renders with undefined entries during the async window between
+// reviewMode turning true and fetchCapDetail/loadEvaluationAnswers
+// resolving.
+resetEvaluationAnswers();
+
+// Containment measures don't apply to every finding — same "not every CAP
+// has this section" rule already applied to the automatic checklist above
+// and to validateContainmentMeasures on the server, so its 3 criteria +
+// conclusion are hidden and excluded from the completeness gate when the
+// CAP has no containment measures.
+const hasContainmentSection = computed(() => Boolean(capStore.selectedCap?.containmentMeasures));
+
+const evaluationSections = computed(() =>
+  CAP_EVALUATION_SECTIONS.filter((section) => section.code !== 'CONTAINMENT' || hasContainmentSection.value).map((section) => ({
+    ...section,
+    criteria: CAP_EVALUATION_CRITERIA.filter((entry) => entry.section === section.code),
+  }))
+);
+
+const missingEvaluationCriteria = computed(() => {
+  const savedShape = Object.entries(evaluationAnswers).map(([code, value]) => ({
+    criterionCode: code,
+    criterionResponse: value.response,
+  }));
+  return getMissingCapEvaluationCriteria(savedShape, { hasContainment: hasContainmentSection.value });
+});
+
+// Persists the manual evaluation. Only ever called from confirmReview,
+// immediately before applying the decision — there is no standalone "Save"
+// action, so an evaluation is never persisted without a decision following
+// it (avoids leaving a saved-but-undecided evaluation behind if the
+// reviewer then hits Cancel). Errors intentionally propagate: confirmReview
+// must not proceed to reviewCap if the save failed.
+async function saveEvaluation() {
+  const capId = capStore.selectedCap?.capId;
+  if (!capId) {
+    return;
+  }
+  const criteria = CAP_EVALUATION_CRITERIA.filter((entry) => entry.section !== 'CONTAINMENT' || hasContainmentSection.value).map(
+    (entry) => ({
+      code: entry.code,
+      response: evaluationAnswers[entry.code]?.response || '',
+      observations: evaluationAnswers[entry.code]?.observations || '',
+    })
+  );
+  await capStore.saveCapEvaluation({ capId, criteria, csrfToken: authStore.csrfToken });
+}
 
 const reviewChecklist = computed(() => {
   const cap = capStore.selectedCap;
@@ -1054,6 +1178,7 @@ async function startReview(capId) {
   reviewValidationError.value = '';
   reviewMode.value = true;
   await capStore.fetchCapDetail(capId);
+  loadEvaluationAnswers(capStore.selectedCap?.currentEvaluation?.criteria || []);
 }
 
 function cancelReview() {
@@ -1067,11 +1192,20 @@ async function confirmReview() {
   if (!capId) {
     return;
   }
+  if (missingEvaluationCriteria.value.length > 0) {
+    reviewValidationError.value = `Complete the manual PAC evaluation before applying a decision (${missingEvaluationCriteria.value.length} item(s) pending).`;
+    return;
+  }
   if (reviewDecision.value === 'Not Accepted' && !reviewReason.value.trim()) {
     reviewValidationError.value = 'A reason is required when a CAP is marked Not Accepted.';
     return;
   }
   try {
+    // Persist whatever's currently in the manual evaluation form before
+    // applying the decision — the server independently re-validates
+    // completeness (409 CAP_EVALUATION_INCOMPLETE) as the authoritative
+    // backstop, but saving here keeps the two in sync for the common path.
+    await saveEvaluation();
     await capStore.reviewCap({
       capId,
       acceptanceStatus: reviewDecision.value,
@@ -1257,6 +1391,82 @@ onMounted(async () => {
 
 .checklist-unmet {
   color: var(--color-error-700);
+}
+
+.evaluation-heading {
+  margin: 0 0 var(--space-2);
+  color: var(--color-primary-700);
+}
+
+.manual-evaluation {
+  margin-top: var(--space-4);
+}
+
+.evaluation-row {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 1.4fr) minmax(0, 1.4fr);
+  gap: var(--space-3);
+  align-items: center;
+  padding: var(--space-2) 0;
+  border-top: 1px dashed var(--border-color);
+}
+
+.evaluation-row:first-of-type {
+  border-top: none;
+}
+
+.evaluation-label,
+.evaluation-conclusion-label {
+  font-size: var(--text-sm);
+  color: var(--color-gray-900);
+}
+
+.evaluation-conclusion-label {
+  font-weight: 600;
+  color: var(--color-primary-700);
+}
+
+.evaluation-conclusion {
+  grid-column: 1 / -1;
+  width: 100%;
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  font-family: inherit;
+  font-size: var(--text-base);
+  resize: vertical;
+  box-sizing: border-box;
+}
+
+.evaluation-response-group {
+  display: flex;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+  font-size: var(--text-sm);
+}
+
+.evaluation-response-group label {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  font-weight: 400;
+}
+
+.evaluation-observations {
+  width: 100%;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  font-family: inherit;
+  font-size: var(--text-sm);
+  box-sizing: border-box;
+}
+
+@media (max-width: 768px) {
+  .evaluation-row {
+    grid-template-columns: 1fr;
+    gap: var(--space-2);
+  }
 }
 
 .evidence-upload {

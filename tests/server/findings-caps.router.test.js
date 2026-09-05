@@ -7,6 +7,17 @@ const { createApp } = require('../../server/app.cjs');
 const { InMemorySessionRepository } = require('../setup/mocks/InMemorySessionRepository.cjs');
 const { InMemoryNotificationRepository } = require('../setup/mocks/InMemoryNotificationRepository.cjs');
 const { createNotificationService } = require('../../server/notifications/notificationService.cjs');
+const { CAP_EVALUATION_CRITERIA } = require('../../server/domain/capEvaluationCriteria.cjs');
+
+// The fixture CAP has no containment measures section, so a "complete"
+// evaluation for it excludes CONTAINMENT criteria — same skip rule the
+// review gate itself applies (see getMissingCapEvaluationCriteria).
+function buildCompleteCapEvaluationCriteria() {
+  return CAP_EVALUATION_CRITERIA.filter((entry) => entry.kind === 'binary' && entry.section !== 'CONTAINMENT').map((entry) => ({
+    code: entry.code,
+    response: 'Sí',
+  }));
+}
 
 function buildTestNotificationService() {
   const repository = new InMemoryNotificationRepository();
@@ -992,6 +1003,12 @@ describe('Findings and CAP API', () => {
   it('allows inspector review and updates CAP acceptance status', async () => {
     const { app } = await buildApp({ roles: ['inspector'] });
 
+    await request(app)
+      .put('/api/caps/P-MDPPA0001-AVIS001-01/evaluation')
+      .set('Cookie', 'compliance_session_id=session-1')
+      .set('x-csrf-token', 'csrf-token-1')
+      .send({ criteria: buildCompleteCapEvaluationCriteria() });
+
     const response = await request(app)
       .patch('/api/caps/P-MDPPA0001-AVIS001-01/review')
       .set('Cookie', 'compliance_session_id=session-1')
@@ -1004,12 +1021,67 @@ describe('Findings and CAP API', () => {
     expect(response.body.cap.acceptanceStatus).toBe('Accepted');
   });
 
+  it('rejects a review decision while the manual PAC evaluation is incomplete', async () => {
+    const { app } = await buildApp({ roles: ['inspector'] });
+
+    const response = await request(app)
+      .patch('/api/caps/P-MDPPA0001-AVIS001-01/review')
+      .set('Cookie', 'compliance_session_id=session-1')
+      .set('x-csrf-token', 'csrf-token-1')
+      .send({ acceptanceStatus: 'Accepted' });
+
+    expect(response.status).toBe(409);
+    expect(response.body.code).toBe('CAP_EVALUATION_INCOMPLETE');
+    expect(response.body.missingCriteria.length).toBeGreaterThan(0);
+  });
+
+  it('saves a partial manual PAC evaluation and lets a reviewer resume it', async () => {
+    const { app } = await buildApp({ roles: ['inspector'] });
+
+    const saveResponse = await request(app)
+      .put('/api/caps/P-MDPPA0001-AVIS001-01/evaluation')
+      .set('Cookie', 'compliance_session_id=session-1')
+      .set('x-csrf-token', 'csrf-token-1')
+      .send({ criteria: [{ code: 'ADMIN.WITHIN_DEADLINE', response: 'Sí', observations: 'On time' }] });
+
+    expect(saveResponse.status).toBe(200);
+    expect(saveResponse.body.evaluation.criteria).toHaveLength(1);
+    expect(saveResponse.body.evaluation.criteria[0].criterionResponse).toBe('Sí');
+
+    const detailResponse = await request(app)
+      .get('/api/caps/P-MDPPA0001-AVIS001-01')
+      .set('Cookie', 'compliance_session_id=session-1');
+
+    expect(detailResponse.status).toBe(200);
+    expect(detailResponse.body.currentEvaluation.criteria).toHaveLength(1);
+    expect(detailResponse.body.currentEvaluation.evaluatedBy).toBe('tester');
+  });
+
+  it('rejects an unknown criterion code on evaluation save', async () => {
+    const { app } = await buildApp({ roles: ['inspector'] });
+
+    const response = await request(app)
+      .put('/api/caps/P-MDPPA0001-AVIS001-01/evaluation')
+      .set('Cookie', 'compliance_session_id=session-1')
+      .set('x-csrf-token', 'csrf-token-1')
+      .send({ criteria: [{ code: 'NOT.A.REAL.CODE', response: 'Sí' }] });
+
+    expect(response.status).toBe(400);
+    expect(response.body.code).toBe('CAP_EVALUATION_BAD_CRITERION');
+  });
+
   it('notifies the cap_entry inbox when a CAP is reviewed', async () => {
     const originalEmail = process.env.CAP_ENTRY_NOTIFICATIONS_EMAIL;
     process.env.CAP_ENTRY_NOTIFICATIONS_EMAIL = 'cap-entry@example.com';
     try {
       const { service, sent } = buildTestNotificationService();
       const { app } = await buildApp({ roles: ['inspector'], notificationService: service });
+
+      await request(app)
+        .put('/api/caps/P-MDPPA0001-AVIS001-01/evaluation')
+        .set('Cookie', 'compliance_session_id=session-1')
+        .set('x-csrf-token', 'csrf-token-1')
+        .send({ criteria: buildCompleteCapEvaluationCriteria() });
 
       const response = await request(app)
         .patch('/api/caps/P-MDPPA0001-AVIS001-01/review')
