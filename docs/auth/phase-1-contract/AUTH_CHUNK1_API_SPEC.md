@@ -53,6 +53,7 @@ Success: 200
     "email": "string (optional)"
   },
   "roles": ["inspector", "planner"],
+  "locale": "en",
   "session": {
     "issuedAt": "2026-03-31T12:00:00Z",
     "expiresAt": "2026-03-31T12:30:00Z",
@@ -86,6 +87,7 @@ Success: 200
     "email": "string (optional)"
   },
   "roles": ["inspector"],
+  "locale": "en",
   "session": {
     "issuedAt": "2026-03-31T12:00:00Z",
     "expiresAt": "2026-03-31T12:40:00Z",
@@ -123,6 +125,39 @@ Behavior notes:
 3. Provider ticket revocation is async best effort.
 4. Session is revoked server-side immediately even if provider ticket revocation fails.
 
+### 4.4 POST /api/auth/locale
+
+Purpose: Persist the caller's UI locale preference (`en` or `es`) for the current session.
+
+Request body:
+
+```json
+{
+  "locale": "en"
+}
+```
+
+Success: 200
+
+```json
+{
+  "ok": true,
+  "locale": "en"
+}
+```
+
+Failure:
+
+1. 401 AUTH_SESSION_EXPIRED (no active session, or session expired)
+2. 403 AUTH_FORBIDDEN (CSRF token missing or mismatched)
+3. 400 AUTH_BAD_REQUEST (`locale` is anything other than `"en"` or `"es"`)
+
+Behavior notes:
+
+1. CSRF token is validated **before** the preference is persisted, matching the `/logout` pattern in §4.3.
+2. Stored in the existing `auth_session.metadata_json` column, merged with existing metadata (e.g. `groups`) rather than overwriting it — no schema change was required.
+3. `locale` is `null` in `/login` and `/session` responses (§4.1, §4.2) until this endpoint has been called at least once for that session; the frontend falls back to browser-detected locale in that case.
+
 ## 5. Cookie Requirements
 
 1. HttpOnly = true
@@ -151,6 +186,7 @@ Required auth codes:
 4. AUTH_IDP_UNAVAILABLE
 5. AUTH_ROLE_REFRESH_FAILED
 6. AUTH_ACCOUNT_LOCKED
+7. AUTH_BAD_REQUEST
 
 ## 7. Role Semantics
 
