@@ -12,6 +12,8 @@ const {
 } = require('../domain/alfrescoMappers.cjs');
 const { parseFollowUpId, buildFollowUpIdFromFinding, buildFindingId } = require('../domain/idFormats.cjs');
 const { computeDeadlinesForSeverity } = require('./severityDeadlines.cjs');
+const { deriveFollowUpCapExecutionTag } = require('./usoapFollowUpTag.cjs');
+const { buildDerivedUsoapTagPayload } = require('../domain/usoapTagPayload.cjs');
 const { FINDING_STATUS } = require('../domain/statusRules.cjs');
 const { computeEffectiveFindingStatus } = require('../domain/statusRules.cjs');
 const { isValidClosureRequest, canReviewClosure } = require('../domain/statusRules.cjs');
@@ -610,6 +612,29 @@ function createFindingsRouter({ auth, alfrescoClient, notificationService, nodeR
         }
 
         const inheritedCapId = selectedCap?.properties?.['vso:capId'] || null;
+
+        // A follow-up is CE-8 evidence for whatever area the finding
+        // belongs to, not evidence for the finding's own PQ -- derived from
+        // the UsoapEvidenceExpectation catalog, not copied from the finding.
+        // Never blocks follow-up creation: an unmatched specialty (or a
+        // transient catalog-lookup failure) just leaves the follow-up
+        // untagged, same as today's baseline.
+        let derivedTag = null;
+        try {
+          derivedTag = await deriveFollowUpCapExecutionTag({
+            nodeRedClient,
+            ticket: req.auth.ticket,
+            specialtyCode: finding.specialtyCode,
+          });
+        } catch (error) {
+          console.warn('USOAP CE-8 tag derivation failed for follow-up; creating untagged', {
+            findingId: finding.findingId,
+            specialtyCode: finding.specialtyCode,
+            message: error.message,
+          });
+        }
+        const followUpUsoapTag = buildDerivedUsoapTagPayload(derivedTag || {});
+
         let created;
         try {
           created = await alfrescoClient.createChildNode({
@@ -618,6 +643,7 @@ function createFindingsRouter({ auth, alfrescoClient, notificationService, nodeR
             nodeType: 'vso:followUpReport',
             name: followUpId,
             associationType: 'vso:hasFollowUp',
+            aspectNames: followUpUsoapTag.aspectNames,
             properties: {
               'vso:followUpId': followUpId,
               'vso:followUpType': followUpType,
@@ -639,6 +665,7 @@ function createFindingsRouter({ auth, alfrescoClient, notificationService, nodeR
               'vso:specialtyName': finding.specialtyName,
               'vso:providerId': finding.providerId,
               'vso:providerName': finding.providerName,
+              ...followUpUsoapTag.properties,
             },
           });
 

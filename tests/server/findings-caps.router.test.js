@@ -129,8 +129,14 @@ function buildNodeRedClientMock() {
   };
 }
 
-async function buildApp({ roles = ['cap_entry'], now = new Date('2026-04-03T10:00:00.000Z'), notificationService } = {}) {
+async function buildApp({ roles = ['cap_entry'], now = new Date('2026-04-03T10:00:00.000Z'), notificationService, findingPropertyOverrides, nodeRedClient } = {}) {
   const fixture = buildFixture();
+  if (findingPropertyOverrides) {
+    fixture.findingNode = {
+      ...fixture.findingNode,
+      properties: { ...fixture.findingNode.properties, ...findingPropertyOverrides },
+    };
+  }
 
   const session = {
     sessionId: 'session-1',
@@ -181,13 +187,14 @@ async function buildApp({ roles = ['cap_entry'], now = new Date('2026-04-03T10:0
         associationType,
         name,
       };
+      fixture.createdChildNodeCalls = [...(fixture.createdChildNodeCalls || []), fixture.lastCreatedChildNodeArgs];
       if (nodeType === 'vso:followUpReport') {
-        const next = { id: 'follow-up-node-created', parentId: parentNodeId, nodeType, name, properties };
+        const next = { id: 'follow-up-node-created', parentId: parentNodeId, nodeType, name, properties, aspectNames };
         fixture.followUpNodes = [...fixture.followUpNodes, next];
         return next;
       }
       if (nodeType === 'vso:correctiveAction') {
-        const next = { id: 'cap-node-created', parentId: parentNodeId, nodeType, name, properties };
+        const next = { id: 'cap-node-created', parentId: parentNodeId, nodeType, name, properties, aspectNames };
         fixture.capNode = next;
         return next;
       }
@@ -339,7 +346,7 @@ async function buildApp({ roles = ['cap_entry'], now = new Date('2026-04-03T10:0
     sessionRepository,
     alfrescoClient,
     notificationService,
-    nodeRedClient: buildNodeRedClientMock(),
+    nodeRedClient: nodeRedClient || buildNodeRedClientMock(),
     logger: console,
     now: () => now,
   });
@@ -490,6 +497,51 @@ describe('Findings and CAP API', () => {
     expect(response.body.cap.correctiveActions[0].itemStatus).toBe('Open');
     expect(response.body.cap.residualRisk.riskLevel).toBe('Low');
     expect(response.body.cap.effectivenessVerification.method).toBe('Follow-up audit');
+  });
+
+  it('inherits the finding USOAP tag onto a new CAP with tagSource=Derived', async () => {
+    const { app, fixture } = await buildApp({
+      roles: ['cap_entry'],
+      findingPropertyOverrides: {
+        'vso:usoapCriticalElement': 'CE-6',
+        'vso:usoapAreaCode': 'AGA',
+        'vso:usoapPqReference': ['PQ 8.111'],
+        'vso:ceMapping': ['CE-6'],
+        'vso:areaMapping': ['AGA'],
+        'vso:usoapTagSource': 'Chain-derived',
+      },
+    });
+
+    const response = await request(app)
+      .post('/api/findings/H-MDPPA0001-AVIS-001/caps')
+      .set('Cookie', 'compliance_session_id=session-1')
+      .set('x-csrf-token', 'csrf-token-1')
+      .send(fullCapPayload());
+
+    expect(response.status).toBe(201);
+    const capCreateCall = fixture.createdChildNodeCalls.find((call) => call.nodeType === 'vso:correctiveAction');
+    expect(capCreateCall.aspectNames).toEqual(
+      expect.arrayContaining(['vso:usoapEvidenceContext', 'vso:regulatoryTraceability'])
+    );
+    expect(capCreateCall.properties['vso:usoapCriticalElement']).toBe('CE-6');
+    expect(capCreateCall.properties['vso:usoapAreaCode']).toBe('AGA');
+    expect(capCreateCall.properties['vso:usoapPqReference']).toEqual(['PQ 8.111']);
+    expect(capCreateCall.properties['vso:usoapTagSource']).toBe('Derived');
+  });
+
+  it('creates a CAP with no USOAP aspect when the finding has no USOAP tags', async () => {
+    const { app, fixture } = await buildApp({ roles: ['cap_entry'] });
+
+    const response = await request(app)
+      .post('/api/findings/H-MDPPA0001-AVIS-001/caps')
+      .set('Cookie', 'compliance_session_id=session-1')
+      .set('x-csrf-token', 'csrf-token-1')
+      .send(fullCapPayload());
+
+    expect(response.status).toBe(201);
+    const capCreateCall = fixture.createdChildNodeCalls.find((call) => call.nodeType === 'vso:correctiveAction');
+    expect(capCreateCall.aspectNames).toEqual([]);
+    expect(capCreateCall.properties['vso:usoapTagSource']).toBeUndefined();
   });
 
   it('rejects CAP submission for a finding that has not yet been reviewer-confirmed', async () => {
@@ -1124,6 +1176,86 @@ describe('Findings and CAP API', () => {
     // reviewed and confirmed Adequate (PATCH .../evidence-review below).
     expect(response.body.followUpReport.evidenceReviewStatus).toBe('Pending Review');
     expect(fixture.findingNode.properties['vso:findingStatus']).toBe('Open');
+  });
+
+  it('derives a CE-8 USOAP tag for a new follow-up from the UsoapEvidenceExpectation catalog', async () => {
+    const nodeRedClient = {
+      queryEntity: async ({ entity }) => {
+        if (entity !== 'UsoapEvidenceExpectation') {
+          return { list: [] };
+        }
+        return {
+          list: [
+            {
+              pqCode: 'PQ 8.048',
+              artifactCategoryName: 'CAPExecution',
+              criticalElementName: 'CE-8',
+              specialtyCode: 'AVIS',
+              areaCodeNames: { 'opt-aga': 'AGA' },
+            },
+            // A different specialty's CAPExecution row must not match.
+            {
+              pqCode: 'PQ 7.199',
+              artifactCategoryName: 'CAPExecution',
+              criticalElementName: 'CE-8',
+              specialtyCode: 'ATS',
+              areaCodeNames: { 'opt-ats': 'ATS' },
+            },
+          ],
+        };
+      },
+    };
+    const { app, fixture } = await buildApp({ roles: ['inspector'], nodeRedClient });
+
+    const response = await request(app)
+      .post('/api/findings/H-MDPPA0001-AVIS-001/follow-ups')
+      .set('Cookie', 'compliance_session_id=session-1')
+      .set('x-csrf-token', 'csrf-token-1')
+      .send({ followUpType: 'Progress Review' });
+
+    expect(response.status).toBe(201);
+    const followUpCreateCall = fixture.createdChildNodeCalls.find((call) => call.nodeType === 'vso:followUpReport');
+    expect(followUpCreateCall.aspectNames).toEqual(
+      expect.arrayContaining(['vso:usoapEvidenceContext', 'vso:regulatoryTraceability'])
+    );
+    expect(followUpCreateCall.properties['vso:usoapCriticalElement']).toBe('CE-8');
+    expect(followUpCreateCall.properties['vso:usoapAreaCode']).toBe('AGA');
+    expect(followUpCreateCall.properties['vso:usoapPqReference']).toEqual(['PQ 8.048']);
+    expect(followUpCreateCall.properties['vso:usoapTagSource']).toBe('Derived');
+  });
+
+  it('creates a follow-up untagged when no CAPExecution catalog row matches the finding specialty', async () => {
+    const { app, fixture } = await buildApp({ roles: ['inspector'] });
+
+    const response = await request(app)
+      .post('/api/findings/H-MDPPA0001-AVIS-001/follow-ups')
+      .set('Cookie', 'compliance_session_id=session-1')
+      .set('x-csrf-token', 'csrf-token-1')
+      .send({ followUpType: 'Progress Review' });
+
+    expect(response.status).toBe(201);
+    const followUpCreateCall = fixture.createdChildNodeCalls.find((call) => call.nodeType === 'vso:followUpReport');
+    expect(followUpCreateCall.aspectNames).toEqual([]);
+    expect(followUpCreateCall.properties['vso:usoapTagSource']).toBeUndefined();
+  });
+
+  it('creates a follow-up untagged (without failing) when the catalog lookup itself throws', async () => {
+    const nodeRedClient = {
+      queryEntity: async () => {
+        throw new Error('AtroCore unreachable');
+      },
+    };
+    const { app, fixture } = await buildApp({ roles: ['inspector'], nodeRedClient });
+
+    const response = await request(app)
+      .post('/api/findings/H-MDPPA0001-AVIS-001/follow-ups')
+      .set('Cookie', 'compliance_session_id=session-1')
+      .set('x-csrf-token', 'csrf-token-1')
+      .send({ followUpType: 'Progress Review' });
+
+    expect(response.status).toBe(201);
+    const followUpCreateCall = fixture.createdChildNodeCalls.find((call) => call.nodeType === 'vso:followUpReport');
+    expect(followUpCreateCall.aspectNames).toEqual([]);
   });
 
   it('rolls back the created follow-up node when the CAP association step fails', async () => {

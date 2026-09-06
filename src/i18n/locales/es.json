@@ -332,7 +332,8 @@
       "createError": "No se pudo crear el seguimiento. Intente nuevamente.",
       "evidenceReviewApplied": "Revisión de evidencia aplicada.",
       "evidenceReviewError": "No se pudo aplicar la revisión de evidencia. Intente nuevamente."
-    }
+    },
+    "usoapTag": "Etiqueta USOAP"
   },
   "findingManager": {
     "listing": "Listado de Hallazgos",

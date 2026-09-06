@@ -332,7 +332,8 @@
       "createError": "Could not create follow-up. Please try again.",
       "evidenceReviewApplied": "Evidence review applied.",
       "evidenceReviewError": "Could not apply evidence review. Please try again."
-    }
+    },
+    "usoapTag": "USOAP Tag"
   },
   "findingManager": {
     "listing": "Finding Listing",

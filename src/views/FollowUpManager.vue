@@ -60,6 +60,10 @@
       <p><strong>{{ t('followUpManager.findingClosed') }}:</strong> {{ selectedFollowUp.findingClosed ? t('common.yes') : t('common.no') }}</p>
       <p><strong>{{ t('followUpManager.effectivenessConfirmed') }}:</strong> {{ selectedFollowUp.effectivenessConfirmed ? t('common.yes') : t('common.no') }}</p>
       <p><strong>{{ t('followUpManager.evidenceReviewStatus') }}:</strong> {{ selectedFollowUp.evidenceReviewStatus || '-' }}</p>
+      <p v-if="selectedFollowUp.usoapPqReference?.length">
+        <strong>{{ t('followUpManager.usoapTag') }}:</strong>
+        {{ selectedFollowUp.usoapCriticalElement }} · {{ selectedFollowUp.usoapAreaCode }} · {{ selectedFollowUp.usoapPqReference.join(', ') }}
+      </p>
       <template v-if="selectedFollowUp.evidenceReviewedBy">
         <p><strong>{{ t('followUpManager.reviewedBy') }}:</strong> {{ selectedFollowUp.evidenceReviewedBy }} {{ t('followUpManager.on') }} {{ selectedFollowUp.evidenceReviewDate || '-' }}</p>
         <p v-if="selectedFollowUp.evidenceReviewNotes"><strong>{{ t('followUpManager.reviewNotes') }}:</strong> {{ selectedFollowUp.evidenceReviewNotes }}</p>
@@ -96,8 +100,6 @@
           </div>
         </div>
       </div>
-
-      <UsoapDirectTagPanel v-if="selectedFollowUp.nodeId" :node-id="selectedFollowUp.nodeId" />
     </section>
 
     <div class="detail-buttons">
@@ -199,7 +201,6 @@ import { useRoute } from 'vue-router';
 import BaseManager from '@/components/base/BaseManager.vue';
 import BaseButton from '@/components/base/BaseButton.vue';
 import ScopePicker from '@/components/common/ScopePicker.vue';
-import UsoapDirectTagPanel from '@/components/UsoapDirectTagPanel.vue';
 import { useFollowUpStore } from '@/stores/followUpStore';
 import { useAuthStore } from '@/stores/authStore';
 import { apiFollowUpEvidenceContentUrl } from '@/services/apiServices';
