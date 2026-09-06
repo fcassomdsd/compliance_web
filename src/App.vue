@@ -59,6 +59,9 @@
       <RouterLink to="/provider-history" class="nav-link" exact-active-class="active-view" @click="navOpen = false">
         {{ t('app.nav.providerHistory') }}
       </RouterLink>
+      <RouterLink to="/usoap-evidence-report" class="nav-link" exact-active-class="active-view" @click="navOpen = false">
+        {{ t('app.nav.usoapEvidenceReport') }}
+      </RouterLink>
     </div>
     <RouterView v-slot="{ Component }">
       <transition name="fade" mode="out-in">

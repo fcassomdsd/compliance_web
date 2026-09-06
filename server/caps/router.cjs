@@ -16,6 +16,7 @@ const {
   resolveFindingIdForCap,
   getFollowUpReportsForFinding,
 } = require('../domain/alfrescoMappers.cjs');
+const { buildCapUsoapTagPayloadFromFinding } = require('../domain/usoapTagPayload.cjs');
 const {
   parseCapId,
   parseFindingId,
@@ -531,12 +532,15 @@ async function performCapCreate({
     return { error: { status: 409, code: 'CAP_ALREADY_EXISTS', message: 'CAP identifier already exists' } };
   }
 
+  const capUsoapTag = buildCapUsoapTagPayloadFromFinding(finding);
+
   const created = await alfrescoClient.createChildNode({
     ticket,
     parentNodeId: finding.nodeId,
     nodeType: 'vso:correctiveAction',
     name: effectiveCapId,
     associationType: 'vso:hasCorrectiveAction',
+    aspectNames: capUsoapTag.aspectNames,
     properties: {
       'vso:capId': effectiveCapId,
       ...(proposedAction ? { 'vso:proposedAction': proposedAction } : {}),
@@ -551,6 +555,7 @@ async function performCapCreate({
       'vso:specialtyName': finding.specialtyName,
       'vso:providerId': finding.providerId,
       'vso:providerName': finding.providerName,
+      ...capUsoapTag.properties,
     },
   });
 

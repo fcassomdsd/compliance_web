@@ -2,6 +2,20 @@ function nodeProperty(node, key, fallback = null) {
   return node?.properties?.[key] ?? fallback;
 }
 
+// USOAP tag fields shared by findings, CAPs, and follow-up reports. Kept in
+// one place since the CAP/follow-up "Derived" inheritance flows read these
+// straight off a mapped source node — see server/domain/usoapTagPayload.cjs.
+function mapUsoapTagFields(node) {
+  return {
+    usoapCriticalElement: nodeProperty(node, 'vso:usoapCriticalElement'),
+    usoapAreaCode: nodeProperty(node, 'vso:usoapAreaCode'),
+    usoapPqReference: nodeProperty(node, 'vso:usoapPqReference', []),
+    ceMapping: nodeProperty(node, 'vso:ceMapping', []),
+    areaMapping: nodeProperty(node, 'vso:areaMapping', []),
+    usoapTagSource: nodeProperty(node, 'vso:usoapTagSource'),
+  };
+}
+
 function mapFindingNode(node) {
   return {
     nodeId: node?.id || null,
@@ -42,6 +56,7 @@ function mapFindingNode(node) {
     specialtyName: nodeProperty(node, 'vso:specialtyName'),
     providerId: nodeProperty(node, 'vso:providerId'),
     providerName: nodeProperty(node, 'vso:providerName'),
+    ...mapUsoapTagFields(node),
   };
 }
 
@@ -70,6 +85,7 @@ function mapCorrectiveActionNode(node) {
     specialtyName: nodeProperty(node, 'vso:specialtyName'),
     providerId: nodeProperty(node, 'vso:providerId'),
     providerName: nodeProperty(node, 'vso:providerName'),
+    ...mapUsoapTagFields(node),
   };
 }
 
@@ -290,6 +306,7 @@ function mapFollowUpReportNode(node) {
     specialtyName: nodeProperty(node, 'vso:specialtyName'),
     providerId: nodeProperty(node, 'vso:providerId'),
     providerName: nodeProperty(node, 'vso:providerName'),
+    ...mapUsoapTagFields(node),
   };
 }
 

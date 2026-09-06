@@ -60,6 +60,10 @@
       <p><strong>{{ t('followUpManager.findingClosed') }}:</strong> {{ selectedFollowUp.findingClosed ? t('common.yes') : t('common.no') }}</p>
       <p><strong>{{ t('followUpManager.effectivenessConfirmed') }}:</strong> {{ selectedFollowUp.effectivenessConfirmed ? t('common.yes') : t('common.no') }}</p>
       <p><strong>{{ t('followUpManager.evidenceReviewStatus') }}:</strong> {{ selectedFollowUp.evidenceReviewStatus || '-' }}</p>
+      <p v-if="selectedFollowUp.usoapPqReference?.length">
+        <strong>{{ t('followUpManager.usoapTag') }}:</strong>
+        {{ selectedFollowUp.usoapCriticalElement }} · {{ selectedFollowUp.usoapAreaCode }} · {{ selectedFollowUp.usoapPqReference.join(', ') }}
+      </p>
       <template v-if="selectedFollowUp.evidenceReviewedBy">
         <p><strong>{{ t('followUpManager.reviewedBy') }}:</strong> {{ selectedFollowUp.evidenceReviewedBy }} {{ t('followUpManager.on') }} {{ selectedFollowUp.evidenceReviewDate || '-' }}</p>
         <p v-if="selectedFollowUp.evidenceReviewNotes"><strong>{{ t('followUpManager.reviewNotes') }}:</strong> {{ selectedFollowUp.evidenceReviewNotes }}</p>

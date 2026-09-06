@@ -53,7 +53,8 @@
       "correctiveActions": "Corrective Actions",
       "followUps": "Follow-ups",
       "inspectionCadences": "Inspection Cadences",
-      "providerHistory": "Provider History"
+      "providerHistory": "Provider History",
+      "usoapEvidenceReport": "USOAP Evidence Report"
     }
   },
   "login": {
@@ -331,7 +332,8 @@
       "createError": "Could not create follow-up. Please try again.",
       "evidenceReviewApplied": "Evidence review applied.",
       "evidenceReviewError": "Could not apply evidence review. Please try again."
-    }
+    },
+    "usoapTag": "USOAP Tag"
   },
   "findingManager": {
     "listing": "Finding Listing",
@@ -509,5 +511,30 @@
       "resolutionDeadline": "Resolution Deadline",
       "reference": "Reference"
     }
+  },
+  "usoapTagPanel": {
+    "title": "Apply USOAP Tag",
+    "selectPlaceholder": "-- Select --",
+    "criticalElement": "Critical Element",
+    "areaCode": "USOAP Area",
+    "pqReferences": "Protocol Questions (PQ)",
+    "noPqCandidates": "No protocol questions match the selected CE/area yet.",
+    "evidenceBasis": "Evidence Basis",
+    "applyTag": "Apply Tag",
+    "applied": "USOAP tag applied."
+  },
+  "usoapEvidenceReport": {
+    "title": "USOAP Evidence Report",
+    "lookUp": "Generate CE Evidence Report",
+    "criticalElement": "Critical Element",
+    "taggedEvidence": "Tagged Evidence",
+    "byPq": "By Protocol Question",
+    "byArea": "By Area",
+    "sampledPopulations": "Sampled-Population Evidence",
+    "sampledPopulationsHint": "PQs whose guidance asks for a sample across a population of documents, resolved by live query rather than per-node tagging.",
+    "candidates": "candidates",
+    "gaps": "Gaps",
+    "gap": "Gap",
+    "noGaps": "No gaps found."
   }
 }

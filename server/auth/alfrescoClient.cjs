@@ -359,6 +359,52 @@ class AlfrescoClient {
 
     return response?.data || null;
   }
+
+  async applyDirectUsoapTag({ ticket, nodeId, criticalElement, areaCode, ceMapping, areaMapping, pqReferences, evidenceBasis }) {
+    if (!ticket || !nodeId) {
+      throw new Error('ticket and nodeId are required');
+    }
+
+    const response = await this.request({
+      method: 'post',
+      url: `${this.baseUrl}/alfresco/s/api/usoap/direct-tag`,
+      params: {
+        alf_ticket: ticket,
+      },
+      data: {
+        nodeId,
+        criticalElement,
+        areaCode,
+        ceMapping,
+        areaMapping,
+        pqReferences,
+        evidenceBasis,
+      },
+    });
+
+    return response?.data || null;
+  }
+
+  async generateCeEvidenceReport({ ticket, ce, year, populationQueries }) {
+    if (!ticket || !ce) {
+      throw new Error('ticket and ce are required');
+    }
+
+    const response = await this.request({
+      method: 'post',
+      url: `${this.baseUrl}/alfresco/s/api/usoap/ce-evidence-report`,
+      params: {
+        alf_ticket: ticket,
+      },
+      data: {
+        ce,
+        ...(year ? { year } : {}),
+        ...(Array.isArray(populationQueries) && populationQueries.length ? { populationQueries } : {}),
+      },
+    });
+
+    return response?.data || null;
+  }
 }
 
 module.exports = {

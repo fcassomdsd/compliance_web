@@ -185,6 +185,49 @@ function createReportsRouter({ auth, alfrescoClient, now = () => new Date() }) {
     }
   );
 
+  router.get(
+    '/usoap-ce-evidence',
+    auth.authenticate,
+    auth.authorize(['inspector', 'planner', 'reporter', 'admin']),
+    async (req, res) => {
+      try {
+        const ce = String(req.query?.ce || '').trim();
+        if (!ce) {
+          return res.status(400).json(buildError('USOAP_CE_EVIDENCE_BAD_REQUEST', 'ce is required'));
+        }
+
+        const year = String(req.query?.year || '').trim() || undefined;
+
+        let populationQueries;
+        if (req.query?.populationQueries) {
+          try {
+            populationQueries = JSON.parse(req.query.populationQueries);
+          } catch {
+            return res.status(400).json(buildError('USOAP_CE_EVIDENCE_BAD_REQUEST', 'populationQueries must be valid JSON'));
+          }
+        }
+
+        const report = await alfrescoClient.generateCeEvidenceReport({
+          ticket: req.auth.ticket,
+          ce,
+          year,
+          populationQueries,
+        });
+
+        return res.status(200).json(report);
+      } catch (error) {
+        const upstreamStatus = Number(error?.response?.status || 0);
+        const upstreamDetail = error?.response?.data?.error || error?.response?.data?.message || error.message;
+
+        if (upstreamStatus >= 400 && upstreamStatus < 500) {
+          return res.status(400).json(buildError('USOAP_CE_EVIDENCE_BAD_REQUEST', upstreamDetail));
+        }
+
+        return res.status(502).json(buildError('USOAP_CE_EVIDENCE_REPORT_FAILED', upstreamDetail));
+      }
+    }
+  );
+
   return router;
 }
 
