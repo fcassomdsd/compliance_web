@@ -4,7 +4,13 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-09-06
+
 ### Added
+- **English/Spanish localization**: `vue-i18n` (Composition API) wired into the frontend, with a new `src/i18n/` locale catalog covering UI chrome. See `docs/STYLE_GUIDE.md` §13.
+- **Locale persistence**: new `POST /api/auth/locale` endpoint persists a user's locale choice onto their session (`sessionPolicy.cjs`'s `buildSessionResponse()` returns it as `locale` on `/login`/`/session`). See `docs/auth/phase-1-contract/AUTH_CHUNK1_API_SPEC.md` §4.4.
+- **`NOTIFICATION_LOCALE` env var**: selects the locale for the new locale-keyed notification catalog (`server/notifications/messages.cjs`); defaults to `es` to preserve existing all-Spanish notification behavior. Documented in `README.md`.
+- **Locale-aware plan/report generation**: `apiInspectionPlan`/`apiInspectionReport` now forward the active UI locale as a `locale` query param, consumed by `compliance_flow` and `compliance_cmis`.
 - **Client-side evidence file validation**: `src/utils/evidenceFile.js` mirrors the server's MIME allowlist and 15MB size limit, and is now checked at file-selection time in both `FollowUpManager.vue` and `CorrectiveActionManager.vue` — an unsupported or oversized file is rejected immediately, before the parent follow-up/CAP record is ever created (previously, evidence upload was a separate step after creation, so a rejected file left a "dud" record with no evidence and no indication anything had already been created).
 - **`ActivityType` catalog support**: new `activityTypeStore.js` fetching the Nomenclatura activity-type reference entity (Auditoría/Inspección/Monitoreo/Revisión documental/Análisis de suceso, letter-coded A/I/M/D/S) dynamically, replacing a hardcoded English enum in `InspectionCadenceManager.vue` and a free-text input in `InspectionManager.vue`.
 - **Rich Corrective Action Plan (CAP) registration**: CAP submission now captures 5 required sections — Root Cause Analysis (method, main category, root cause, contributing factors, evidence upload), Risk Assessment (hazard, consequence, probability, severity, calculated risk level, tolerability level, justification, evidence upload), Corrective Actions (repeatable list with sequence number, description, priority, responsible person, deadline), Expected Residual Risk (probability, severity, risk level, justification), and Effectiveness Verification (method, indicators, projected verification date).
@@ -21,6 +27,8 @@ All notable changes to this project will be documented in this file.
 - **Permission change**: `authStore`'s domain-based specialty-scope restriction on the `assigner` role (keyed on retired AGA/SNA/VA Alfresco groups) is removed. An `assigner` can now act across all 16 specialties instead of a domain-restricted subset. Removed the dead `specialtyStore.js` this scoping used to read from.
 
 ### Fixed
+- **Router-guard Pinia-initialization bug**: `applyAuthGuards()` accessed the auth store eagerly at router-module load time, before `app.use(pinia)` ran in `main.js`, crashing app boot with `getActivePinia() was called but there was no active Pinia`. Store access moved into the lazy `beforeEach` callback.
+- **CI lint crash on JSON files**: `eslint-plugin-vue`'s `flat/essential` config carries rule sets with no `files` restriction, so adding the new `src/i18n/locales/*.json` resources crashed `vue-eslint-parser`. Locale JSON files excluded from lint (this repo has no JSON parser configured).
 - **Activity-code sequence off-by-one**: `InspectionManager.vue` auto-creates an Inspection on mount (correct sequence), then a later save (setting the real activity type) re-scans existing Inspections to regenerate the code — the scan included the record's own current row, counting itself and inflating the sequence by one. Now excludes the record being updated.
 
 ## [0.4.0] - 2026-08-02
