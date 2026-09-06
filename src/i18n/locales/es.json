@@ -53,7 +53,8 @@
       "correctiveActions": "Acciones Correctivas",
       "followUps": "Seguimientos",
       "inspectionCadences": "Cadencias de Inspección",
-      "providerHistory": "Historial de Proveedores"
+      "providerHistory": "Historial de Proveedores",
+      "usoapEvidenceReport": "Informe de Evidencia USOAP"
     }
   },
   "login": {
@@ -509,5 +510,30 @@
       "resolutionDeadline": "Plazo de Resolución",
       "reference": "Referencia"
     }
+  },
+  "usoapTagPanel": {
+    "title": "Aplicar Etiqueta USOAP",
+    "selectPlaceholder": "-- Seleccionar --",
+    "criticalElement": "Elemento Crítico",
+    "areaCode": "Área USOAP",
+    "pqReferences": "Preguntas de Protocolo (PQ)",
+    "noPqCandidates": "Ninguna pregunta de protocolo coincide con el CE/área seleccionado.",
+    "evidenceBasis": "Base de la Evidencia",
+    "applyTag": "Aplicar Etiqueta",
+    "applied": "Etiqueta USOAP aplicada."
+  },
+  "usoapEvidenceReport": {
+    "title": "Informe de Evidencia USOAP",
+    "lookUp": "Generar Informe de Evidencia por CE",
+    "criticalElement": "Elemento Crítico",
+    "taggedEvidence": "Evidencia Etiquetada",
+    "byPq": "Por Pregunta de Protocolo",
+    "byArea": "Por Área",
+    "sampledPopulations": "Evidencia por Muestreo",
+    "sampledPopulationsHint": "PQs cuya orientación pide una muestra de una población de documentos, resuelta por consulta en vivo en lugar de etiquetado por nodo.",
+    "candidates": "candidatos",
+    "gaps": "Brechas",
+    "gap": "Brecha",
+    "noGaps": "No se encontraron brechas."
   }
 }

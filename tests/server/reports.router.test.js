@@ -42,7 +42,7 @@ function buildCapNode(overrides = {}) {
   };
 }
 
-async function buildApp({ roles = ['inspector'], findingNodes, capNodes, now = new Date('2026-04-03T10:00:00.000Z') } = {}) {
+async function buildApp({ roles = ['inspector'], findingNodes, capNodes, now = new Date('2026-04-03T10:00:00.000Z'), generateCeEvidenceReport } = {}) {
   const session = {
     sessionId: 'session-1',
     username: 'tester',
@@ -70,6 +70,7 @@ async function buildApp({ roles = ['inspector'], findingNodes, capNodes, now = n
       }
       return [];
     },
+    generateCeEvidenceReport: generateCeEvidenceReport || (async () => ({ success: true, ce: 'CE-7', year: 'All', summary: { total: 0, gaps: [] }, byPq: {}, artifacts: [] })),
   };
 
   const app = createApp({
@@ -227,6 +228,103 @@ describe('GET /api/reports/oversight-posture/filter-options', () => {
 
     const response = await request(app)
       .get('/api/reports/oversight-posture/filter-options')
+      .set('Cookie', 'compliance_session_id=session-1');
+
+    expect(response.status).toBe(403);
+  });
+});
+
+describe('GET /api/reports/usoap-ce-evidence', () => {
+  it('requires the ce query parameter', async () => {
+    const { app } = await buildApp({ roles: ['inspector'] });
+
+    const response = await request(app)
+      .get('/api/reports/usoap-ce-evidence')
+      .set('Cookie', 'compliance_session_id=session-1');
+
+    expect(response.status).toBe(400);
+    expect(response.body.code).toBe('USOAP_CE_EVIDENCE_BAD_REQUEST');
+  });
+
+  it('forwards ce/year/populationQueries to alfrescoClient and returns its report', async () => {
+    let receivedArgs = null;
+    const { app } = await buildApp({
+      roles: ['reporter'],
+      generateCeEvidenceReport: async (args) => {
+        receivedArgs = args;
+        return { success: true, ce: args.ce, year: args.year || 'All', sampledPopulations: [{ pqCode: 'PQ 8.403', artifactCategory: 'OversightPlan', candidateCount: 2, candidates: [] }] };
+      },
+    });
+
+    const populationQueries = [{ pqCode: 'PQ 8.403', artifactCategory: 'OversightPlan', monthsBack: 24 }];
+    const response = await request(app)
+      .get('/api/reports/usoap-ce-evidence')
+      .query({ ce: 'CE-7', year: '2026', populationQueries: JSON.stringify(populationQueries) })
+      .set('Cookie', 'compliance_session_id=session-1');
+
+    expect(response.status).toBe(200);
+    expect(response.body.success).toBe(true);
+    expect(response.body.sampledPopulations[0].artifactCategory).toBe('OversightPlan');
+    expect(receivedArgs.ticket).toBe('encrypted-ticket');
+    expect(receivedArgs.ce).toBe('CE-7');
+    expect(receivedArgs.year).toBe('2026');
+    expect(receivedArgs.populationQueries).toEqual(populationQueries);
+  });
+
+  it('rejects malformed populationQueries JSON', async () => {
+    const { app } = await buildApp({ roles: ['inspector'] });
+
+    const response = await request(app)
+      .get('/api/reports/usoap-ce-evidence')
+      .query({ ce: 'CE-7', populationQueries: '{not-json' })
+      .set('Cookie', 'compliance_session_id=session-1');
+
+    expect(response.status).toBe(400);
+    expect(response.body.code).toBe('USOAP_CE_EVIDENCE_BAD_REQUEST');
+  });
+
+  it('maps an upstream 4xx error to a 400 response', async () => {
+    const { app } = await buildApp({
+      roles: ['inspector'],
+      generateCeEvidenceReport: async () => {
+        const error = new Error('Invalid ce parameter');
+        error.response = { status: 400, data: { error: 'Invalid ce parameter' } };
+        throw error;
+      },
+    });
+
+    const response = await request(app)
+      .get('/api/reports/usoap-ce-evidence')
+      .query({ ce: 'CE-99' })
+      .set('Cookie', 'compliance_session_id=session-1');
+
+    expect(response.status).toBe(400);
+    expect(response.body.code).toBe('USOAP_CE_EVIDENCE_BAD_REQUEST');
+  });
+
+  it('returns a 502 when the upstream call fails unexpectedly', async () => {
+    const { app } = await buildApp({
+      roles: ['inspector'],
+      generateCeEvidenceReport: async () => {
+        throw new Error('upstream unavailable');
+      },
+    });
+
+    const response = await request(app)
+      .get('/api/reports/usoap-ce-evidence')
+      .query({ ce: 'CE-7' })
+      .set('Cookie', 'compliance_session_id=session-1');
+
+    expect(response.status).toBe(502);
+    expect(response.body.code).toBe('USOAP_CE_EVIDENCE_REPORT_FAILED');
+  });
+
+  it('rejects a role with no access', async () => {
+    const { app } = await buildApp({ roles: ['cap_entry'] });
+
+    const response = await request(app)
+      .get('/api/reports/usoap-ce-evidence')
+      .query({ ce: 'CE-7' })
       .set('Cookie', 'compliance_session_id=session-1');
 
     expect(response.status).toBe(403);

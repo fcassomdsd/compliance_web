@@ -1017,3 +1017,52 @@ export function apiFollowUpEvidenceContentUrl(findingId, followUpId, evidenceNod
   return `${complianceApiServer}/findings/${encodeURIComponent(findingId)}/follow-ups/${encodeURIComponent(followUpId)}/evidence/${encodeURIComponent(evidenceNodeId)}/content`;
 }
 
+export async function apiApplyDirectUsoapTag(payload, csrfToken) {
+  try {
+    if (!payload?.nodeId || typeof payload.nodeId !== 'string') {
+      throw new Error('nodeId is required');
+    }
+
+    const result = await axios({
+      method: 'post',
+      url: `${complianceApiServer}/usoap/direct-tag`,
+      data: payload,
+      headers: buildCsrfHeader(csrfToken),
+      withCredentials: true,
+    });
+    return { data: result.data, status: result.status };
+  } catch (error) {
+    const backendMessage = error?.response?.data?.message || error?.response?.data?.error;
+    const status = error?.response?.status;
+    const detail = backendMessage || error.message;
+    throw new Error(`apiApplyDirectUsoapTag: ${status ? `[${status}] ` : ''}${detail}`);
+  }
+}
+
+export async function apiUsoapCeEvidenceReport({ ce, year, populationQueries }) {
+  try {
+    if (!ce || typeof ce !== 'string') {
+      throw new Error('ce is required');
+    }
+
+    const result = await axios({
+      method: 'get',
+      url: `${complianceApiServer}/reports/usoap-ce-evidence`,
+      params: {
+        ce,
+        ...(year ? { year } : {}),
+        ...(Array.isArray(populationQueries) && populationQueries.length
+          ? { populationQueries: JSON.stringify(populationQueries) }
+          : {}),
+      },
+      withCredentials: true,
+    });
+    return { data: result.data, status: result.status };
+  } catch (error) {
+    const backendMessage = error?.response?.data?.message || error?.response?.data?.error;
+    const status = error?.response?.status;
+    const detail = backendMessage || error.message;
+    throw new Error(`apiUsoapCeEvidenceReport: ${status ? `[${status}] ` : ''}${detail}`);
+  }
+}
+

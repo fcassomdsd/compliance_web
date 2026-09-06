@@ -96,6 +96,8 @@
           </div>
         </div>
       </div>
+
+      <UsoapDirectTagPanel v-if="selectedFollowUp.nodeId" :node-id="selectedFollowUp.nodeId" />
     </section>
 
     <div class="detail-buttons">
@@ -197,6 +199,7 @@ import { useRoute } from 'vue-router';
 import BaseManager from '@/components/base/BaseManager.vue';
 import BaseButton from '@/components/base/BaseButton.vue';
 import ScopePicker from '@/components/common/ScopePicker.vue';
+import UsoapDirectTagPanel from '@/components/UsoapDirectTagPanel.vue';
 import { useFollowUpStore } from '@/stores/followUpStore';
 import { useAuthStore } from '@/stores/authStore';
 import { apiFollowUpEvidenceContentUrl } from '@/services/apiServices';

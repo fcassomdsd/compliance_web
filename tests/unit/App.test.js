@@ -61,7 +61,7 @@ describe('App.vue (router navigation)', () => {
     const { wrapper } = await mountAppAt();
 
     const links = wrapper.findAll('a.nav-link');
-    expect(links).toHaveLength(11);
+    expect(links).toHaveLength(12);
 
     const labels = links.map((link) => link.text().trim());
     expect(labels).toEqual([
@@ -76,6 +76,7 @@ describe('App.vue (router navigation)', () => {
       'Follow-ups',
       'Inspection Cadences',
       'Provider History',
+      'USOAP Evidence Report',
     ]);
   });
 

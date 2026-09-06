@@ -79,6 +79,12 @@ const routes = [
     meta: { requiresAuth: true, requiredRoles: ['inspector', 'planner', 'reporter', 'admin'] },
   },
   {
+    path: '/usoap-evidence-report',
+    name: 'usoapEvidenceReport',
+    component: () => import('@/views/UsoapEvidenceReport.vue'),
+    meta: { requiresAuth: true, requiredRoles: ['inspector', 'planner', 'reporter', 'admin'] },
+  },
+  {
     path: '/notifications',
     name: 'notifications',
     component: () => import('@/views/NotificationCenter.vue'),
