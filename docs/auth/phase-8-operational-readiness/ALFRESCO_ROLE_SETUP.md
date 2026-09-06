@@ -15,9 +15,12 @@ The application authenticates users through Alfresco and assigns roles based on 
 |------|---------|-----------|
 | `admin` | Full system access | All endpoints |
 | `inspector` | Execute inspections, manage findings | Findings, CAP review, reports |
-| `planner` | Plan and assign inspections | Assign inspectors, inspection plans |
+| `planner` | Plan inspections | Inspection plans |
+| `assigner` | Assign inspectors to specialties | `/assign-inspectors` |
 | `cap_entry` | Submit corrective actions | CAP submission to findings |
 | `reporter` | Generate reports | Report viewing and generation |
+
+`assigner` was previously scoped to a subset of specialties by AGA/SNA/VA Alfresco-group membership (a separate mechanism from this role mapping). That domain-based scoping was retired along with the domain grouping itself — anyone with the `assigner` role now sees/acts on all 16 specialties, with no further group-based restriction.
 
 ## Step 1: Create Alfresco Groups
 
@@ -26,8 +29,9 @@ In Alfresco, create groups corresponding to each application role. Recommended g
 1. **admin** → Create group: `app-admin`
 2. **inspector** → Create group: `app-inspector`  
 3. **planner** → Create group: `app-planner`
-4. **cap_entry** → Create group: `app-cap-entry`
-5. **reporter** → Create group: `app-reporter`
+4. **assigner** → Create group: `app-assigner`
+5. **cap_entry** → Create group: `app-cap-entry`
+6. **reporter** → Create group: `app-reporter`
 
 ### Via Alfresco Share UI
 

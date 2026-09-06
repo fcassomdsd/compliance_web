@@ -1,25 +1,25 @@
 <template>
-  <BaseManager title="Assign Inspectors">
+  <BaseManager :title="t('assignInspectors.title')">
     <div class="input-group">
       <div class="grid-cell1 grid-item">
-        <label for="selectedSiteVisit">Selected Site Visit:</label>
-        <input id="selectedSiteVisit" type="text" :value="currentInspection?.code || 'None'" disabled />
+        <label for="selectedSiteVisit">{{ t('inspectionPlan.selectedSiteVisit') }}</label>
+        <input id="selectedSiteVisit" type="text" :value="currentInspection?.code || t('inspectionPlan.none')" disabled />
       </div>
       <div class="grid-cell2 grid-item">
-        <label for="locationName">Location:</label>
+        <label for="locationName">{{ t('inspectionPlan.location') }}</label>
         <input id="locationName" type="text" :value="currentInspection?.locationName || ''" disabled />
       </div>
       <div class="input-buttons">
-        <BaseButton id="saveBtn" variant="ghost" size="sm" :icon="saveImg" alt="Save" :disabled="!currentInspection || currentProviderId === 'NONE'" @click="saveAssignments" />
-        <BaseButton id="cancelBtn" variant="ghost" size="sm" :icon="cancelImg" alt="Cancel" :disabled="!currentInspection" @click="cancelAssignments" />
+        <BaseButton id="saveBtn" variant="ghost" size="sm" :icon="saveImg" :alt="t('common.save')" :disabled="!currentInspection || currentProviderId === 'NONE'" @click="saveAssignments" />
+        <BaseButton id="cancelBtn" variant="ghost" size="sm" :icon="cancelImg" :alt="t('common.cancel')" :disabled="!currentInspection" @click="cancelAssignments" />
       </div>
     </div>
 
     <div class="detail-group" v-if="currentInspection">
       <div class="detail-buttons">
-        <span class="subtitle">Inspection Specialties</span>
+        <span class="subtitle">{{ t('assignInspectors.inspectionSpecialties') }}</span>
         <select v-model="currentProviderId" @change="onProviderChange" class="provider-select">
-          <option value="NONE">Select provider</option>
+          <option value="NONE">{{ t('assignInspectors.selectProvider') }}</option>
           <option v-for="pi in providerInspections" :key="pi.id" :value="pi.id">
             {{ pi.serviceProviderName || pi.name || pi.serviceProviderId }}
           </option>
@@ -33,8 +33,8 @@
           </colgroup>
           <thead>
             <tr>
-              <th>Specialty</th>
-              <th>Assign Inspectors</th>
+              <th>{{ t('assignInspectors.specialty') }}</th>
+              <th>{{ t('assignInspectors.assignInspectors') }}</th>
             </tr>
           </thead>
           <tbody>
@@ -67,10 +67,10 @@
         </colgroup>
         <thead>
           <tr>
-            <th>Code</th>
-            <th>Location</th>
-            <th>Start Date</th>
-            <th>Actions</th>
+            <th>{{ t('inspectionPlan.table.code') }}</th>
+            <th>{{ t('inspectionPlan.location') }}</th>
+            <th>{{ t('inspectionPlan.table.startDate') }}</th>
+            <th>{{ t('common.actions') }}</th>
           </tr>
         </thead>
         <tbody>
@@ -80,7 +80,7 @@
             <td>{{ formatDate(inspection?.startDate) }}</td>
             <td class="actions-cell">
               <div>
-                <BaseButton :id="`select-${inspection.id}`" variant="ghost" size="sm" :icon="viewImg" alt="Select" :disabled="inspectorStore.inspectors.length==0" @click="selectInspection(inspection)" />
+                <BaseButton :id="`select-${inspection.id}`" variant="ghost" size="sm" :icon="viewImg" :alt="t('common.view')" :disabled="inspectorStore.inspectors.length==0" @click="selectInspection(inspection)" />
               </div>
             </td>
           </tr>
@@ -92,6 +92,7 @@
 
 <script setup>
 import { onMounted, ref, computed } from 'vue';
+import { useI18n } from 'vue-i18n';
 import BaseManager from '@/components/base/BaseManager.vue';
 import BaseButton from '@/components/base/BaseButton.vue';
 import { useSiteVisitStore } from '@/stores/siteVisitStore';
@@ -100,8 +101,6 @@ import { useInspectorStore } from '@/stores/inspectorStore';
 import { useInspectedSpecialtyStore } from '@/stores/inspectedSpecialtyStore';
 import { formatDate } from '@/utils/formatDate';
 import { useInspectedProviderStore } from '@/stores/inspectedProviderStore';
-import { useAuthStore } from '@/stores/authStore';
-// specialtyStore not required here; inspectorStore provides inspector specialties
 import { useToast } from 'vue-toastification';
 import saveImg from '@/assets/images/icons/save.png';
 import cancelImg from '@/assets/images/icons/cancel.png';
@@ -109,12 +108,12 @@ import viewImg from '@/assets/images/icons/view.png';
 import { apiEntityLinks } from '@/services/apiServices';
 import { INSPECTION_STATUS, canAssignInspectors, isActive, shouldRevertToAssignedOnReassign } from '@/utils/siteVisitStatus';
 
+const { t } = useI18n();
 const siteVisitStore = useSiteVisitStore();
 const inspectionStore = useInspectionStore();
 const inspectorStore = useInspectorStore();
 const inspectedStore = useInspectedSpecialtyStore();
 const inspectedProviderStore = useInspectedProviderStore();
-const authStore = useAuthStore();
 const toast = useToast();
 
 const currentInspection = ref(null);
@@ -139,7 +138,7 @@ onMounted(async () => {
 
   // if there are no inspectors, do not allow inspections selection
   if (inspectorStore.inspectors.length === 0) {
-    toast.warning('No inspectors available. Please add inspectors before assigning.');
+    toast.warning(t('assignInspectors.toast.noInspectors'));
   } else {
     // load inspector specialties if not already loaded
     await inspectorStore.loadInspectorSpecialties();
@@ -154,16 +153,11 @@ const buildSpecialtiesList = () => {
   allowedInspectorList.value = {};
   assigned.value = {};
   const specObj = inspectedStore.inspectedSpecialties || {};
-  const assignerScopeIds = authStore.assignerSpecialtyIds;
-  const enforceAssignerScope = authStore.hasRole('assigner')
-    && !authStore.hasRole(['admin', 'planner'])
-    && assignerScopeIds.size > 0;
 
+  // Specialties are no longer narrowed by assigner domain group (AGA/SNA/VA):
+  // that grouping has been retired, so every specialty on the inspection is
+  // assignable by anyone who can reach this view.
   for (const specKey of Object.keys(specObj)) {
-      if (enforceAssignerScope && !assignerScopeIds.has(specKey)) {
-        continue;
-      }
-
       const specialty = specObj[specKey];
       specialtiesList.value.push({ "id" : specKey, name: specialty.name, inspectedId: specialty.id });
       // prefill assignments by matching inspectors' declared specialties
@@ -250,7 +244,7 @@ const saveAssignments = async () => {
       };
 
       if (Object.keys(toAddAssignments).length === 0 && Object.keys(toRemoveAssignments).length === 0) {
-        toast.info('No changes to save');
+        toast.info(t('assignInspectors.toast.noChanges'));
         return;
       }
       
@@ -264,26 +258,26 @@ const saveAssignments = async () => {
         await inspectedStore.unlinkActingInspectors(toRemoveAssignments[specKey].inspectedSpecialtyId, toRemoveAssignments[specKey].inspectors);
       }
 
-      toast.success('Inspector assignments saved successfully.');
+      toast.success(t('assignInspectors.toast.saveSuccess'));
 
       const inspections = inspectionStore.getForInspectedProvider(currentProviderId.value);
       const inspStatus = inspections.length > 0 ? inspections[0].status : null;
 
       if (inspStatus === INSPECTION_STATUS.DEFINED) {
         await inspectionStore.updateInspectionStatus(currentProviderId.value, INSPECTION_STATUS.ASSIGNED);
-        toast.success('Inspection status updated to Assigned');
+        toast.success(t('assignInspectors.toast.statusUpdated'));
       } else if (inspStatus && shouldRevertToAssignedOnReassign(inspStatus)) {
         await inspectionStore.updateInspectionStatus(currentProviderId.value, INSPECTION_STATUS.ASSIGNED);
-        toast.success('Inspection status reverted to Assigned');
+        toast.success(t('assignInspectors.toast.statusReverted'));
       }
     } catch (error) {
-      toast.error('Could not save assignments: ' + error.message);
+      toast.error(t('assignInspectors.toast.saveError', { message: error.message }));
     }
 };
 
 const cancelAssignments = () => {
   buildSpecialtiesList();
-  toast.info('Changes cancelled');
+  toast.info(t('assignInspectors.toast.changesCancelled'));
 };
 
 </script>

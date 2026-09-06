@@ -1,10 +1,16 @@
 <template>
   <section class="not-found">
-    <h1>Page not found</h1>
-    <p>The page you requested does not exist.</p>
-    <RouterLink class="home-link" to="/site-visit">Go to Site Visit Manager</RouterLink>
+    <h1>{{ t('notFound.title') }}</h1>
+    <p>{{ t('notFound.message') }}</p>
+    <RouterLink class="home-link" to="/site-visit">{{ t('notFound.goHome') }}</RouterLink>
   </section>
 </template>
+
+<script setup>
+import { useI18n } from 'vue-i18n';
+
+const { t } = useI18n();
+</script>
 
 <style scoped>
 .not-found {

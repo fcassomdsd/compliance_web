@@ -52,6 +52,7 @@ describe('FindingManager.vue', () => {
       setFilter: vi.fn(),
       fetchFindings: vi.fn().mockResolvedValue(undefined),
       fetchFindingDetail: vi.fn().mockResolvedValue(undefined),
+      reviewFinding: vi.fn().mockResolvedValue(undefined),
     };
     vi.mocked(useFindingStore).mockReturnValue(mockFindingStore);
   });
@@ -75,7 +76,7 @@ describe('FindingManager.vue', () => {
     wrapper.vm.scope.inspectionId = 'INS-1';
     wrapper.vm.scope.providerId = 'PROV-1';
     wrapper.vm.scope.locationId = 'LOC-1';
-    wrapper.vm.scope.specialtyCode = 'AYVIS';
+    wrapper.vm.scope.specialtyCode = 'AVIS';
     wrapper.vm.scope.domain = 'OPS';
     wrapper.vm.scope.capOverdueOnly = true;
 
@@ -86,7 +87,7 @@ describe('FindingManager.vue', () => {
     expect(mockFindingStore.setFilter).toHaveBeenCalledWith('inspectionId', 'INS-1');
     expect(mockFindingStore.setFilter).toHaveBeenCalledWith('providerId', 'PROV-1');
     expect(mockFindingStore.setFilter).toHaveBeenCalledWith('locationId', 'LOC-1');
-    expect(mockFindingStore.setFilter).toHaveBeenCalledWith('specialtyCode', 'AYVIS');
+    expect(mockFindingStore.setFilter).toHaveBeenCalledWith('specialtyCode', 'AVIS');
     expect(mockFindingStore.setFilter).toHaveBeenCalledWith('domain', 'OPS');
     expect(mockFindingStore.setFilter).toHaveBeenCalledWith('capOverdueOnly', false);
     expect(mockFindingStore.setFilter).toHaveBeenCalledWith('solutionOverdueOnly', false);
@@ -195,5 +196,85 @@ describe('FindingManager.vue', () => {
 
     expect(mockRouter.push).toHaveBeenNthCalledWith(1, { name: 'followUps', query: { findingId: 'F-1' } });
     expect(mockRouter.push).toHaveBeenNthCalledWith(2, { name: 'followUps', query: { findingId: 'F-9' } });
+  });
+
+  it('shows the Review action only for Non-Compliance findings not yet confirmed', async () => {
+    mockFindingStore.findings = [
+      { findingId: 'F-1', findingLevel: 'Non-Compliance', findingReviewStatus: 'Pending Review', effectiveStatus: 'Open' },
+      { findingId: 'F-2', findingLevel: 'Observation', findingReviewStatus: 'Pending Review', effectiveStatus: 'Open' },
+      { findingId: 'F-3', findingLevel: 'Non-Compliance', findingReviewStatus: 'Confirmed', effectiveStatus: 'Open' },
+    ];
+    const wrapper = mountComponent();
+    await wrapper.vm.$nextTick();
+
+    const reviewButtons = wrapper.findAll('button').filter((btn) => btn.text() === 'Review');
+    expect(reviewButtons).toHaveLength(1);
+  });
+
+  it('startReview enters review mode and fetches the finding detail', async () => {
+    const wrapper = mountComponent();
+    await wrapper.vm.$nextTick();
+
+    await wrapper.vm.startReview('F-1');
+
+    expect(mockFindingStore.fetchFindingDetail).toHaveBeenCalledWith('F-1');
+    expect(wrapper.vm.reviewMode).toBe(true);
+  });
+
+  it('renders readonly review fields and evidence, editable only for severity', async () => {
+    mockFindingStore.selectedFinding = {
+      findingId: 'F-4',
+      findingLevel: 'Non-Compliance',
+      findingReviewStatus: 'Pending Review',
+      dateIssued: '2026-02-01',
+      requirementBreached: 'REG-4',
+      checklistItemCode: 'CHK-4',
+      description: 'Non-compliant item',
+      nationalRegulation: 'RAC 139',
+      regulationItem: '4.2.1',
+      findingSeverity: 'B',
+      evidence: [{ nodeId: 'ev-1', name: 'photo.jpg' }],
+    };
+    const wrapper = mountComponent();
+    await wrapper.vm.startReview('F-4');
+    await wrapper.vm.$nextTick();
+
+    expect(wrapper.text()).toContain('Review Finding: F-4');
+    expect(wrapper.text()).toContain('REG-4');
+    expect(wrapper.text()).toContain('CHK-4');
+    expect(wrapper.text()).toContain('RAC 139');
+    expect(wrapper.text()).toContain('4.2.1');
+    expect(wrapper.text()).toContain('photo.jpg');
+    expect(wrapper.find('#reviewFindingSeverity').exists()).toBe(true);
+  });
+
+  it('confirmReview submits only findingSeverity and exits review mode', async () => {
+    mockFindingStore.selectedFinding = {
+      findingId: 'F-5',
+      findingLevel: 'Non-Compliance',
+      findingReviewStatus: 'Pending Review',
+      findingSeverity: 'C',
+    };
+    const wrapper = mountComponent();
+    await wrapper.vm.startReview('F-5');
+    wrapper.vm.reviewSeverity = 'A';
+
+    await wrapper.vm.confirmReview();
+
+    expect(mockFindingStore.reviewFinding).toHaveBeenCalledWith(
+      expect.objectContaining({ findingId: 'F-5', edits: { findingSeverity: 'A' } })
+    );
+    expect(wrapper.vm.reviewMode).toBe(false);
+  });
+
+  it('cancelReview exits review mode without submitting', async () => {
+    const wrapper = mountComponent();
+    await wrapper.vm.startReview('F-1');
+    expect(wrapper.vm.reviewMode).toBe(true);
+
+    wrapper.vm.cancelReview();
+
+    expect(wrapper.vm.reviewMode).toBe(false);
+    expect(mockFindingStore.reviewFinding).not.toHaveBeenCalled();
   });
 });

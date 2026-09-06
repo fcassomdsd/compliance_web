@@ -78,11 +78,11 @@ describe('capStore', () => {
   });
 
   it('reviewCap returns API data and tracks errors', async () => {
-    const payload = { capId: 'CAP-5', acceptanceStatus: 'Accepted', csrfToken: 'csrf' };
+    const payload = { capId: 'CAP-5', acceptanceStatus: 'Not Accepted', csrfToken: 'csrf', reason: 'Root cause insufficient' };
     vi.mocked(apiReviewCap).mockResolvedValue({ data: { reviewed: true } });
 
     await expect(store.reviewCap(payload)).resolves.toEqual({ reviewed: true });
-    expect(apiReviewCap).toHaveBeenCalledWith('CAP-5', 'Accepted', 'csrf');
+    expect(apiReviewCap).toHaveBeenCalledWith('CAP-5', 'Not Accepted', 'csrf', 'Root cause insufficient');
 
     vi.mocked(apiReviewCap).mockRejectedValueOnce(new Error('review failed'));
     await expect(store.reviewCap(payload)).rejects.toThrow('review failed');

@@ -4,6 +4,7 @@ const FINDING_STATUS = Object.freeze({
   CAP_ACCEPTED: 'CAP Accepted',
   IN_PROGRESS: 'In Progress',
   PENDING_CLOSURE_REVIEW: 'Pending Closure Review',
+  PENDING_CLOSURE_APPROVAL: 'Pending Closure Approval',
   CLOSED: 'Closed',
   // Legacy value kept only for backward-compatible comparisons against
   // previously-persisted data. No longer assigned by computeEffectiveFindingStatus().
@@ -17,8 +18,7 @@ const FINDING_STATUS = Object.freeze({
 const CAP_ACCEPTANCE_STATUS = Object.freeze({
   PENDING_REVIEW: 'Pending review',
   ACCEPTED: 'Accepted',
-  REJECTED: 'Rejected',
-  RETURNED_FOR_REVISION: 'Returned',
+  NOT_ACCEPTED: 'Not Accepted',
 });
 
 const ACTION_ITEM_STATUS = Object.freeze({
@@ -187,13 +187,137 @@ function isValidCapAcceptanceStatus(status) {
   return Object.values(CAP_ACCEPTANCE_STATUS).includes(status);
 }
 
-// A CAP's content (RCA, risk assessment, action items, residual risk,
-// effectiveness verification) can only be edited in place while it's
-// Returned for revision. Pending-review/Accepted/Rejected CAPs are
+// The review decision itself is narrower than the full acceptance-status
+// enum — a reviewer can only ever choose Accepted or Not Accepted (never
+// set a CAP back to Pending review, which is only reachable via creation
+// or resubmission).
+function isValidCapReviewDecision(status) {
+  return status === CAP_ACCEPTANCE_STATUS.ACCEPTED || status === CAP_ACCEPTANCE_STATUS.NOT_ACCEPTED;
+}
+
+const CLOSURE_VERIFICATION_FOLLOW_UP_TYPE = 'Closure Verification';
+
+// A follow-up may only request closure with this exact type/flag combination
+// (see CLAUDE.md's closure gate rule); any other combination attempting
+// closure must be rejected rather than silently downgraded.
+function isValidClosureRequest({ followUpType, findingClosed, effectivenessConfirmed }) {
+  if (!findingClosed) {
+    return true;
+  }
+  return followUpType === CLOSURE_VERIFICATION_FOLLOW_UP_TYPE && effectivenessConfirmed === true;
+}
+
+function canReviewClosure(findingStatus) {
+  return findingStatus === FINDING_STATUS.PENDING_CLOSURE_APPROVAL;
+}
+
+const DEADLINE_EXTENSION_STATUS = Object.freeze({
+  REQUESTED: 'Requested',
+  ACCEPTED: 'Accepted',
+  REJECTED: 'Rejected',
+});
+
+// A new extension request may only be submitted while there's no pending
+// one — i.e. never requested yet, or the last one already reached a
+// terminal state (Accepted/Rejected).
+function canRequestDeadlineExtension(deadlineExtensionStatus) {
+  return !deadlineExtensionStatus
+    || deadlineExtensionStatus === DEADLINE_EXTENSION_STATUS.ACCEPTED
+    || deadlineExtensionStatus === DEADLINE_EXTENSION_STATUS.REJECTED;
+}
+
+function canReviewDeadlineExtension(deadlineExtensionStatus) {
+  return deadlineExtensionStatus === DEADLINE_EXTENSION_STATUS.REQUESTED;
+}
+
+function isValidDeadlineExtensionDecision(status) {
+  return status === DEADLINE_EXTENSION_STATUS.ACCEPTED || status === DEADLINE_EXTENSION_STATUS.REJECTED;
+}
+
+const EVIDENCE_REVIEW_STATUS = Object.freeze({
+  PENDING_REVIEW: 'Pending Review',
+  ADEQUATE: 'Adequate',
+  INADEQUATE: 'Inadequate',
+});
+
+// A follow-up's evidence can only be reviewed once, while still pending
+// (missing is treated as pending, for any follow-up predating this field).
+function canReviewEvidence(evidenceReviewStatus) {
+  return !evidenceReviewStatus || evidenceReviewStatus === EVIDENCE_REVIEW_STATUS.PENDING_REVIEW;
+}
+
+function isValidEvidenceReviewDecision(status) {
+  return status === EVIDENCE_REVIEW_STATUS.ADEQUATE || status === EVIDENCE_REVIEW_STATUS.INADEQUATE;
+}
+
+const FINDING_REVIEW_STATUS = Object.freeze({
+  PENDING_REVIEW: 'Pending Review',
+  CONFIRMED: 'Confirmed',
+});
+
+// Only findings imported via the canonical path (going forward) carry this
+// property at all; missing is treated as reviewable/confirmed so existing
+// findings from before this field existed aren't retroactively blocked.
+function canReviewFinding(findingReviewStatus) {
+  return !findingReviewStatus || findingReviewStatus === FINDING_REVIEW_STATUS.PENDING_REVIEW;
+}
+
+function isFindingReviewConfirmed(findingReviewStatus) {
+  return !findingReviewStatus || findingReviewStatus === FINDING_REVIEW_STATUS.CONFIRMED;
+}
+
+// A follow-up may only affect vso:findingStatus once its evidence has been
+// confirmed Adequate — never at submission time, and never while still
+// Pending Review or Inadequate. See CLAUDE.md's closure gate rule for the
+// followUpType/effectivenessConfirmed condition itself.
+function resolveFindingStatusFromFollowUp({ followUpType, effectivenessConfirmed, percentComplete }) {
+  const closureRequested = followUpType === CLOSURE_VERIFICATION_FOLLOW_UP_TYPE && effectivenessConfirmed === true;
+  if (closureRequested) {
+    return FINDING_STATUS.PENDING_CLOSURE_APPROVAL;
+  }
+  if (Number(percentComplete || 0) >= 100) {
+    return FINDING_STATUS.PENDING_CLOSURE_REVIEW;
+  }
+  return FINDING_STATUS.IN_PROGRESS;
+}
+
+// A CAP's content (RCA, risk assessment, containment measures, action
+// items, residual risk, effectiveness verification) can only be edited in
+// place while it's Not Accepted. Pending-review/Accepted CAPs are
 // immutable content-wise. Draft CAPs are staged outside Alfresco
 // entirely (see cap_draft table) and never reach this check.
 function isCapEditable(acceptanceStatus) {
-  return acceptanceStatus === CAP_ACCEPTANCE_STATUS.RETURNED_FOR_REVISION;
+  return acceptanceStatus === CAP_ACCEPTANCE_STATUS.NOT_ACCEPTED;
+}
+
+const CAP_CRITERION_RESPONSE = Object.freeze({
+  SI: 'Sí',
+  NO: 'No',
+  NOT_APPLICABLE: 'No aplica',
+});
+
+function isValidCriterionResponse(value) {
+  return Object.values(CAP_CRITERION_RESPONSE).includes(value);
+}
+
+// A CAP's manual evaluation (IDAC-PAC-EVAL-01) is complete once every
+// applicable binary criterion in the catalog has a recorded response.
+// CONTAINMENT.* criteria are skipped when the CAP has no containment
+// measures section, mirroring the same optional-section rule already
+// applied to validateContainmentMeasures in caps/router.cjs. Returns the
+// list of missing criterion codes (empty = complete) so callers can surface
+// exactly what's left, rather than just a boolean.
+function getMissingCapEvaluationCriteria(criteriaCatalog, savedCriteria = [], { hasContainment = true } = {}) {
+  const responseByCode = new Map(savedCriteria.map((row) => [row.criterionCode, row.criterionResponse]));
+  return criteriaCatalog
+    .filter((entry) => entry.kind === 'binary')
+    .filter((entry) => hasContainment || entry.section !== 'CONTAINMENT')
+    .filter((entry) => !isValidCriterionResponse(responseByCode.get(entry.code)))
+    .map((entry) => entry.code);
+}
+
+function isCapEvaluationComplete(criteriaCatalog, savedCriteria, options) {
+  return getMissingCapEvaluationCriteria(criteriaCatalog, savedCriteria, options).length === 0;
 }
 
 module.exports = {
@@ -212,5 +336,24 @@ module.exports = {
   computeEffectiveFindingStatus,
   canSubmitCap,
   isValidCapAcceptanceStatus,
+  isValidCapReviewDecision,
   isCapEditable,
+  CLOSURE_VERIFICATION_FOLLOW_UP_TYPE,
+  isValidClosureRequest,
+  canReviewClosure,
+  DEADLINE_EXTENSION_STATUS,
+  canRequestDeadlineExtension,
+  canReviewDeadlineExtension,
+  isValidDeadlineExtensionDecision,
+  EVIDENCE_REVIEW_STATUS,
+  canReviewEvidence,
+  isValidEvidenceReviewDecision,
+  resolveFindingStatusFromFollowUp,
+  FINDING_REVIEW_STATUS,
+  canReviewFinding,
+  isFindingReviewConfirmed,
+  CAP_CRITERION_RESPONSE,
+  isValidCriterionResponse,
+  getMissingCapEvaluationCriteria,
+  isCapEvaluationComplete,
 };

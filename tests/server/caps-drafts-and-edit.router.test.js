@@ -6,6 +6,17 @@ const require = createRequire(import.meta.url);
 const { createApp } = require('../../server/app.cjs');
 const { InMemorySessionRepository } = require('../setup/mocks/InMemorySessionRepository.cjs');
 const { InMemoryCapDraftRepository } = require('../setup/mocks/InMemoryCapDraftRepository.cjs');
+const { CAP_EVALUATION_CRITERIA } = require('../../server/domain/capEvaluationCriteria.cjs');
+
+// The fixture CAP has no containment measures section, so a "complete"
+// evaluation for it excludes CONTAINMENT criteria — same skip rule the
+// review gate itself applies.
+function buildCompleteCapEvaluationCriteria() {
+  return CAP_EVALUATION_CRITERIA.filter((entry) => entry.kind === 'binary' && entry.section !== 'CONTAINMENT').map((entry) => ({
+    code: entry.code,
+    response: 'Sí',
+  }));
+}
 
 function buildFixture() {
   const inspectionNode = {
@@ -22,14 +33,14 @@ function buildFixture() {
     parentId: 'inspection-node-1',
     nodeType: 'vso:finding',
     properties: {
-      'vso:findingId': 'MDPP001-AYVIS-01',
+      'vso:findingId': 'H-MDPPA0001-AVIS-001',
       'vso:findingStatus': 'Open',
       'vso:submissionDeadline': '2026-04-01',
       'vso:inspectionId': 'MDPP-001',
       'vso:locationId': 'LOC-01',
       'vso:locationCode': 'MDPP',
       'vso:locationName': 'Main Airport',
-      'vso:specialtyCode': 'AYVIS',
+      'vso:specialtyCode': 'AVIS',
       'vso:specialtyId': 'spec-ayvis',
       'vso:specialtyName': 'Aviation Safety',
       'vso:domain': 'OPS',
@@ -44,16 +55,16 @@ function buildFixture() {
     parentId: 'finding-node-1',
     nodeType: 'vso:correctiveAction',
     properties: {
-      'vso:capId': 'CA-MDPP001AYVIS-01-01',
+      'vso:capId': 'P-MDPPA0001-AVIS001-01',
       'vso:proposedAction': 'Action A',
       'vso:responsibleEntity': 'Provider 1',
       'vso:dueDate': '2026-05-01',
-      'vso:acceptanceStatus': 'Returned',
+      'vso:acceptanceStatus': 'Not Accepted',
       'vso:inspectionId': 'MDPP-001',
       'vso:locationId': 'LOC-01',
       'vso:locationCode': 'MDPP',
       'vso:locationName': 'Main Airport',
-      'vso:specialtyCode': 'AYVIS',
+      'vso:specialtyCode': 'AVIS',
       'vso:specialtyId': 'spec-ayvis',
       'vso:specialtyName': 'Aviation Safety',
       'vso:providerId': 'PR-01',
@@ -91,6 +102,10 @@ function fullCapPayload(overrides = {}) {
       calculatedRiskLevel: 'High',
       tolerabilityLevel: 'Unacceptable',
       justification: 'Based on historical occurrence data',
+    },
+    containmentMeasures: {
+      description: 'Temporary closure of the affected runway segment',
+      implementedDate: '2026-06-02',
     },
     correctiveActions: [
       {
@@ -142,7 +157,7 @@ async function buildApp({ roles = ['cap_entry'], username = 'tester', now = new 
       return [];
     },
     searchFindingByBusinessId: async ({ findingId }) => {
-      return findingId === 'MDPP001-AYVIS-01' ? fixture.findingNode : null;
+      return findingId === 'H-MDPPA0001-AVIS-001' ? fixture.findingNode : null;
     },
     searchCapByBusinessId: async ({ capId }) => {
       return fixture.capNode && capId === fixture.capNode.properties['vso:capId'] ? fixture.capNode : null;
@@ -272,10 +287,10 @@ describe('CAP drafts (Postgres-staged)', () => {
       .post('/api/caps/drafts')
       .set('Cookie', 'compliance_session_id=session-1')
       .set('x-csrf-token', 'csrf-token-1')
-      .send({ findingId: 'MDPP001-AYVIS-01', dueDate: '2026-06-01', rootCauseAnalysis: { method: 'Fishbone' } });
+      .send({ findingId: 'H-MDPPA0001-AVIS-001', dueDate: '2026-06-01', rootCauseAnalysis: { method: 'Fishbone' } });
 
     expect(createResponse.status).toBe(201);
-    expect(createResponse.body.draft.findingId).toBe('MDPP001-AYVIS-01');
+    expect(createResponse.body.draft.findingId).toBe('H-MDPPA0001-AVIS-001');
     const draftId = createResponse.body.draft.draftId;
 
     const listResponse = await request(app)
@@ -311,7 +326,7 @@ describe('CAP drafts (Postgres-staged)', () => {
       .post('/api/caps/drafts')
       .set('Cookie', 'compliance_session_id=session-1')
       .set('x-csrf-token', 'csrf-token-1')
-      .send({ findingId: 'MDPP001-AYVIS-01' });
+      .send({ findingId: 'H-MDPPA0001-AVIS-001' });
 
     expect(response.status).toBe(201);
   });
@@ -323,14 +338,14 @@ describe('CAP drafts (Postgres-staged)', () => {
       .post('/api/caps/drafts')
       .set('Cookie', 'compliance_session_id=session-1')
       .set('x-csrf-token', 'csrf-token-1')
-      .send({ findingId: 'MDPP001-AYVIS-01', correctiveActions: 'not-an-array' });
+      .send({ findingId: 'H-MDPPA0001-AVIS-001', correctiveActions: 'not-an-array' });
 
     expect(response.status).toBe(400);
   });
 
   it('updates a draft in place via PATCH', async () => {
     const { app, capDraftRepository } = await buildApp({ username: 'alice' });
-    const draft = await capDraftRepository.create({ findingId: 'MDPP001-AYVIS-01', ownerUsername: 'alice', payload: { dueDate: '2026-06-01' } });
+    const draft = await capDraftRepository.create({ findingId: 'H-MDPPA0001-AVIS-001', ownerUsername: 'alice', payload: { dueDate: '2026-06-01' } });
 
     const response = await request(app)
       .patch(`/api/caps/drafts/${draft.draftId}`)
@@ -344,7 +359,7 @@ describe('CAP drafts (Postgres-staged)', () => {
 
   it('cannot see or edit another user\'s draft', async () => {
     const { app, capDraftRepository } = await buildApp({ username: 'alice' });
-    const othersDraft = await capDraftRepository.create({ findingId: 'MDPP001-AYVIS-01', ownerUsername: 'bob', payload: {} });
+    const othersDraft = await capDraftRepository.create({ findingId: 'H-MDPPA0001-AVIS-001', ownerUsername: 'bob', payload: {} });
 
     const getResponse = await request(app)
       .get(`/api/caps/drafts/${othersDraft.draftId}`)
@@ -367,7 +382,7 @@ describe('CAP drafts (Postgres-staged)', () => {
 
   it('deletes a draft', async () => {
     const { app, capDraftRepository } = await buildApp({ username: 'alice' });
-    const draft = await capDraftRepository.create({ findingId: 'MDPP001-AYVIS-01', ownerUsername: 'alice', payload: {} });
+    const draft = await capDraftRepository.create({ findingId: 'H-MDPPA0001-AVIS-001', ownerUsername: 'alice', payload: {} });
 
     const response = await request(app)
       .delete(`/api/caps/drafts/${draft.draftId}`)
@@ -381,7 +396,7 @@ describe('CAP drafts (Postgres-staged)', () => {
   it('rejects submitting an incomplete draft for review, leaving the draft intact', async () => {
     const { app, capDraftRepository } = await buildApp({ username: 'alice' });
     const draft = await capDraftRepository.create({
-      findingId: 'MDPP001-AYVIS-01',
+      findingId: 'H-MDPPA0001-AVIS-001',
       ownerUsername: 'alice',
       payload: { dueDate: '2026-06-01' },
     });
@@ -399,7 +414,7 @@ describe('CAP drafts (Postgres-staged)', () => {
     const { app, fixture, capDraftRepository } = await buildApp({ username: 'alice' });
     fixture.capNode = null;
     const draft = await capDraftRepository.create({
-      findingId: 'MDPP001-AYVIS-01',
+      findingId: 'H-MDPPA0001-AVIS-001',
       ownerUsername: 'alice',
       payload: fullCapPayload(),
     });
@@ -416,8 +431,8 @@ describe('CAP drafts (Postgres-staged)', () => {
   });
 });
 
-describe('PATCH /api/caps/:capId (Returned-CAP editing)', () => {
-  it('rejects editing a CAP that is not Returned', async () => {
+describe('PATCH /api/caps/:capId (Not-Accepted-CAP editing)', () => {
+  it('rejects editing a CAP that is not Not Accepted', async () => {
     const { app, fixture } = await buildApp();
     fixture.capNode.properties['vso:acceptanceStatus'] = 'Pending review';
 
@@ -430,7 +445,7 @@ describe('PATCH /api/caps/:capId (Returned-CAP editing)', () => {
     expect(response.status).toBe(409);
   });
 
-  it('saves a partial edit to a Returned CAP without resubmitting (status stays Returned)', async () => {
+  it('saves a partial edit to a Not Accepted CAP without resubmitting (status stays Not Accepted)', async () => {
     const { app, fixture } = await buildApp();
 
     const response = await request(app)
@@ -440,7 +455,7 @@ describe('PATCH /api/caps/:capId (Returned-CAP editing)', () => {
       .send({ dueDate: '2026-08-01' });
 
     expect(response.status).toBe(200);
-    expect(response.body.cap.acceptanceStatus).toBe('Returned');
+    expect(response.body.cap.acceptanceStatus).toBe('Not Accepted');
     expect(response.body.cap.dueDate).toBe('2026-08-01');
     expect(fixture.findingNode.properties['vso:findingStatus']).toBe('Open');
   });
@@ -551,10 +566,10 @@ describe('PATCH /api/caps/:capId (Returned-CAP editing)', () => {
       .send({ resubmit: true, dueDate: '2026-08-01' });
 
     expect(response.status).toBe(400);
-    expect(fixture.capNode.properties['vso:acceptanceStatus']).toBe('Returned');
+    expect(fixture.capNode.properties['vso:acceptanceStatus']).toBe('Not Accepted');
   });
 
-  it('resubmits a complete Returned CAP: status flips to Pending review and finding to CAP Submitted', async () => {
+  it('resubmits a complete Not Accepted CAP: status flips to Pending review and finding to CAP Submitted', async () => {
     const { app, fixture } = await buildApp();
 
     const payload = fullCapPayload();
@@ -573,7 +588,7 @@ describe('PATCH /api/caps/:capId (Returned-CAP editing)', () => {
 describe('PATCH /api/caps/:capId/review preconditions', () => {
   it('rejects reviewing a CAP that is not Pending review', async () => {
     const { app, fixture } = await buildApp({ roles: ['inspector'] });
-    fixture.capNode.properties['vso:acceptanceStatus'] = 'Returned';
+    fixture.capNode.properties['vso:acceptanceStatus'] = 'Not Accepted';
 
     const response = await request(app)
       .patch(`/api/caps/${fixture.capNode.properties['vso:capId']}/review`)
@@ -588,6 +603,12 @@ describe('PATCH /api/caps/:capId/review preconditions', () => {
     const { app, fixture } = await buildApp({ roles: ['inspector'] });
     fixture.capNode.properties['vso:acceptanceStatus'] = 'Pending review';
 
+    await request(app)
+      .put(`/api/caps/${fixture.capNode.properties['vso:capId']}/evaluation`)
+      .set('Cookie', 'compliance_session_id=session-1')
+      .set('x-csrf-token', 'csrf-token-1')
+      .send({ criteria: buildCompleteCapEvaluationCriteria() });
+
     const response = await request(app)
       .patch(`/api/caps/${fixture.capNode.properties['vso:capId']}/review`)
       .set('Cookie', 'compliance_session_id=session-1')
@@ -596,6 +617,58 @@ describe('PATCH /api/caps/:capId/review preconditions', () => {
 
     expect(response.status).toBe(200);
     expect(response.body.cap.acceptanceStatus).toBe('Accepted');
+    expect(response.body.cap.capReviewedBy).toBe('tester');
+    expect(response.body.cap.capReviewDate).toBeTruthy();
+  });
+
+  it('rejects marking a CAP Not Accepted without a reason', async () => {
+    const { app, fixture } = await buildApp({ roles: ['inspector'] });
+    fixture.capNode.properties['vso:acceptanceStatus'] = 'Pending review';
+
+    const response = await request(app)
+      .patch(`/api/caps/${fixture.capNode.properties['vso:capId']}/review`)
+      .set('Cookie', 'compliance_session_id=session-1')
+      .set('x-csrf-token', 'csrf-token-1')
+      .send({ acceptanceStatus: 'Not Accepted' });
+
+    expect(response.status).toBe(400);
+    expect(response.body.code).toBe('CAP_REVIEW_REASON_REQUIRED');
+  });
+
+  it('marks a CAP Not Accepted and records the reason', async () => {
+    const { app, fixture } = await buildApp({ roles: ['inspector'] });
+    fixture.capNode.properties['vso:acceptanceStatus'] = 'Pending review';
+
+    await request(app)
+      .put(`/api/caps/${fixture.capNode.properties['vso:capId']}/evaluation`)
+      .set('Cookie', 'compliance_session_id=session-1')
+      .set('x-csrf-token', 'csrf-token-1')
+      .send({ criteria: buildCompleteCapEvaluationCriteria() });
+
+    const response = await request(app)
+      .patch(`/api/caps/${fixture.capNode.properties['vso:capId']}/review`)
+      .set('Cookie', 'compliance_session_id=session-1')
+      .set('x-csrf-token', 'csrf-token-1')
+      .send({ acceptanceStatus: 'Not Accepted', reason: 'Root cause does not explain the finding' });
+
+    expect(response.status).toBe(200);
+    expect(response.body.cap.acceptanceStatus).toBe('Not Accepted');
+    expect(response.body.cap.capReviewReason).toBe('Root cause does not explain the finding');
+    expect(fixture.findingNode.properties['vso:findingStatus']).toBe('Open');
+  });
+
+  it('rejects an invalid review decision value', async () => {
+    const { app, fixture } = await buildApp({ roles: ['inspector'] });
+    fixture.capNode.properties['vso:acceptanceStatus'] = 'Pending review';
+
+    const response = await request(app)
+      .patch(`/api/caps/${fixture.capNode.properties['vso:capId']}/review`)
+      .set('Cookie', 'compliance_session_id=session-1')
+      .set('x-csrf-token', 'csrf-token-1')
+      .send({ acceptanceStatus: 'Returned' });
+
+    expect(response.status).toBe(400);
+    expect(response.body.code).toBe('CAP_BAD_REVIEW_STATUS');
   });
 });
 
@@ -653,7 +726,7 @@ describe('CAP evidence management (view/remove)', () => {
     expect(response.status).toBe(404);
   });
 
-  it('removes evidence from a Returned CAP', async () => {
+  it('removes evidence from a Not Accepted CAP', async () => {
     const { app, fixture } = await buildApp();
     const { sectionNode, evidenceNode } = seedRcaEvidence(fixture);
 
@@ -667,7 +740,7 @@ describe('CAP evidence management (view/remove)', () => {
     expect(fixture.evidenceAssociations.get(sectionNode.id)).toHaveLength(0);
   });
 
-  it('rejects removing evidence from a CAP that is not Returned', async () => {
+  it('rejects removing evidence from a CAP that is not Not Accepted', async () => {
     const { app, fixture } = await buildApp();
     fixture.capNode.properties['vso:acceptanceStatus'] = 'Pending review';
     const { evidenceNode } = seedRcaEvidence(fixture);

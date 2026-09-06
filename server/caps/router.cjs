@@ -9,6 +9,8 @@ const {
   mapFollowUpReportNode,
   mapEvidenceItemNode,
   mapCorrectiveActionItemNode,
+  mapCapEvaluationNode,
+  getCurrentCapEvaluation,
   getCapChildSections,
   listEvidenceForSection,
   resolveFindingIdForCap,
@@ -18,6 +20,8 @@ const {
   parseCapId,
   parseFindingId,
   buildCapIdFromFinding,
+  FINDING_ID_SHAPE,
+  CAP_ID_SHAPE,
 } = require('../domain/idFormats.cjs');
 const {
   FINDING_STATUS,
@@ -26,9 +30,16 @@ const {
   isValidActionItemStatus,
   computeEffectiveFindingStatus,
   canSubmitCap,
-  isValidCapAcceptanceStatus,
+  isValidCapReviewDecision,
   isCapEditable,
+  isFindingReviewConfirmed,
+  CAP_CRITERION_RESPONSE,
+  isValidCriterionResponse,
+  getMissingCapEvaluationCriteria,
 } = require('../domain/statusRules.cjs');
+const { CAP_EVALUATION_CRITERIA } = require('../domain/capEvaluationCriteria.cjs');
+const { notifyRoleInbox } = require('../notifications/roleNotify.cjs');
+const { buildNotificationMessage } = require('../notifications/messages.cjs');
 
 const RCA_METHODS = ['5 Whys', 'Fishbone', 'BowTie', 'TapRooT', 'Barrier Analysis', 'Other'];
 const ACTION_PRIORITIES = ['High', 'Medium', 'Low'];
@@ -120,6 +131,24 @@ function validateCorrectiveActions(items) {
   return null;
 }
 
+// Containment measures don't apply to every finding, unlike the other CAP
+// sections — optional at the model level (see vsoModel.xml), so validated
+// as optional here too: only checked when actually provided, and with no
+// sub-field requirements even then.
+function validateContainmentMeasures(containmentMeasures) {
+  if (containmentMeasures === undefined || containmentMeasures === null) {
+    return null;
+  }
+  if (typeof containmentMeasures !== 'object') {
+    return 'containmentMeasures must be an object';
+  }
+  return null;
+}
+
+function hasContainmentMeasuresData(containmentMeasures) {
+  return Boolean(containmentMeasures?.description || containmentMeasures?.implementedDate);
+}
+
 function validateResidualRisk(residualRisk) {
   if (!residualRisk || typeof residualRisk !== 'object') {
     return 'residualRisk is required';
@@ -149,13 +178,16 @@ function validateEffectivenessVerification(verification) {
 // content. Full completeness is enforced by the strict validate* functions
 // above, only when a draft is submitted for review.
 function validateCapDraftPayloadShape(payload) {
-  const { rootCauseAnalysis, riskAssessment, correctiveActions, residualRisk, effectivenessVerification } = payload || {};
+  const { rootCauseAnalysis, riskAssessment, containmentMeasures, correctiveActions, residualRisk, effectivenessVerification } = payload || {};
 
   if (rootCauseAnalysis !== undefined && (typeof rootCauseAnalysis !== 'object' || rootCauseAnalysis === null)) {
     return 'rootCauseAnalysis must be an object';
   }
   if (riskAssessment !== undefined && (typeof riskAssessment !== 'object' || riskAssessment === null)) {
     return 'riskAssessment must be an object';
+  }
+  if (containmentMeasures !== undefined && (typeof containmentMeasures !== 'object' || containmentMeasures === null)) {
+    return 'containmentMeasures must be an object';
   }
   if (residualRisk !== undefined && (typeof residualRisk !== 'object' || residualRisk === null)) {
     return 'residualRisk must be an object';
@@ -170,7 +202,7 @@ function validateCapDraftPayloadShape(payload) {
 }
 
 // Property-mapping for each CAP section, shared between performCapCreate
-// (fresh/promoted CAPs) and the Returned-CAP edit route, so the mapping
+// (fresh/promoted CAPs) and the Not-Accepted-CAP edit route, so the mapping
 // from payload shape to Alfresco property names lives in exactly one place.
 function buildRcaProperties(rca) {
   return {
@@ -191,6 +223,13 @@ function buildRiskAssessmentProperties(ra) {
     'vso:calculatedRiskLevel': ra.calculatedRiskLevel,
     'vso:tolerabilityLevel': ra.tolerabilityLevel,
     'vso:raJustification': ra.justification,
+  };
+}
+
+function buildContainmentMeasuresProperties(containmentMeasures) {
+  return {
+    'vso:containmentDescription': containmentMeasures.description,
+    'vso:containmentImplementedDate': containmentMeasures.implementedDate,
   };
 }
 
@@ -353,17 +392,19 @@ async function uploadEvidenceForSection({ alfrescoClient, ticket, capId, section
 // blindly — prevents one CAP's evidence being fetched/deleted via another
 // CAP's URL.
 async function findEvidenceNodeForCap({ alfrescoClient, ticket, capNode }, evidenceNodeId) {
-  const [rcaNodes, raNodes] = await Promise.all([
+  const [rcaNodes, raNodes, cmNodes] = await Promise.all([
     alfrescoClient.listChildrenByType({ ticket, parentNodeId: capNode.id, nodeType: 'vso:rootCauseAnalysis' }),
     alfrescoClient.listChildrenByType({ ticket, parentNodeId: capNode.id, nodeType: 'vso:riskAssessment' }),
+    alfrescoClient.listChildrenByType({ ticket, parentNodeId: capNode.id, nodeType: 'vso:containmentMeasures' }),
   ]);
 
-  const [rcaEvidence, raEvidence] = await Promise.all([
+  const [rcaEvidence, raEvidence, cmEvidence] = await Promise.all([
     listEvidenceForSection({ alfrescoClient, ticket, sectionNodeId: rcaNodes[0]?.id }),
     listEvidenceForSection({ alfrescoClient, ticket, sectionNodeId: raNodes[0]?.id }),
+    listEvidenceForSection({ alfrescoClient, ticket, sectionNodeId: cmNodes[0]?.id }),
   ]);
 
-  return [...rcaEvidence, ...raEvidence].find((item) => item.nodeId === evidenceNodeId) || null;
+  return [...rcaEvidence, ...raEvidence, ...cmEvidence].find((item) => item.nodeId === evidenceNodeId) || null;
 }
 
 function escapeAftsValue(value) {
@@ -432,6 +473,7 @@ async function performCapCreate({
   dueDate,
   rootCauseAnalysis,
   riskAssessment,
+  containmentMeasures,
   correctiveActions,
   residualRisk,
   effectivenessVerification,
@@ -439,7 +481,7 @@ async function performCapCreate({
 }) {
   const findingIdParts = parseFindingId(finding.findingId);
   if (!findingIdParts) {
-    return { error: { status: 400, code: 'CAP_BAD_REQUEST', message: 'Finding ID does not match expected format XXXXNNN-YYY-MM' } };
+    return { error: { status: 400, code: 'CAP_BAD_REQUEST', message: `Finding ID does not match expected format ${FINDING_ID_SHAPE}` } };
   }
 
   let effectiveCapId = capId ? String(capId).trim().toUpperCase() : '';
@@ -455,7 +497,7 @@ async function performCapCreate({
       const siblingCapId = siblingCap?.properties?.['vso:capId'];
       const parsedCap = parseCapId(siblingCapId);
       if (!parsedCap) continue;
-      if (parsedCap.compactInspectionId !== findingIdParts.compactInspectionId) continue;
+      if (parsedCap.compactActivityCode !== findingIdParts.compactActivityCode) continue;
       if (parsedCap.specialtyCode !== findingIdParts.specialtyCode) continue;
       if (parsedCap.findingSequence !== findingIdParts.findingSequence) continue;
       if (parsedCap.capSequence > maxCapSequence) {
@@ -470,10 +512,10 @@ async function performCapCreate({
   } else {
     const parsedCap = parseCapId(effectiveCapId);
     if (!parsedCap) {
-      return { error: { status: 400, code: 'CAP_BAD_REQUEST', message: 'capId must match CA-XXXXNNNYYY-MM-SS' } };
+      return { error: { status: 400, code: 'CAP_BAD_REQUEST', message: `capId must match ${CAP_ID_SHAPE}` } };
     }
     if (
-      parsedCap.compactInspectionId !== findingIdParts.compactInspectionId ||
+      parsedCap.compactActivityCode !== findingIdParts.compactActivityCode ||
       parsedCap.specialtyCode !== findingIdParts.specialtyCode ||
       parsedCap.findingSequence !== findingIdParts.findingSequence
     ) {
@@ -538,6 +580,18 @@ async function performCapCreate({
       associationType: 'vso:hasRiskAssessment',
       properties: buildRiskAssessmentProperties(riskAssessment),
     }),
+    ...(hasContainmentMeasuresData(containmentMeasures)
+      ? [
+          alfrescoClient.createChildNode({
+            ticket,
+            parentNodeId: created.id,
+            nodeType: 'vso:containmentMeasures',
+            name: `${effectiveCapId}-CONTAINMENT-MEASURES`,
+            associationType: 'vso:hasContainmentMeasures',
+            properties: buildContainmentMeasuresProperties(containmentMeasures),
+          }),
+        ]
+      : []),
     alfrescoClient.createChildNode({
       ticket,
       parentNodeId: created.id,
@@ -584,7 +638,7 @@ async function performCapCreate({
   };
 }
 
-function createCapsRouter({ auth, alfrescoClient, capDraftRepository, now = () => new Date() }) {
+function createCapsRouter({ auth, alfrescoClient, capDraftRepository, notificationService, now = () => new Date() }) {
   const router = express.Router();
 
   router.post(
@@ -613,6 +667,9 @@ function createCapsRouter({ auth, alfrescoClient, capDraftRepository, now = () =
         if (!canSubmitCap(statusMeta.effectiveStatus)) {
           return res.status(409).json(buildError('CAP_NOT_ALLOWED', 'CAP can only be submitted for Open or CAP Overdue findings'));
         }
+        if (!isFindingReviewConfirmed(finding.findingReviewStatus)) {
+          return res.status(409).json(buildError('FINDING_NOT_REVIEWED', 'This finding must be confirmed by a reviewer before a CAP can be submitted against it'));
+        }
 
         const capId = req.body?.capId;
         const proposedAction = req.body?.proposedAction;
@@ -621,6 +678,7 @@ function createCapsRouter({ auth, alfrescoClient, capDraftRepository, now = () =
 
         const rootCauseAnalysis = req.body?.rootCauseAnalysis;
         const riskAssessment = req.body?.riskAssessment;
+        const containmentMeasures = req.body?.containmentMeasures;
         const correctiveActions = req.body?.correctiveActions;
         const residualRisk = req.body?.residualRisk;
         const effectivenessVerification = req.body?.effectivenessVerification;
@@ -628,6 +686,7 @@ function createCapsRouter({ auth, alfrescoClient, capDraftRepository, now = () =
         const validationError =
           validateRootCauseAnalysis(rootCauseAnalysis) ||
           validateRiskAssessment(riskAssessment) ||
+          validateContainmentMeasures(containmentMeasures) ||
           validateCorrectiveActions(correctiveActions) ||
           validateResidualRisk(residualRisk) ||
           validateEffectivenessVerification(effectivenessVerification);
@@ -646,6 +705,7 @@ function createCapsRouter({ auth, alfrescoClient, capDraftRepository, now = () =
           dueDate,
           rootCauseAnalysis,
           riskAssessment,
+          containmentMeasures,
           correctiveActions,
           residualRisk,
           effectivenessVerification,
@@ -655,6 +715,17 @@ function createCapsRouter({ auth, alfrescoClient, capDraftRepository, now = () =
         if (result.error) {
           return res.status(result.error.status).json(buildError(result.error.code, result.error.message));
         }
+
+        await notifyRoleInbox({
+          notificationService,
+          envVar: 'INSPECTOR_NOTIFICATIONS_EMAIL',
+          eventType: 'cap_submitted',
+          ...buildNotificationMessage('cap_submitted', {
+            findingId: finding.findingId,
+            capId: result.cap?.capId || capId,
+          }),
+          context: { findingId: finding.findingId, capId: result.cap?.capId || capId },
+        });
 
         return res.status(201).json(result);
       } catch (error) {
@@ -795,6 +866,7 @@ function createCapsRouter({ auth, alfrescoClient, capDraftRepository, now = () =
           dueDate,
           rootCauseAnalysis,
           riskAssessment,
+          containmentMeasures,
           correctiveActions,
           residualRisk,
           effectivenessVerification,
@@ -803,6 +875,7 @@ function createCapsRouter({ auth, alfrescoClient, capDraftRepository, now = () =
         const validationError =
           validateRootCauseAnalysis(rootCauseAnalysis) ||
           validateRiskAssessment(riskAssessment) ||
+          validateContainmentMeasures(containmentMeasures) ||
           validateCorrectiveActions(correctiveActions) ||
           validateResidualRisk(residualRisk) ||
           validateEffectivenessVerification(effectivenessVerification);
@@ -829,6 +902,9 @@ function createCapsRouter({ auth, alfrescoClient, capDraftRepository, now = () =
         if (!canSubmitCap(statusMeta.effectiveStatus)) {
           return res.status(409).json(buildError('CAP_NOT_ALLOWED', 'CAP can only be submitted for Open or CAP Overdue findings'));
         }
+        if (!isFindingReviewConfirmed(finding.findingReviewStatus)) {
+          return res.status(409).json(buildError('FINDING_NOT_REVIEWED', 'This finding must be confirmed by a reviewer before a CAP can be submitted against it'));
+        }
 
         const result = await performCapCreate({
           alfrescoClient,
@@ -840,6 +916,7 @@ function createCapsRouter({ auth, alfrescoClient, capDraftRepository, now = () =
           dueDate,
           rootCauseAnalysis,
           riskAssessment,
+          containmentMeasures,
           correctiveActions,
           residualRisk,
           effectivenessVerification,
@@ -853,6 +930,17 @@ function createCapsRouter({ auth, alfrescoClient, capDraftRepository, now = () =
         // Only discard the draft after the Alfresco create succeeded, so a
         // failure here leaves the user's work intact.
         await capDraftRepository.delete(req.params.draftId, { ownerUsername: req.auth.username });
+
+        await notifyRoleInbox({
+          notificationService,
+          envVar: 'INSPECTOR_NOTIFICATIONS_EMAIL',
+          eventType: 'cap_submitted',
+          ...buildNotificationMessage('cap_submitted', {
+            findingId: finding.findingId,
+            capId: result.cap?.capId || capId,
+          }),
+          context: { findingId: finding.findingId, capId: result.cap?.capId || capId },
+        });
 
         return res.status(201).json(result);
       } catch (error) {
@@ -934,8 +1022,8 @@ function createCapsRouter({ auth, alfrescoClient, capDraftRepository, now = () =
     }
   );
 
-  // Content edit for a CAP that's Returned for revision. Unlike Draft
-  // (Postgres-only), a Returned CAP is already a real, already-versioned
+  // Content edit for a CAP marked Not Accepted. Unlike Draft
+  // (Postgres-only), a Not Accepted CAP is already a real, already-versioned
   // Alfresco node — each save here does create a new version, which is
   // correct: it's genuine revision history of a real submission, not
   // pre-submission noise.
@@ -956,7 +1044,7 @@ function createCapsRouter({ auth, alfrescoClient, capDraftRepository, now = () =
 
         const currentStatus = capNode?.properties?.['vso:acceptanceStatus'];
         if (!isCapEditable(currentStatus)) {
-          return res.status(409).json(buildError('CAP_NOT_EDITABLE', 'Only CAPs Returned for revision can be edited'));
+          return res.status(409).json(buildError('CAP_NOT_EDITABLE', 'Only CAPs marked Not Accepted can be edited'));
         }
 
         const {
@@ -965,6 +1053,7 @@ function createCapsRouter({ auth, alfrescoClient, capDraftRepository, now = () =
           dueDate,
           rootCauseAnalysis,
           riskAssessment,
+          containmentMeasures,
           correctiveActions,
           residualRisk,
           effectivenessVerification,
@@ -975,6 +1064,7 @@ function createCapsRouter({ auth, alfrescoClient, capDraftRepository, now = () =
           const validationError =
             validateRootCauseAnalysis(rootCauseAnalysis) ||
             validateRiskAssessment(riskAssessment) ||
+            validateContainmentMeasures(containmentMeasures) ||
             validateCorrectiveActions(correctiveActions) ||
             validateResidualRisk(residualRisk) ||
             validateEffectivenessVerification(effectivenessVerification);
@@ -1004,6 +1094,9 @@ function createCapsRouter({ auth, alfrescoClient, capDraftRepository, now = () =
           if (!canSubmitCap(statusMeta.effectiveStatus)) {
             return res.status(409).json(buildError('CAP_NOT_ALLOWED', 'CAP can only be resubmitted while its finding is Open or CAP Overdue'));
           }
+          if (!isFindingReviewConfirmed(finding.findingReviewStatus)) {
+            return res.status(409).json(buildError('FINDING_NOT_REVIEWED', 'This finding must be confirmed by a reviewer before a CAP can be resubmitted against it'));
+          }
         }
 
         await alfrescoClient.updateNodeProperties({
@@ -1015,7 +1108,7 @@ function createCapsRouter({ auth, alfrescoClient, capDraftRepository, now = () =
             ...(dueDate !== undefined ? { 'vso:dueDate': dueDate } : {}),
             'vso:acceptanceStatus': resubmit
               ? CAP_ACCEPTANCE_STATUS.PENDING_REVIEW
-              : CAP_ACCEPTANCE_STATUS.RETURNED_FOR_REVISION,
+              : CAP_ACCEPTANCE_STATUS.NOT_ACCEPTED,
           },
         });
 
@@ -1054,6 +1147,22 @@ function createCapsRouter({ auth, alfrescoClient, capDraftRepository, now = () =
                   nodeType: 'vso:riskAssessment',
                   name: `${req.params.capId}-RISK-ASSESSMENT`,
                   associationType: 'vso:hasRiskAssessment',
+                  properties,
+                })
+          );
+        }
+
+        if (containmentMeasures !== undefined) {
+          const properties = buildContainmentMeasuresProperties(containmentMeasures);
+          sectionWrites.push(
+            existingSections.containmentMeasures?.nodeId
+              ? alfrescoClient.updateNodeProperties({ ticket: req.auth.ticket, nodeId: existingSections.containmentMeasures.nodeId, properties })
+              : alfrescoClient.createChildNode({
+                  ticket: req.auth.ticket,
+                  parentNodeId: capNode.id,
+                  nodeType: 'vso:containmentMeasures',
+                  name: `${req.params.capId}-CONTAINMENT-MEASURES`,
+                  associationType: 'vso:hasContainmentMeasures',
                   properties,
                 })
           );
@@ -1140,6 +1249,14 @@ function createCapsRouter({ auth, alfrescoClient, capDraftRepository, now = () =
               'vso:lastStatusChange': nowIsoDate(now()),
             },
           });
+
+          await notifyRoleInbox({
+            notificationService,
+            envVar: 'INSPECTOR_NOTIFICATIONS_EMAIL',
+            eventType: 'cap_resubmitted',
+            ...buildNotificationMessage('cap_resubmitted', { capId: req.params.capId }),
+            context: { capId: req.params.capId },
+          });
         }
 
         const updatedCapNode = await alfrescoClient.getNodeById({ ticket: req.auth.ticket, nodeId: capNode.id });
@@ -1163,6 +1280,134 @@ function createCapsRouter({ auth, alfrescoClient, capDraftRepository, now = () =
     }
   );
 
+  router.put(
+    '/caps/:capId/evaluation',
+    auth.authenticate,
+    auth.authorize(['inspector', 'admin']),
+    auth.requireCsrf(),
+    async (req, res) => {
+      try {
+        const criteria = Array.isArray(req.body?.criteria) ? req.body.criteria : null;
+        if (!criteria) {
+          return res.status(400).json(buildError('CAP_EVALUATION_BAD_REQUEST', 'criteria must be an array'));
+        }
+
+        const catalogByCode = new Map(CAP_EVALUATION_CRITERIA.map((entry) => [entry.code, entry]));
+        for (const row of criteria) {
+          const entry = catalogByCode.get(row?.code);
+          if (!entry) {
+            return res.status(400).json(buildError('CAP_EVALUATION_BAD_CRITERION', `Unknown criterion code: ${row?.code}`));
+          }
+          if (entry.kind === 'binary' && row.response && !isValidCriterionResponse(row.response)) {
+            return res
+              .status(400)
+              .json(buildError('CAP_EVALUATION_BAD_RESPONSE', `${row.code} response must be one of: ${Object.values(CAP_CRITERION_RESPONSE).join(', ')}`));
+          }
+        }
+
+        const capNode = await alfrescoClient.searchCapByBusinessId({
+          ticket: req.auth.ticket,
+          capId: req.params.capId,
+        });
+        if (!capNode) {
+          return res.status(404).json(buildError('CAP_NOT_FOUND', 'Corrective action not found'));
+        }
+
+        const currentStatus = capNode?.properties?.['vso:acceptanceStatus'];
+        if (currentStatus !== CAP_ACCEPTANCE_STATUS.PENDING_REVIEW) {
+          return res.status(409).json(buildError('CAP_NOT_REVIEWABLE', 'Only CAPs in Pending review status can be evaluated'));
+        }
+
+        const existingEvaluation = await getCurrentCapEvaluation({
+          alfrescoClient,
+          ticket: req.auth.ticket,
+          capNodeId: capNode.id,
+        });
+
+        // An evaluation that already resulted in a decision is closed and
+        // historical — a new review cycle (after reject -> resubmit) always
+        // starts a fresh vso:capEvaluation node rather than reopening it.
+        const reuseExisting = Boolean(existingEvaluation && !existingEvaluation.decisionOutcome);
+        const evaluationDate = nowIsoDate(now());
+        let evaluationNodeId;
+
+        if (reuseExisting) {
+          evaluationNodeId = existingEvaluation.nodeId;
+          await alfrescoClient.updateNodeProperties({
+            ticket: req.auth.ticket,
+            nodeId: evaluationNodeId,
+            properties: {
+              'vso:evaluatedBy': req.auth.username,
+              'vso:evaluationDate': evaluationDate,
+            },
+          });
+
+          const existingCriterionNodes = await alfrescoClient.listChildrenByType({
+            ticket: req.auth.ticket,
+            parentNodeId: evaluationNodeId,
+            nodeType: 'vso:capEvaluationCriterion',
+          });
+          await Promise.all(
+            existingCriterionNodes.map((node) => alfrescoClient.deleteNode({ ticket: req.auth.ticket, nodeId: node.id }))
+          );
+        } else {
+          const createdEvaluation = await alfrescoClient.createChildNode({
+            ticket: req.auth.ticket,
+            parentNodeId: capNode.id,
+            nodeType: 'vso:capEvaluation',
+            name: `${req.params.capId}-EVAL-${evaluationDate}-${Date.now()}`,
+            associationType: 'vso:hasEvaluation',
+            properties: {
+              'vso:evaluatedBy': req.auth.username,
+              'vso:evaluationDate': evaluationDate,
+              'vso:specialtyCode': capNode.properties?.['vso:specialtyCode'],
+              'vso:specialtyId': capNode.properties?.['vso:specialtyId'],
+              'vso:specialtyName': capNode.properties?.['vso:specialtyName'],
+              'vso:providerId': capNode.properties?.['vso:providerId'],
+              'vso:providerName': capNode.properties?.['vso:providerName'],
+            },
+          });
+          evaluationNodeId = createdEvaluation.id;
+        }
+
+        await Promise.all(
+          criteria.map((row) => {
+            const entry = catalogByCode.get(row.code);
+            return alfrescoClient.createChildNode({
+              ticket: req.auth.ticket,
+              parentNodeId: evaluationNodeId,
+              nodeType: 'vso:capEvaluationCriterion',
+              name: `${req.params.capId}-EVAL-${entry.code}`,
+              associationType: 'vso:hasCriterion',
+              properties: {
+                'vso:criterionCode': entry.code,
+                'vso:criterionSection': entry.section,
+                'vso:criterionLabel': entry.label,
+                ...(row.response ? { 'vso:criterionResponse': row.response } : {}),
+                ...(row.observations ? { 'vso:criterionObservations': row.observations } : {}),
+              },
+            });
+          })
+        );
+
+        const criterionNodes = await alfrescoClient.listChildrenByType({
+          ticket: req.auth.ticket,
+          parentNodeId: evaluationNodeId,
+          nodeType: 'vso:capEvaluationCriterion',
+        });
+
+        return res.status(200).json({
+          evaluation: mapCapEvaluationNode(
+            { id: evaluationNodeId, properties: { 'vso:evaluatedBy': req.auth.username, 'vso:evaluationDate': evaluationDate } },
+            criterionNodes
+          ),
+        });
+      } catch (error) {
+        return res.status(502).json(buildError('CAP_EVALUATION_SAVE_FAILED', error.message));
+      }
+    }
+  );
+
   router.patch(
     '/caps/:capId/review',
     auth.authenticate,
@@ -1171,8 +1416,13 @@ function createCapsRouter({ auth, alfrescoClient, capDraftRepository, now = () =
     async (req, res) => {
       try {
         const acceptanceStatus = req.body?.acceptanceStatus;
-        if (!isValidCapAcceptanceStatus(acceptanceStatus)) {
-          return res.status(400).json(buildError('CAP_BAD_REVIEW_STATUS', 'Invalid acceptanceStatus value'));
+        if (!isValidCapReviewDecision(acceptanceStatus)) {
+          return res.status(400).json(buildError('CAP_BAD_REVIEW_STATUS', 'acceptanceStatus must be "Accepted" or "Not Accepted"'));
+        }
+
+        const reason = String(req.body?.reason || '').trim();
+        if (acceptanceStatus === CAP_ACCEPTANCE_STATUS.NOT_ACCEPTED && !reason) {
+          return res.status(400).json(buildError('CAP_REVIEW_REASON_REQUIRED', 'A reason is required when a CAP is marked Not Accepted'));
         }
 
         const capNode = await alfrescoClient.searchCapByBusinessId({
@@ -1188,13 +1438,52 @@ function createCapsRouter({ auth, alfrescoClient, capDraftRepository, now = () =
           return res.status(409).json(buildError('CAP_NOT_REVIEWABLE', 'Only CAPs in Pending review status can be reviewed'));
         }
 
+        const containmentNodes = await alfrescoClient.listChildrenByType({
+          ticket: req.auth.ticket,
+          parentNodeId: capNode.id,
+          nodeType: 'vso:containmentMeasures',
+        });
+        const currentEvaluation = await getCurrentCapEvaluation({
+          alfrescoClient,
+          ticket: req.auth.ticket,
+          capNodeId: capNode.id,
+        });
+        const missingCriteria = getMissingCapEvaluationCriteria(
+          CAP_EVALUATION_CRITERIA,
+          currentEvaluation?.criteria || [],
+          { hasContainment: containmentNodes.length > 0 }
+        );
+        if (missingCriteria.length > 0) {
+          return res.status(409).json({
+            ...buildError('CAP_EVALUATION_INCOMPLETE', 'The manual PAC evaluation must be completed before a decision can be applied'),
+            missingCriteria,
+          });
+        }
+
         const updatedCap = await alfrescoClient.updateNodeProperties({
           ticket: req.auth.ticket,
           nodeId: capNode.id,
           properties: {
             'vso:acceptanceStatus': acceptanceStatus,
+            'vso:capReviewedBy': req.auth.username,
+            'vso:capReviewDate': nowIsoDate(now()),
+            ...(reason ? { 'vso:capReviewReason': reason } : {}),
           },
         });
+
+        // Closes this evaluation pass: once stamped with an outcome, it's
+        // historical, and the next "Save evaluation" call (only reachable
+        // after a Not Accepted CAP is resubmitted) starts a new one.
+        if (currentEvaluation?.nodeId) {
+          await alfrescoClient.updateNodeProperties({
+            ticket: req.auth.ticket,
+            nodeId: currentEvaluation.nodeId,
+            properties: {
+              'vso:evaluationDecisionOutcome': acceptanceStatus,
+              ...(reason ? { 'vso:evaluationDecisionReason': reason } : {}),
+            },
+          });
+        }
 
         const capDetails = await alfrescoClient.getNodeById({
           ticket: req.auth.ticket,
@@ -1217,6 +1506,17 @@ function createCapsRouter({ auth, alfrescoClient, capDraftRepository, now = () =
             },
           });
         }
+
+        await notifyRoleInbox({
+          notificationService,
+          envVar: 'CAP_ENTRY_NOTIFICATIONS_EMAIL',
+          eventType: 'cap_reviewed',
+          ...buildNotificationMessage('cap_reviewed', {
+            capId: req.params.capId,
+            acceptanceStatusLabel: acceptanceStatus.toLowerCase(),
+          }),
+          context: { capId: req.params.capId, acceptanceStatus },
+        });
 
         return res.status(200).json({
           cap: mapCorrectiveActionNode(updatedCap),
@@ -1353,6 +1653,35 @@ function createCapsRouter({ auth, alfrescoClient, capDraftRepository, now = () =
     }
   );
 
+  router.post(
+    '/caps/:capId/containment/evidence',
+    auth.authenticate,
+    auth.authorize(['cap_entry', 'admin']),
+    auth.requireCsrf(),
+    singleEvidenceUpload('file'),
+    async (req, res) => {
+      try {
+        if (!req.file) {
+          return res.status(400).json(buildError('EVIDENCE_BAD_REQUEST', 'file is required'));
+        }
+        const result = await uploadEvidenceForSection({
+          alfrescoClient,
+          ticket: req.auth.ticket,
+          capId: req.params.capId,
+          sectionNodeType: 'vso:containmentMeasures',
+          evidenceRole: 'Containment Evidence',
+          file: req.file,
+        });
+        return res.status(result.status).json(result.body);
+      } catch (error) {
+        const status = extractRepositoryErrorStatus(error);
+        return res
+          .status(status && status >= 400 && status < 500 ? status : 502)
+          .json(buildError('EVIDENCE_UPLOAD_FAILED', extractRepositoryErrorMessage(error)));
+      }
+    }
+  );
+
   router.get(
     '/caps/:capId/evidence/:evidenceNodeId/content',
     auth.authenticate,
@@ -1409,7 +1738,7 @@ function createCapsRouter({ auth, alfrescoClient, capDraftRepository, now = () =
 
         const currentStatus = capNode?.properties?.['vso:acceptanceStatus'];
         if (!isCapEditable(currentStatus)) {
-          return res.status(409).json(buildError('CAP_NOT_EDITABLE', 'Only CAPs Returned for revision can have evidence removed'));
+          return res.status(409).json(buildError('CAP_NOT_EDITABLE', 'Only CAPs marked Not Accepted can have evidence removed'));
         }
 
         const evidence = await findEvidenceNodeForCap(

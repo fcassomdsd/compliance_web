@@ -11,7 +11,7 @@ function buildFindingNode(overrides = {}) {
     id: `finding-node-${overrides.id || '1'}`,
     nodeType: 'vso:finding',
     properties: {
-      'vso:findingId': 'MDPP001-AYVIS-01',
+      'vso:findingId': 'H-MDPPA0001-AVIS-001',
       'vso:findingStatus': 'Open',
       'vso:findingSeverity': 'A',
       'vso:riskClassification': 'High',
@@ -33,7 +33,7 @@ function buildCapNode(overrides = {}) {
     id: `cap-node-${overrides.id || '1'}`,
     nodeType: 'vso:correctiveAction',
     properties: {
-      'vso:capId': 'CA-MDPP001AYVIS-01-01',
+      'vso:capId': 'P-MDPPA0001-AVIS001-01',
       'vso:acceptanceStatus': 'Accepted',
       'vso:providerId': 'PR-01',
       'vso:locationId': 'LOC-01',

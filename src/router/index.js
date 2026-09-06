@@ -73,6 +73,24 @@ const routes = [
     meta: { requiresAuth: true, requiredRoles: ['inspector', 'planner', 'cap_entry', 'admin'] },
   },
   {
+    path: '/provider-history',
+    name: 'providerHistory',
+    component: () => import('@/views/ProviderHistoryLookup.vue'),
+    meta: { requiresAuth: true, requiredRoles: ['inspector', 'planner', 'reporter', 'admin'] },
+  },
+  {
+    path: '/notifications',
+    name: 'notifications',
+    component: () => import('@/views/NotificationCenter.vue'),
+    meta: { requiresAuth: true },
+  },
+  {
+    path: '/inspection-cadences',
+    name: 'inspectionCadences',
+    component: () => import('@/views/InspectionCadenceManager.vue'),
+    meta: { requiresAuth: true, requiredRoles: ['planner', 'admin'] },
+  },
+  {
     path: '/login',
     name: 'login',
     component: () => import('@/views/LoginView.vue'),

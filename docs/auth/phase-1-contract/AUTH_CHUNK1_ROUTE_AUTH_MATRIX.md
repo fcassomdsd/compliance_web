@@ -20,13 +20,18 @@ Pseudo-rule:
 | Route | Name | requiresAuth | requiredRoles | Notes |
 |---|---|---:|---|---|
 | /inspection | inspection | true | inspector, admin | Main inspection management |
-| /assign-inspectors | assignInspectors | true | planner, admin | Assignment workflow |
+| /assign-inspectors | assignInspectors | true | assigner, admin | Assignment workflow. Formerly scoped to a specialty subset by AGA/SNA/VA Alfresco-group membership; that domain-based scoping was retired along with the domain grouping itself — an assigner now sees/acts on all specialties. |
 | /checklist | checklist | true | inspector, planner, admin | Checklist access |
 | /inspection-plan | inspectionPlan | true | planner, admin | Planning route |
 | /inspection-report | inspectionReport | true | reporter, admin | Reporting route |
 | /api/findings | findingsApi | true | inspector, planner, cap_entry, admin | Findings list and filters |
 | /api/findings/:findingId | findingDetailApi | true | inspector, planner, cap_entry, admin | Finding detail |
 | /api/findings/:findingId/caps | capSubmitApi | true | cap_entry, admin | CAP submission |
+| /api/findings/:findingId/review | findingReviewApi | true | inspector, admin | Confirm a finding (optionally correcting description/severity/classification), only from Pending Review; PATCH |
+| /api/findings/:findingId/closure-review | findingClosureReviewApi | true | inspector, admin | Approve/reject a pending finding closure (only from Pending Closure Approval; PATCH) |
+| /api/findings/:findingId/deadline-extension-requests | deadlineExtensionRequestApi | true | cap_entry, admin | Request a resolution-deadline extension (POST) |
+| /api/findings/:findingId/deadline-extension-review | deadlineExtensionReviewApi | true | inspector, admin | Accept/reject a pending deadline extension request (only from Requested; PATCH) |
+| /api/findings/:findingId/follow-ups/:followUpId/evidence-review | followUpEvidenceReviewApi | true | inspector, admin | Mark a follow-up's evidence Adequate/Inadequate (only from Pending Review; PATCH). A follow-up cannot affect findingStatus until this is Adequate |
 | /api/caps | capsApi | true | inspector, planner, cap_entry, admin | CAP list and filters |
 | /api/caps/:capId | capDetailApi | true | inspector, planner, cap_entry, admin | CAP detail |
 | /api/caps/:capId | capUpdateApi | true | cap_entry, admin | CAP content edit (Returned CAPs only; PATCH) |
@@ -56,6 +61,7 @@ Pseudo-rule:
 3. planner: assignment and planning operations
 4. reporter: report generation and report views
 5. cap_entry: corrective action entry operations
+6. assigner: inspector-to-specialty assignment workflow (`/assign-inspectors`) — undocumented until now; the actual guard has used this role, not `planner`, since the Assign Inspectors view shipped
 
 ## 5. Mapping Source
 

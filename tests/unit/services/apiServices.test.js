@@ -248,10 +248,10 @@ describe('apiServices', () => {
     });
 
     it('calls assignment group lookup endpoint correctly', async () => {
-      const result = await apiAssignmentGroup('GROUP_U-VSO-IN_AssignerAGA');
+      const result = await apiAssignmentGroup('GROUP_U-VSO-IN_Assigner');
       expect(result.data).toEqual({
         method: 'get',
-        url: 'http://localhost:1880/assignmentGroup/GROUP_U-VSO-IN_AssignerAGA',
+        url: 'http://localhost:1880/assignmentGroup/GROUP_U-VSO-IN_Assigner',
       });
     });
 
@@ -277,11 +277,11 @@ describe('apiServices', () => {
     it('calls inspection plan/report endpoints on valid payloads', async () => {
       const plan = await apiInspectionPlan(' CODE-001 ');
       expect(plan.data.method).toBe('get');
-      expect(plan.data.url).toBe('http://localhost:1880/inspectionPlan?siteVisit=CODE-001');
+      expect(plan.data.url).toBe('http://localhost:1880/inspectionPlan?siteVisit=CODE-001&locale=en');
 
       const report = await apiInspectionReport(' CODE-001 ', ' 2026-04-02 ', ' PROVIDER-1 ');
       expect(report.data.method).toBe('get');
-      expect(report.data.url).toBe('http://localhost:1880/inspectionReport?siteVisit=CODE-001&reportDate=2026-04-02&provider=PROVIDER-1');
+      expect(report.data.url).toBe('http://localhost:1880/inspectionReport?siteVisit=CODE-001&reportDate=2026-04-02&provider=PROVIDER-1&locale=en');
     });
 
     it('wraps axios failures for inspection plan/report', async () => {
@@ -386,10 +386,10 @@ describe('apiServices', () => {
     it('validates and calls follow-up report endpoint', async () => {
       await expect(apiCreateFollowUpReport('')).rejects.toThrow('apiCreateFollowUpReport: findingId is required');
 
-      const result = await apiCreateFollowUpReport('MDPP001-AYVIS-01', { percentComplete: 55 }, 'csrf-token');
+      const result = await apiCreateFollowUpReport('H-MDPPA0001-AVIS-001', { percentComplete: 55 }, 'csrf-token');
       expect(result.data).toEqual({
         method: 'post',
-        url: '/api/findings/MDPP001-AYVIS-01/follow-ups',
+        url: '/api/findings/H-MDPPA0001-AVIS-001/follow-ups',
         data: { percentComplete: 55 },
         headers: { 'x-csrf-token': 'csrf-token' },
         withCredentials: true,
@@ -397,11 +397,11 @@ describe('apiServices', () => {
     });
 
     it('calls finding-scoped follow-up listing and creation endpoints', async () => {
-      const list = await apiFollowUps({ findingId: 'MDPP001-AYVIS-01', followUpType: 'Progress Review' });
+      const list = await apiFollowUps({ findingId: 'H-MDPPA0001-AVIS-001', followUpType: 'Progress Review' });
       expect(list.data).toEqual({
         method: 'get',
         url: '/api/findings/follow-ups',
-        params: { findingId: 'MDPP001-AYVIS-01', followUpType: 'Progress Review' },
+        params: { findingId: 'H-MDPPA0001-AVIS-001', followUpType: 'Progress Review' },
         withCredentials: true,
       });
 
@@ -410,13 +410,13 @@ describe('apiServices', () => {
         .toThrow('apiCreateFindingFollowUp: findingId is required');
 
       const create = await apiCreateFindingFollowUp(
-        'MDPP001-AYVIS-01',
+        'H-MDPPA0001-AVIS-001',
         { followUpType: 'Progress Review', percentComplete: 20 },
         'csrf-token'
       );
       expect(create.data).toEqual({
         method: 'post',
-        url: '/api/findings/MDPP001-AYVIS-01/follow-ups',
+        url: '/api/findings/H-MDPPA0001-AVIS-001/follow-ups',
         data: { followUpType: 'Progress Review', percentComplete: 20 },
         headers: { 'x-csrf-token': 'csrf-token' },
         withCredentials: true,

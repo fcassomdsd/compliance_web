@@ -10,13 +10,19 @@ describe('Inspection Store (per-provider)', () => {
   let store;
 
   const mockSiteVisit = {
-    id: 'SV1', code: 'ABCD-001', startDate: '2025-03-26', endDate: '2025-03-27',
+    id: 'SV1', code: 'V-MDSD-2026-01', startDate: '2026-03-26', endDate: '2026-03-27',
     locationId: 'LOC1', locationName: 'Location A',
   };
 
+  const mockLocation = { id: 'LOC1', icaoCode: 'MDSD' };
+
+  const mockActivityType = { id: 'AT1', code: 'A', name: 'Auditoria' };
+
   const mockInspection = {
-    id: 'INSP1', siteVisitId: 'SV1', inspectedProviderId: 'P1',
-    inspectionType: 'Ramp Inspection', objective: 'Test objective', scope: 'Test scope',
+    id: 'INSP1', siteVisitId: 'SV1', inspectedProviderId: 'P1', code: 'AV-MDSD-A-0003',
+    status: 'Created',
+    activityTypeId: 'AT1', activityTypeCode: 'A', activityTypeName: 'Auditoria',
+    objective: 'Test objective', scope: 'Test scope',
     description: 'Previously saved description', conclusion: 'Previously saved conclusion',
   };
 
@@ -31,6 +37,12 @@ describe('Inspection Store (per-provider)', () => {
       }
       if (method === 'query' && entity === 'SiteVisit') {
         return Promise.resolve({ data: { list: [mockSiteVisit] }, status: 200 });
+      }
+      if (method === 'query' && entity === 'Location') {
+        return Promise.resolve({ data: { list: [mockLocation] }, status: 200 });
+      }
+      if (method === 'query' && entity === 'ActivityType') {
+        return Promise.resolve({ data: { list: [mockActivityType] }, status: 200 });
       }
       if (method === 'add' && entity === 'Inspection') {
         return Promise.resolve({ data: mockInspection, status: 200 });
@@ -53,14 +65,35 @@ describe('Inspection Store (per-provider)', () => {
   describe('addInspection', () => {
     it('creates inspection and auto-generates schedules', async () => {
       const result = await store.addInspection('SV1', 'P1', {
-        inspectionType: 'Ramp Inspection',
+        activityTypeId: 'AT1',
         objective: 'Test',
         scope: 'Scope',
       });
       expect(result.id).toBe('INSP1');
       expect(apiEntityCRUD).toHaveBeenCalledWith('add', 'Inspection', null, expect.objectContaining({
-        siteVisitId: 'SV1', inspectedProviderId: 'P1',
+        siteVisitId: 'SV1', inspectedProviderId: 'P1', activityTypeId: 'AT1',
       }));
+    });
+
+    it('generates an Activity code independent of the parent site visit code', async () => {
+      await store.addInspection('SV1', 'P1', { activityTypeId: 'AT1' });
+
+      const addCall = vi.mocked(apiEntityCRUD).mock.calls
+        .find(([method, entity]) => method === 'add' && entity === 'Inspection');
+
+      // Existing AV-MDSD-A-0003 means the next A-activity at MDSD is 0004,
+      // and the code must NOT be a copy of the site visit's V-MDSD-2026-01.
+      expect(addCall[3].code).toBe('AV-MDSD-A-0004');
+      expect(addCall[3].code).not.toBe(mockSiteVisit.code);
+    });
+
+    it('falls back to the I (Inspeccion) letter when no activity type is chosen', async () => {
+      await store.addInspection('SV1', 'P1', {});
+
+      const addCall = vi.mocked(apiEntityCRUD).mock.calls
+        .find(([method, entity]) => method === 'add' && entity === 'Inspection');
+
+      expect(addCall[3].code).toBe('AV-MDSD-I-0001');
     });
   });
 
@@ -69,7 +102,8 @@ describe('Inspection Store (per-provider)', () => {
       await store.getInspections('IP1');
       const list = store.getForInspectedProvider('IP1');
       expect(list.length).toBe(1);
-      expect(list[0].inspectionType).toBe('Ramp Inspection');
+      expect(list[0].activityTypeId).toBe('AT1');
+      expect(list[0].activityTypeName).toBe('Auditoria');
     });
 
     it('includes previously saved description and conclusion so regenerating a report can prefill them', async () => {
@@ -86,6 +120,42 @@ describe('Inspection Store (per-provider)', () => {
       expect(apiEntityCRUD).toHaveBeenCalledWith('update', 'Inspection', 'INSP1', expect.objectContaining({
         objective: 'Updated',
       }));
+    });
+
+    it('re-mints the Activity code when the activity type changes at Created status', async () => {
+      await store.updateInspection({ id: 'INSP1', activityTypeId: 'AT-OTHER' }, 'IP1');
+
+      const updateCall = vi.mocked(apiEntityCRUD).mock.calls
+        .find(([method, entity]) => method === 'update' && entity === 'Inspection');
+
+      // The letter is baked into the code, so a type change must regenerate it.
+      // The scan must exclude INSP1's own current row (it's the record being
+      // regenerated) - the mock's Inspection query only ever returns
+      // [mockInspection] (INSP1 itself), so with self excluded there are no
+      // other MDSD/A inspections and the sequence restarts at 1.
+      expect(updateCall[3].code).toBe('AV-MDSD-A-0001');
+    });
+
+    it('never re-mints the Activity code once the inspection has left Created', async () => {
+      vi.mocked(apiEntityCRUD).mockImplementation((method, entity) => {
+        if (method === 'query' && entity === 'Inspection') {
+          return Promise.resolve({ data: { list: [{ ...mockInspection, status: 'Planned' }] }, status: 200 });
+        }
+        if (method === 'query' && entity === 'SiteVisit') {
+          return Promise.resolve({ data: { list: [mockSiteVisit] }, status: 200 });
+        }
+        if (method === 'query' && entity === 'Location') {
+          return Promise.resolve({ data: { list: [mockLocation] }, status: 200 });
+        }
+        return Promise.resolve({ data: { list: [] }, status: 200 });
+      });
+
+      await store.updateInspection({ id: 'INSP1', activityTypeId: 'AT-OTHER' }, 'IP1');
+
+      const updateCall = vi.mocked(apiEntityCRUD).mock.calls
+        .find(([method, entity]) => method === 'update' && entity === 'Inspection');
+
+      expect(updateCall[3].code).toBeUndefined();
     });
   });
 

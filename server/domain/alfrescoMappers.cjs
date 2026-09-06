@@ -8,12 +8,24 @@ function mapFindingNode(node) {
     findingId: nodeProperty(node, 'vso:findingId'),
     findingLevel: nodeProperty(node, 'vso:findingLevel'),
     requirementBreached: nodeProperty(node, 'vso:requirementBreached'),
+    checklistItemCode: nodeProperty(node, 'vso:checklistItemCode'),
+    nationalRegulation: nodeProperty(node, 'vso:nationalRegulation'),
+    regulationItem: nodeProperty(node, 'vso:regulationItem'),
     description: nodeProperty(node, 'vso:description'),
     findingStatus: nodeProperty(node, 'vso:findingStatus'),
+    findingReviewStatus: nodeProperty(node, 'vso:findingReviewStatus'),
+    findingReviewDate: nodeProperty(node, 'vso:findingReviewDate'),
+    findingReviewedBy: nodeProperty(node, 'vso:findingReviewedBy'),
     findingSeverity: nodeProperty(node, 'vso:findingSeverity'),
     riskClassification: nodeProperty(node, 'vso:riskClassification'),
+    targetResidualRisk: nodeProperty(node, 'vso:targetResidualRisk'),
     submissionDeadline: nodeProperty(node, 'vso:submissionDeadline'),
     resolutionDeadline: nodeProperty(node, 'vso:resolutionDeadline'),
+    deadlineExtensionStatus: nodeProperty(node, 'vso:deadlineExtensionStatus'),
+    requestedResolutionDeadline: nodeProperty(node, 'vso:requestedResolutionDeadline'),
+    deadlineExtensionReason: nodeProperty(node, 'vso:deadlineExtensionReason'),
+    deadlineExtensionRequestedDate: nodeProperty(node, 'vso:deadlineExtensionRequestedDate'),
+    deadlineExtensionDecisionDate: nodeProperty(node, 'vso:deadlineExtensionDecisionDate'),
     findingClosureDate: nodeProperty(node, 'vso:findingClosureDate'),
     // vso:openedDate was renamed to vso:dateIssued in the Alfresco model;
     // dateIssued is the canonical field going forward (see CLAUDE.md).
@@ -46,6 +58,9 @@ function mapCorrectiveActionNode(node) {
     responsibleEntity: nodeProperty(node, 'vso:responsibleEntity'),
     dueDate: nodeProperty(node, 'vso:dueDate'),
     acceptanceStatus: nodeProperty(node, 'vso:acceptanceStatus'),
+    capReviewedBy: nodeProperty(node, 'vso:capReviewedBy'),
+    capReviewDate: nodeProperty(node, 'vso:capReviewDate'),
+    capReviewReason: nodeProperty(node, 'vso:capReviewReason'),
     inspectionId: nodeProperty(node, 'vso:inspectionId'),
     locationId: nodeProperty(node, 'vso:locationId'),
     locationCode: nodeProperty(node, 'vso:locationCode'),
@@ -66,6 +81,7 @@ function mapEvidenceItemNode(node) {
     source: nodeProperty(node, 'vso:source'),
     collectionDate: nodeProperty(node, 'vso:collectionDate'),
     evidenceRole: nodeProperty(node, 'vso:evidenceRole'),
+    collectionMethod: nodeProperty(node, 'vso:collectionMethod'),
     name: node?.name || null,
   };
 }
@@ -93,6 +109,15 @@ function mapRiskAssessmentNode(node) {
     calculatedRiskLevel: nodeProperty(node, 'vso:calculatedRiskLevel'),
     tolerabilityLevel: nodeProperty(node, 'vso:tolerabilityLevel'),
     justification: nodeProperty(node, 'vso:raJustification'),
+  };
+}
+
+function mapContainmentMeasuresNode(node) {
+  if (!node) return null;
+  return {
+    nodeId: node?.id || null,
+    description: nodeProperty(node, 'vso:containmentDescription'),
+    implementedDate: nodeProperty(node, 'vso:containmentImplementedDate'),
   };
 }
 
@@ -143,22 +168,68 @@ async function listEvidenceForSection({ alfrescoClient, ticket, sectionNodeId })
   return evidenceNodes.map(mapEvidenceItemNode);
 }
 
+function mapCapEvaluationCriterionNode(node) {
+  return {
+    nodeId: node?.id || null,
+    criterionCode: nodeProperty(node, 'vso:criterionCode'),
+    criterionSection: nodeProperty(node, 'vso:criterionSection'),
+    criterionLabel: nodeProperty(node, 'vso:criterionLabel'),
+    criterionResponse: nodeProperty(node, 'vso:criterionResponse'),
+    criterionObservations: nodeProperty(node, 'vso:criterionObservations'),
+  };
+}
+
+function mapCapEvaluationNode(node, criteriaNodes = []) {
+  if (!node) return null;
+  return {
+    nodeId: node?.id || null,
+    evaluatedBy: nodeProperty(node, 'vso:evaluatedBy'),
+    evaluationDate: nodeProperty(node, 'vso:evaluationDate'),
+    decisionOutcome: nodeProperty(node, 'vso:evaluationDecisionOutcome'),
+    decisionReason: nodeProperty(node, 'vso:evaluationDecisionReason'),
+    criteria: criteriaNodes.map(mapCapEvaluationCriterionNode),
+  };
+}
+
+async function getCurrentCapEvaluation({ alfrescoClient, ticket, capNodeId }) {
+  const evaluationNodes = await alfrescoClient.listChildrenByType({
+    ticket,
+    parentNodeId: capNodeId,
+    nodeType: 'vso:capEvaluation',
+  });
+  if (evaluationNodes.length === 0) {
+    return null;
+  }
+  const [latest] = [...evaluationNodes].sort(
+    (a, b) => new Date(b.properties?.['vso:evaluationDate'] || 0) - new Date(a.properties?.['vso:evaluationDate'] || 0)
+  );
+  const criterionNodes = await alfrescoClient.listChildrenByType({
+    ticket,
+    parentNodeId: latest.id,
+    nodeType: 'vso:capEvaluationCriterion',
+  });
+  return mapCapEvaluationNode(latest, criterionNodes);
+}
+
 async function getCapChildSections({ alfrescoClient, ticket, capNodeId }) {
-  const [rcaNodes, raNodes, actionItemNodes, residualRiskNodes, effectivenessNodes] = await Promise.all([
+  const [rcaNodes, raNodes, cmNodes, actionItemNodes, residualRiskNodes, effectivenessNodes, currentEvaluation] = await Promise.all([
     alfrescoClient.listChildrenByType({ ticket, parentNodeId: capNodeId, nodeType: 'vso:rootCauseAnalysis' }),
     alfrescoClient.listChildrenByType({ ticket, parentNodeId: capNodeId, nodeType: 'vso:riskAssessment' }),
+    alfrescoClient.listChildrenByType({ ticket, parentNodeId: capNodeId, nodeType: 'vso:containmentMeasures' }),
     alfrescoClient.listChildrenByType({ ticket, parentNodeId: capNodeId, nodeType: 'vso:correctiveActionItem' }),
     alfrescoClient.listChildrenByType({ ticket, parentNodeId: capNodeId, nodeType: 'vso:residualRisk' }),
     alfrescoClient.listChildrenByType({ ticket, parentNodeId: capNodeId, nodeType: 'vso:effectivenessVerification' }),
+    getCurrentCapEvaluation({ alfrescoClient, ticket, capNodeId }),
   ]);
 
   const correctiveActions = actionItemNodes
     .map(mapCorrectiveActionItemNode)
     .sort((a, b) => (Number(a.sequenceNumber) || 0) - (Number(b.sequenceNumber) || 0));
 
-  const [rcaEvidence, riskEvidence] = await Promise.all([
+  const [rcaEvidence, riskEvidence, containmentEvidence] = await Promise.all([
     listEvidenceForSection({ alfrescoClient, ticket, sectionNodeId: rcaNodes[0]?.id }),
     listEvidenceForSection({ alfrescoClient, ticket, sectionNodeId: raNodes[0]?.id }),
+    listEvidenceForSection({ alfrescoClient, ticket, sectionNodeId: cmNodes[0]?.id }),
   ]);
 
   const rootCauseAnalysis = mapRootCauseAnalysisNode(rcaNodes[0]);
@@ -169,13 +240,19 @@ async function getCapChildSections({ alfrescoClient, ticket, capNodeId }) {
   if (riskAssessment) {
     riskAssessment.evidence = riskEvidence;
   }
+  const containmentMeasures = mapContainmentMeasuresNode(cmNodes[0]);
+  if (containmentMeasures) {
+    containmentMeasures.evidence = containmentEvidence;
+  }
 
   return {
     rootCauseAnalysis,
     riskAssessment,
+    containmentMeasures,
     correctiveActions,
     residualRisk: mapResidualRiskNode(residualRiskNodes[0]),
     effectivenessVerification: mapEffectivenessVerificationNode(effectivenessNodes[0]),
+    currentEvaluation,
   };
 }
 
@@ -200,6 +277,10 @@ function mapFollowUpReportNode(node) {
     followUpClosureDate: nodeProperty(node, 'vso:followUpClosureDate'),
     closureVerificationMethod: nodeProperty(node, 'vso:closureVerificationMethod'),
     effectivenessConfirmed: Boolean(nodeProperty(node, 'vso:effectivenessConfirmed', false)),
+    evidenceReviewStatus: nodeProperty(node, 'vso:evidenceReviewStatus'),
+    evidenceReviewNotes: nodeProperty(node, 'vso:evidenceReviewNotes'),
+    evidenceReviewDate: nodeProperty(node, 'vso:evidenceReviewDate'),
+    evidenceReviewedBy: nodeProperty(node, 'vso:evidenceReviewedBy'),
     inspectionId: nodeProperty(node, 'vso:inspectionId'),
     locationId: nodeProperty(node, 'vso:locationId'),
     locationCode: nodeProperty(node, 'vso:locationCode'),
@@ -219,9 +300,13 @@ module.exports = {
   mapEvidenceItemNode,
   mapRootCauseAnalysisNode,
   mapRiskAssessmentNode,
+  mapContainmentMeasuresNode,
   mapCorrectiveActionItemNode,
   mapResidualRiskNode,
   mapEffectivenessVerificationNode,
+  mapCapEvaluationCriterionNode,
+  mapCapEvaluationNode,
+  getCurrentCapEvaluation,
   getCapChildSections,
   listEvidenceForSection,
   resolveFindingIdForCap,
@@ -234,5 +319,10 @@ async function getFollowUpReportsForFinding({ alfrescoClient, ticket, findingNod
     parentNodeId: findingNodeId,
     nodeType: 'vso:followUpReport',
   });
-  return followUpNodes.map(mapFollowUpReportNode);
+  return Promise.all(
+    followUpNodes.map(async (node) => ({
+      ...mapFollowUpReportNode(node),
+      evidence: await listEvidenceForSection({ alfrescoClient, ticket, sectionNodeId: node.id }),
+    }))
+  );
 }

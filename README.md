@@ -122,6 +122,25 @@ Common optional auth settings:
 - `AUTH_TICKET_ENCRYPTION_KEY` (required in production — server refuses to start without it)
 - `AUTH_LOGIN_RATE_LIMIT_MAX_ATTEMPTS`
 
+Notification settings (see `NOTIFICATIONS_SQL.sql` for the schema):
+
+- `SMTP_HOST` — if unset, email notifications queue as `pending` and fail on every retry attempt until configured; in-app notifications are unaffected.
+- `SMTP_PORT` (default `587`), `SMTP_SECURE` (default `false`), `SMTP_USER`, `SMTP_PASS`, `SMTP_FROM` (default `noreply@compliance.local`)
+- `NOTIFICATION_SEND_INTERVAL_MS` (default `60000`) — how often the retry sweep runs
+- `CASE_ESCALATION_EMAIL` — fixed distribution-list address for case-escalation notifications (finding overdue job)
+- `INSPECTOR_NOTIFICATIONS_EMAIL` — fixed distribution list for events an inspector/reviewer needs to act on: CAP submitted, follow-up evidence needs review, evidence marked inadequate, finding pending post-upload review (daily digest), finding closure pending approval, finding closure rejected, deadline extension requested
+- `CAP_ENTRY_NOTIFICATIONS_EMAIL` — fixed distribution list for events the CAP submitter side needs to know about: CAP reviewed, deadline extension reviewed, finding closed
+- `PLANNER_NOTIFICATIONS_EMAIL` — fixed distribution list for auto-scheduled site visits (see below)
+
+All notification env vars above are optional — each notification type is skipped (not queued) if its target env var isn't set, rather than failing.
+
+- `NOTIFICATION_LOCALE` (default `es`) — language (`en`/`es`) for the subject/body of internal role-inbox notifications. Unlike the vars above, this one always has an effective value and never causes a notification to be skipped — recipients are fixed shared inboxes rather than individual sessions, so there's no per-recipient locale to resolve; the whole deployment picks one language for these emails.
+
+Site visit scheduling job settings:
+
+- `NODE_RED_BASE_URL` (default `http://localhost:1880`; the Docker Compose backend service overrides this to `http://node-red:1880` for container-to-container reachability) — where the site visit scheduling job reaches Node-RED's generic entity CRUD endpoints (`queryEntity`/`addEntity`/`updateEntity`), the same integration path the frontend uses directly. Requires `ALFRESCO_JOB_USERNAME`/`ALFRESCO_JOB_PASSWORD` (shared with the finding overdue job) to obtain the ticket Node-RED expects in `X-Alfresco-Ticket`. Also used synchronously by `PATCH /findings/:findingId/review` to look up the `FindingSeverity` entity's `daysToSolution`/`daysToSubmission` when recomputing a finding's deadlines — unlike the background jobs, a misconfigured value here fails that request immediately rather than silently.
+- `SITE_VISIT_SCHEDULING_JOB_HOUR` (default `2`) — local hour the daily sweep runs. It queries active `InspectionCadence` records (a recurring inspection cadence per Provider × Specialty × Location, managed in AtroCore) for any with `nextDueDate` in the past, auto-creates a `SiteVisit` + `Inspection` for each, and advances the cadence's `lastScheduledDate`/`nextDueDate` by its `intervalMonths`.
+
 Auth backend details: [server/README.md](server/README.md)
 
 ## Available Scripts

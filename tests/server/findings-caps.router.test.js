@@ -1,10 +1,36 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import request from 'supertest';
 import { createRequire } from 'node:module';
 
 const require = createRequire(import.meta.url);
 const { createApp } = require('../../server/app.cjs');
 const { InMemorySessionRepository } = require('../setup/mocks/InMemorySessionRepository.cjs');
+const { InMemoryNotificationRepository } = require('../setup/mocks/InMemoryNotificationRepository.cjs');
+const { createNotificationService } = require('../../server/notifications/notificationService.cjs');
+const { CAP_EVALUATION_CRITERIA } = require('../../server/domain/capEvaluationCriteria.cjs');
+
+// The fixture CAP has no containment measures section, so a "complete"
+// evaluation for it excludes CONTAINMENT criteria — same skip rule the
+// review gate itself applies (see getMissingCapEvaluationCriteria).
+function buildCompleteCapEvaluationCriteria() {
+  return CAP_EVALUATION_CRITERIA.filter((entry) => entry.kind === 'binary' && entry.section !== 'CONTAINMENT').map((entry) => ({
+    code: entry.code,
+    response: 'Sí',
+  }));
+}
+
+function buildTestNotificationService() {
+  const repository = new InMemoryNotificationRepository();
+  const sent = [];
+  const emailTransport = {
+    from: 'noreply@compliance.local',
+    async send(message) {
+      sent.push(message);
+    },
+  };
+  const logger = { info: () => {}, warn: () => {}, error: () => {} };
+  return { service: createNotificationService({ repository, emailTransport, logger }), sent };
+}
 
 function buildFixture() {
   const inspectionNode = {
@@ -21,14 +47,15 @@ function buildFixture() {
     parentId: 'inspection-node-1',
     nodeType: 'vso:finding',
     properties: {
-      'vso:findingId': 'MDPP001-AYVIS-01',
+      'vso:findingId': 'H-MDPPA0001-AVIS-001',
       'vso:findingStatus': 'Open',
+      'vso:findingLevel': 'Non-Compliance',
       'vso:submissionDeadline': '2026-04-01',
       'vso:inspectionId': 'MDPP-001',
       'vso:locationId': 'LOC-01',
       'vso:locationCode': 'MDPP',
       'vso:locationName': 'Main Airport',
-      'vso:specialtyCode': 'AYVIS',
+      'vso:specialtyCode': 'AVIS',
       'vso:specialtyId': 'spec-ayvis',
       'vso:specialtyName': 'Aviation Safety',
       'vso:domain': 'OPS',
@@ -43,7 +70,7 @@ function buildFixture() {
     parentId: 'finding-node-1',
     nodeType: 'vso:correctiveAction',
     properties: {
-      'vso:capId': 'CA-MDPP001AYVIS-01-01',
+      'vso:capId': 'P-MDPPA0001-AVIS001-01',
       'vso:proposedAction': 'Action A',
       'vso:responsibleEntity': 'Provider 1',
       'vso:dueDate': '2026-05-01',
@@ -52,7 +79,7 @@ function buildFixture() {
       'vso:locationId': 'LOC-01',
       'vso:locationCode': 'MDPP',
       'vso:locationName': 'Main Airport',
-      'vso:specialtyCode': 'AYVIS',
+      'vso:specialtyCode': 'AVIS',
       'vso:specialtyId': 'spec-ayvis',
       'vso:specialtyName': 'Aviation Safety',
       'vso:providerId': 'PR-01',
@@ -60,18 +87,49 @@ function buildFixture() {
     },
   };
 
+  const evidenceNode = {
+    id: 'evidence-node-1',
+    nodeType: 'vso:evidenceItem',
+    name: 'photo.jpg',
+    properties: {
+      'vso:evidenceId': 'EV-01',
+      'vso:evidenceType': 'image/jpeg',
+    },
+  };
+
   return {
     inspectionNode,
     findingNode,
     capNode,
+    evidenceNode,
+    findingEvidenceNodes: [evidenceNode],
     followUpNodes: [],
     followUpCapLinks: new Map(),
+    followUpEvidenceLinks: new Map(),
+    evidenceNodesById: new Map(),
     capSectionChildren: new Map(),
     lastCreatedChildNodeArgs: null,
   };
 }
 
-async function buildApp({ roles = ['cap_entry'], now = new Date('2026-04-03T10:00:00.000Z') } = {}) {
+const FINDING_SEVERITY_RECORDS = [
+  { id: 'sev-a', name: 'A', daysToSolution: 7, daysToSubmission: 3 },
+  { id: 'sev-b', name: 'B', daysToSolution: 30, daysToSubmission: 15 },
+  { id: 'sev-c', name: 'C', daysToSolution: 90, daysToSubmission: 30 },
+];
+
+function buildNodeRedClientMock() {
+  return {
+    queryEntity: async ({ entity, data }) => {
+      if (entity === 'FindingSeverity') {
+        return { list: FINDING_SEVERITY_RECORDS.filter((record) => record.name === data.name) };
+      }
+      return { list: [] };
+    },
+  };
+}
+
+async function buildApp({ roles = ['cap_entry'], now = new Date('2026-04-03T10:00:00.000Z'), notificationService } = {}) {
   const fixture = buildFixture();
 
   const session = {
@@ -99,7 +157,7 @@ async function buildApp({ roles = ['cap_entry'], now = new Date('2026-04-03T10:0
       return [];
     },
     searchFindingByBusinessId: async ({ findingId }) => {
-      return findingId === 'MDPP001-AYVIS-01' ? fixture.findingNode : null;
+      return findingId === 'H-MDPPA0001-AVIS-001' ? fixture.findingNode : null;
     },
     searchCapByBusinessId: async ({ capId }) => {
       return capId === fixture.capNode.properties['vso:capId'] ? fixture.capNode : null;
@@ -137,15 +195,30 @@ async function buildApp({ roles = ['cap_entry'], now = new Date('2026-04-03T10:0
       const existing = fixture.capSectionChildren.get(key) || [];
       const next = { id: `${nodeType}-${existing.length + 1}`, parentId: parentNodeId, nodeType, name, properties };
       fixture.capSectionChildren.set(key, [...existing, next]);
+      if (nodeType === 'vso:evidenceItem') {
+        fixture.evidenceNodesById.set(next.id, next);
+      }
       return next;
     },
     createTargetAssociation: async ({ sourceNodeId, targetNodeId, assocType }) => {
       if (assocType === 'vso:relatedCorrectiveAction') {
         fixture.followUpCapLinks.set(sourceNodeId, targetNodeId);
       }
+      if (assocType === 'vso:relatedEvidence') {
+        const existing = fixture.followUpEvidenceLinks.get(sourceNodeId) || [];
+        fixture.followUpEvidenceLinks.set(sourceNodeId, [...existing, targetNodeId]);
+      }
       return { id: `${sourceNodeId}->${targetNodeId}` };
     },
     listTargetAssociations: async ({ nodeId, assocType }) => {
+      if (assocType === 'vso:relatedEvidence' && nodeId === fixture.findingNode.id) {
+        return fixture.findingEvidenceNodes;
+      }
+      if (assocType === 'vso:relatedEvidence' && fixture.followUpEvidenceLinks.has(nodeId)) {
+        return fixture.followUpEvidenceLinks.get(nodeId)
+          .map((targetNodeId) => fixture.evidenceNodesById.get(targetNodeId))
+          .filter(Boolean);
+      }
       if (assocType !== 'vso:relatedCorrectiveAction') {
         return [];
       }
@@ -188,6 +261,21 @@ async function buildApp({ roles = ['cap_entry'], now = new Date('2026-04-03T10:0
         return fixture.capNode;
       }
 
+      const followUpIndex = fixture.followUpNodes.findIndex((node) => node.id === nodeId);
+      if (followUpIndex !== -1) {
+        const updatedFollowUp = {
+          ...fixture.followUpNodes[followUpIndex],
+          properties: {
+            ...fixture.followUpNodes[followUpIndex].properties,
+            ...properties,
+          },
+        };
+        const nextFollowUpNodes = [...fixture.followUpNodes];
+        nextFollowUpNodes[followUpIndex] = updatedFollowUp;
+        fixture.followUpNodes = nextFollowUpNodes;
+        return updatedFollowUp;
+      }
+
       for (const [key, nodes] of fixture.capSectionChildren.entries()) {
         const index = nodes.findIndex((node) => node.id === nodeId);
         if (index !== -1) {
@@ -207,6 +295,15 @@ async function buildApp({ roles = ['cap_entry'], now = new Date('2026-04-03T10:0
     putNodeContent: async ({ nodeId }) => {
       return { id: nodeId };
     },
+    getNodeContent: async ({ nodeId }) => {
+      if (nodeId === fixture.evidenceNode.id) {
+        return { buffer: Buffer.from('fake-image-bytes'), contentType: 'image/jpeg' };
+      }
+      if (fixture.evidenceNodesById.has(nodeId)) {
+        return { buffer: Buffer.from('fake-upload-bytes'), contentType: 'image/jpeg' };
+      }
+      throw Object.assign(new Error('Not found'), { response: { status: 404 } });
+    },
     getNodeById: async ({ nodeId }) => {
       if (nodeId === fixture.inspectionNode.id) {
         return fixture.inspectionNode;
@@ -218,6 +315,10 @@ async function buildApp({ roles = ['cap_entry'], now = new Date('2026-04-03T10:0
         return fixture.findingNode;
       }
       return null;
+    },
+    deleteNode: async ({ nodeId }) => {
+      fixture.deletedNodeIds = [...(fixture.deletedNodeIds || []), nodeId];
+      fixture.followUpNodes = fixture.followUpNodes.filter((node) => node.id !== nodeId);
     },
   };
 
@@ -237,6 +338,8 @@ async function buildApp({ roles = ['cap_entry'], now = new Date('2026-04-03T10:0
     },
     sessionRepository,
     alfrescoClient,
+    notificationService,
+    nodeRedClient: buildNodeRedClientMock(),
     logger: console,
     now: () => now,
   });
@@ -329,7 +432,7 @@ describe('Findings and CAP API', () => {
     const { app } = await buildApp({ roles: ['cap_entry'] });
 
     const response = await request(app)
-      .post('/api/findings/MDPP001-AYVIS-01/caps')
+      .post('/api/findings/H-MDPPA0001-AVIS-001/caps')
       .set('Cookie', 'compliance_session_id=session-1')
       .set('x-csrf-token', 'csrf-token-1')
       .send({
@@ -351,6 +454,10 @@ describe('Findings and CAP API', () => {
           calculatedRiskLevel: 'High',
           tolerabilityLevel: 'Unacceptable',
           justification: 'Based on historical occurrence data',
+        },
+        containmentMeasures: {
+          description: 'Temporary closure of the affected runway segment',
+          implementedDate: '2026-06-02',
         },
         correctiveActions: [
           {
@@ -374,7 +481,7 @@ describe('Findings and CAP API', () => {
       });
 
     expect(response.status).toBe(201);
-    expect(response.body.cap.capId).toBe('CA-MDPP001AYVIS-01-02');
+    expect(response.body.cap.capId).toBe('P-MDPPA0001-AVIS001-02');
     expect(response.body.cap.acceptanceStatus).toBe('Pending review');
     expect(response.body.cap.rootCauseAnalysis.method).toBe('Fishbone');
     expect(response.body.cap.riskAssessment.identifiedHazard).toBe('Runway incursion');
@@ -383,6 +490,42 @@ describe('Findings and CAP API', () => {
     expect(response.body.cap.correctiveActions[0].itemStatus).toBe('Open');
     expect(response.body.cap.residualRisk.riskLevel).toBe('Low');
     expect(response.body.cap.effectivenessVerification.method).toBe('Follow-up audit');
+  });
+
+  it('rejects CAP submission for a finding that has not yet been reviewer-confirmed', async () => {
+    const { app, fixture } = await buildApp({ roles: ['cap_entry'] });
+    fixture.findingNode.properties['vso:findingReviewStatus'] = 'Pending Review';
+
+    const response = await request(app)
+      .post('/api/findings/H-MDPPA0001-AVIS-001/caps')
+      .set('Cookie', 'compliance_session_id=session-1')
+      .set('x-csrf-token', 'csrf-token-1')
+      .send(fullCapPayload());
+
+    expect(response.status).toBe(409);
+    expect(response.body.code).toBe('FINDING_NOT_REVIEWED');
+  });
+
+  it('notifies the inspector inbox when a CAP is submitted', async () => {
+    const originalEmail = process.env.INSPECTOR_NOTIFICATIONS_EMAIL;
+    process.env.INSPECTOR_NOTIFICATIONS_EMAIL = 'inspectors@example.com';
+    try {
+      const { service, sent } = buildTestNotificationService();
+      const { app } = await buildApp({ roles: ['cap_entry'], notificationService: service });
+
+      const response = await request(app)
+        .post('/api/findings/H-MDPPA0001-AVIS-001/caps')
+        .set('Cookie', 'compliance_session_id=session-1')
+        .set('x-csrf-token', 'csrf-token-1')
+        .send(fullCapPayload());
+
+      expect(response.status).toBe(201);
+      expect(sent).toHaveLength(1);
+      expect(sent[0].to).toBe('inspectors@example.com');
+      expect(sent[0].subject).toContain('H-MDPPA0001-AVIS-001');
+    } finally {
+      process.env.INSPECTOR_NOTIFICATIONS_EMAIL = originalEmail;
+    }
   });
 
   function fullCapPayload(overrides = {}) {
@@ -404,6 +547,10 @@ describe('Findings and CAP API', () => {
         calculatedRiskLevel: 'High',
         tolerabilityLevel: 'Unacceptable',
         justification: 'Based on historical occurrence data',
+      },
+      containmentMeasures: {
+        description: 'Temporary closure of the affected runway segment',
+        implementedDate: '2026-06-02',
       },
       correctiveActions: [
         {
@@ -435,7 +582,7 @@ describe('Findings and CAP API', () => {
     delete payload.riskAssessment;
 
     const response = await request(app)
-      .post('/api/findings/MDPP001-AYVIS-01/caps')
+      .post('/api/findings/H-MDPPA0001-AVIS-001/caps')
       .set('Cookie', 'compliance_session_id=session-1')
       .set('x-csrf-token', 'csrf-token-1')
       .send(payload);
@@ -448,13 +595,13 @@ describe('Findings and CAP API', () => {
     const { app } = await buildApp({ roles: ['cap_entry'] });
 
     await request(app)
-      .post('/api/findings/MDPP001-AYVIS-01/caps')
+      .post('/api/findings/H-MDPPA0001-AVIS-001/caps')
       .set('Cookie', 'compliance_session_id=session-1')
       .set('x-csrf-token', 'csrf-token-1')
       .send(fullCapPayload());
 
     const response = await request(app)
-      .patch('/api/caps/CA-MDPP001AYVIS-01-02/actions/1')
+      .patch('/api/caps/P-MDPPA0001-AVIS001-02/actions/1')
       .set('Cookie', 'compliance_session_id=session-1')
       .set('x-csrf-token', 'csrf-token-1')
       .send({ itemStatus: 'In Progress' });
@@ -467,13 +614,13 @@ describe('Findings and CAP API', () => {
     const { app } = await buildApp({ roles: ['cap_entry'] });
 
     await request(app)
-      .post('/api/findings/MDPP001-AYVIS-01/caps')
+      .post('/api/findings/H-MDPPA0001-AVIS-001/caps')
       .set('Cookie', 'compliance_session_id=session-1')
       .set('x-csrf-token', 'csrf-token-1')
       .send(fullCapPayload());
 
     const response = await request(app)
-      .patch('/api/caps/CA-MDPP001AYVIS-01-02/actions/1')
+      .patch('/api/caps/P-MDPPA0001-AVIS001-02/actions/1')
       .set('Cookie', 'compliance_session_id=session-1')
       .set('x-csrf-token', 'csrf-token-1')
       .send({ itemStatus: 'Closed' });
@@ -485,13 +632,13 @@ describe('Findings and CAP API', () => {
     const { app } = await buildApp({ roles: ['cap_entry'] });
 
     await request(app)
-      .post('/api/findings/MDPP001-AYVIS-01/caps')
+      .post('/api/findings/H-MDPPA0001-AVIS-001/caps')
       .set('Cookie', 'compliance_session_id=session-1')
       .set('x-csrf-token', 'csrf-token-1')
       .send(fullCapPayload());
 
     const response = await request(app)
-      .patch('/api/caps/CA-MDPP001AYVIS-01-02/actions/1')
+      .patch('/api/caps/P-MDPPA0001-AVIS001-02/actions/1')
       .set('Cookie', 'compliance_session_id=session-1')
       .set('x-csrf-token', 'csrf-token-1')
       .send({ itemStatus: 'Closed', closureDate: '2026-07-01', closureNotes: 'Verified complete' });
@@ -506,13 +653,13 @@ describe('Findings and CAP API', () => {
     const { app, fixture } = await buildApp({ roles: ['cap_entry'] });
 
     await request(app)
-      .post('/api/findings/MDPP001-AYVIS-01/caps')
+      .post('/api/findings/H-MDPPA0001-AVIS-001/caps')
       .set('Cookie', 'compliance_session_id=session-1')
       .set('x-csrf-token', 'csrf-token-1')
       .send(fullCapPayload());
 
     const response = await request(app)
-      .post('/api/caps/CA-MDPP001AYVIS-01-02/rca/evidence')
+      .post('/api/caps/P-MDPPA0001-AVIS001-02/rca/evidence')
       .set('Cookie', 'compliance_session_id=session-1')
       .set('x-csrf-token', 'csrf-token-1')
       .attach('file', Buffer.from('%PDF-1.4 test'), { filename: 'evidence.pdf', contentType: 'application/pdf' });
@@ -537,13 +684,13 @@ describe('Findings and CAP API', () => {
     const { app, fixture } = await buildApp({ roles: ['cap_entry'] });
 
     await request(app)
-      .post('/api/findings/MDPP001-AYVIS-01/caps')
+      .post('/api/findings/H-MDPPA0001-AVIS-001/caps')
       .set('Cookie', 'compliance_session_id=session-1')
       .set('x-csrf-token', 'csrf-token-1')
       .send(fullCapPayload());
 
     const response = await request(app)
-      .post('/api/caps/CA-MDPP001AYVIS-01-02/risk-assessment/evidence')
+      .post('/api/caps/P-MDPPA0001-AVIS001-02/risk-assessment/evidence')
       .set('Cookie', 'compliance_session_id=session-1')
       .set('x-csrf-token', 'csrf-token-1')
       .attach('file', Buffer.from('%PDF-1.4 test'), { filename: 'evidence.pdf', contentType: 'application/pdf' });
@@ -553,11 +700,61 @@ describe('Findings and CAP API', () => {
     expect(fixture.lastCreatedChildNodeArgs.parentNodeId).toBe('inspection-node-1');
   });
 
+  it('uploads Containment Measures evidence for a CAP', async () => {
+    const { app, fixture } = await buildApp({ roles: ['cap_entry'] });
+
+    await request(app)
+      .post('/api/findings/H-MDPPA0001-AVIS-001/caps')
+      .set('Cookie', 'compliance_session_id=session-1')
+      .set('x-csrf-token', 'csrf-token-1')
+      .send(fullCapPayload());
+
+    const response = await request(app)
+      .post('/api/caps/P-MDPPA0001-AVIS001-02/containment/evidence')
+      .set('Cookie', 'compliance_session_id=session-1')
+      .set('x-csrf-token', 'csrf-token-1')
+      .attach('file', Buffer.from('%PDF-1.4 test'), { filename: 'evidence.pdf', contentType: 'application/pdf' });
+
+    expect(response.status).toBe(201);
+    expect(response.body.evidence.evidenceRole).toBe('Containment Evidence');
+    expect(fixture.lastCreatedChildNodeArgs.parentNodeId).toBe('inspection-node-1');
+  });
+
+  it('creates and returns the containment measures section on CAP creation', async () => {
+    const { app } = await buildApp({ roles: ['cap_entry'] });
+
+    const response = await request(app)
+      .post('/api/findings/H-MDPPA0001-AVIS-001/caps')
+      .set('Cookie', 'compliance_session_id=session-1')
+      .set('x-csrf-token', 'csrf-token-1')
+      .send(fullCapPayload());
+
+    expect(response.status).toBe(201);
+    expect(response.body.cap.containmentMeasures.description).toBe('Temporary closure of the affected runway segment');
+    expect(response.body.cap.containmentMeasures.implementedDate).toBe('2026-06-02');
+  });
+
+  it('creates a CAP without containmentMeasures, since it does not apply to every finding', async () => {
+    const { app } = await buildApp({ roles: ['cap_entry'] });
+
+    const payload = fullCapPayload();
+    delete payload.containmentMeasures;
+
+    const response = await request(app)
+      .post('/api/findings/H-MDPPA0001-AVIS-001/caps')
+      .set('Cookie', 'compliance_session_id=session-1')
+      .set('x-csrf-token', 'csrf-token-1')
+      .send(payload);
+
+    expect(response.status).toBe(201);
+    expect(response.body.cap.containmentMeasures).toBeFalsy();
+  });
+
   it('preserves repository 422 errors during evidence upload', async () => {
     const { app, alfrescoClient } = await buildApp({ roles: ['cap_entry'] });
 
     await request(app)
-      .post('/api/findings/MDPP001-AYVIS-01/caps')
+      .post('/api/findings/H-MDPPA0001-AVIS-001/caps')
       .set('Cookie', 'compliance_session_id=session-1')
       .set('x-csrf-token', 'csrf-token-1')
       .send(fullCapPayload());
@@ -576,7 +773,7 @@ describe('Findings and CAP API', () => {
     };
 
     const response = await request(app)
-      .post('/api/caps/CA-MDPP001AYVIS-01-02/rca/evidence')
+      .post('/api/caps/P-MDPPA0001-AVIS001-02/rca/evidence')
       .set('Cookie', 'compliance_session_id=session-1')
       .set('x-csrf-token', 'csrf-token-1')
       .attach('file', Buffer.from('%PDF-1.4 test'), { filename: 'evidence.pdf', contentType: 'application/pdf' });
@@ -589,13 +786,13 @@ describe('Findings and CAP API', () => {
     const { app } = await buildApp({ roles: ['cap_entry'] });
 
     await request(app)
-      .post('/api/findings/MDPP001-AYVIS-01/caps')
+      .post('/api/findings/H-MDPPA0001-AVIS-001/caps')
       .set('Cookie', 'compliance_session_id=session-1')
       .set('x-csrf-token', 'csrf-token-1')
       .send(fullCapPayload());
 
     const response = await request(app)
-      .post('/api/caps/CA-MDPP001AYVIS-01-02/rca/evidence')
+      .post('/api/caps/P-MDPPA0001-AVIS001-02/rca/evidence')
       .set('Cookie', 'compliance_session_id=session-1')
       .set('x-csrf-token', 'csrf-token-1');
 
@@ -606,13 +803,13 @@ describe('Findings and CAP API', () => {
     const { app } = await buildApp({ roles: ['cap_entry'] });
 
     await request(app)
-      .post('/api/findings/MDPP001-AYVIS-01/caps')
+      .post('/api/findings/H-MDPPA0001-AVIS-001/caps')
       .set('Cookie', 'compliance_session_id=session-1')
       .set('x-csrf-token', 'csrf-token-1')
       .send(fullCapPayload());
 
     const response = await request(app)
-      .post('/api/caps/CA-MDPP001AYVIS-01-02/rca/evidence')
+      .post('/api/caps/P-MDPPA0001-AVIS001-02/rca/evidence')
       .set('Cookie', 'compliance_session_id=session-1')
       .set('x-csrf-token', 'csrf-token-1')
       .attach('file', Buffer.from('#!/bin/sh\necho hi'), { filename: 'script.sh', contentType: 'application/x-sh' });
@@ -624,7 +821,7 @@ describe('Findings and CAP API', () => {
     const { app } = await buildApp({ roles: ['cap_entry'] });
 
     const response = await request(app)
-      .post('/api/findings/MDPP001-AYVIS-01/caps')
+      .post('/api/findings/H-MDPPA0001-AVIS-001/caps')
       .set('Cookie', 'compliance_session_id=session-1')
       .set('x-csrf-token', 'csrf-token-1')
       .send({
@@ -643,6 +840,10 @@ describe('Findings and CAP API', () => {
           calculatedRiskLevel: 'High',
           tolerabilityLevel: 'Unacceptable',
           justification: 'Based on historical occurrence data',
+        },
+        containmentMeasures: {
+          description: 'Temporary closure of the affected runway segment',
+          implementedDate: '2026-06-02',
         },
         correctiveActions: [
           {
@@ -668,11 +869,148 @@ describe('Findings and CAP API', () => {
     expect(response.status).toBe(201);
   });
 
-  it('allows inspector review and updates CAP acceptance status', async () => {
+  it('confirms a finding as-is with no edits', async () => {
+    const { app, fixture } = await buildApp({ roles: ['inspector'] });
+    fixture.findingNode.properties['vso:findingReviewStatus'] = 'Pending Review';
+
+    const response = await request(app)
+      .patch('/api/findings/H-MDPPA0001-AVIS-001/review')
+      .set('Cookie', 'compliance_session_id=session-1')
+      .set('x-csrf-token', 'csrf-token-1')
+      .send({});
+
+    expect(response.status).toBe(200);
+    expect(response.body.finding.findingReviewStatus).toBe('Confirmed');
+    expect(response.body.finding.findingReviewedBy).toBe('tester');
+    expect(response.body.finding.description).toBe('Finding description');
+    expect(fixture.findingNode.properties['vso:findingReviewDate']).toBeTruthy();
+    // No findingSeverity sent, so deadlines are untouched.
+    expect(fixture.findingNode.properties['vso:resolutionDeadline']).toBeUndefined();
+  });
+
+  it('confirms a finding while updating its severity, recomputing both deadlines from FindingSeverity', async () => {
+    const { app, fixture } = await buildApp({ roles: ['inspector'], now: new Date('2026-04-03T10:00:00.000Z') });
+    fixture.findingNode.properties['vso:findingReviewStatus'] = 'Pending Review';
+
+    const response = await request(app)
+      .patch('/api/findings/H-MDPPA0001-AVIS-001/review')
+      .set('Cookie', 'compliance_session_id=session-1')
+      .set('x-csrf-token', 'csrf-token-1')
+      .send({ findingSeverity: 'A' });
+
+    expect(response.status).toBe(200);
+    expect(response.body.finding.findingReviewStatus).toBe('Confirmed');
+    expect(response.body.finding.findingReviewedBy).toBe('tester');
+    expect(response.body.finding.findingSeverity).toBe('A');
+    // Severity A: daysToSolution=7, daysToSubmission=3, from baseDate 2026-04-03.
+    expect(response.body.finding.resolutionDeadline).toBe('2026-04-10');
+    expect(response.body.finding.submissionDeadline).toBe('2026-04-06');
+    // Fields other than findingSeverity are never accepted by this endpoint.
+    expect(fixture.findingNode.properties['vso:description']).toBe('Finding description');
+  });
+
+  it('rejects reviewing a finding whose findingLevel is not Non-Compliance', async () => {
+    const { app, fixture } = await buildApp({ roles: ['inspector'] });
+    fixture.findingNode.properties['vso:findingLevel'] = 'Observation';
+    fixture.findingNode.properties['vso:findingReviewStatus'] = 'Pending Review';
+
+    const response = await request(app)
+      .patch('/api/findings/H-MDPPA0001-AVIS-001/review')
+      .set('Cookie', 'compliance_session_id=session-1')
+      .set('x-csrf-token', 'csrf-token-1')
+      .send({});
+
+    expect(response.status).toBe(400);
+    expect(response.body.code).toBe('FINDING_REVIEW_NOT_APPLICABLE');
+  });
+
+  it('rejects reviewing a finding a second time once already confirmed', async () => {
+    const { app, fixture } = await buildApp({ roles: ['inspector'] });
+    fixture.findingNode.properties['vso:findingReviewStatus'] = 'Confirmed';
+
+    const response = await request(app)
+      .patch('/api/findings/H-MDPPA0001-AVIS-001/review')
+      .set('Cookie', 'compliance_session_id=session-1')
+      .set('x-csrf-token', 'csrf-token-1')
+      .send({});
+
+    expect(response.status).toBe(409);
+    expect(response.body.code).toBe('FINDING_ALREADY_REVIEWED');
+  });
+
+  it('rejects finding review from roles other than inspector/admin', async () => {
+    const { app } = await buildApp({ roles: ['cap_entry'] });
+
+    const response = await request(app)
+      .patch('/api/findings/H-MDPPA0001-AVIS-001/review')
+      .set('Cookie', 'compliance_session_id=session-1')
+      .set('x-csrf-token', 'csrf-token-1')
+      .send({});
+
+    expect(response.status).toBe(403);
+  });
+
+  it('includes the finding\'s attached evidence in the detail response', async () => {
     const { app } = await buildApp({ roles: ['inspector'] });
 
     const response = await request(app)
-      .patch('/api/caps/CA-MDPP001AYVIS-01-01/review')
+      .get('/api/findings/H-MDPPA0001-AVIS-001')
+      .set('Cookie', 'compliance_session_id=session-1');
+
+    expect(response.status).toBe(200);
+    expect(response.body.evidence).toHaveLength(1);
+    expect(response.body.evidence[0].nodeId).toBe('evidence-node-1');
+    expect(response.body.evidence[0].name).toBe('photo.jpg');
+  });
+
+  it('streams finding evidence content', async () => {
+    const { app } = await buildApp({ roles: ['inspector'] });
+
+    const response = await request(app)
+      .get('/api/findings/H-MDPPA0001-AVIS-001/evidence/evidence-node-1/content')
+      .set('Cookie', 'compliance_session_id=session-1');
+
+    expect(response.status).toBe(200);
+    expect(response.headers['content-type']).toContain('image/jpeg');
+    expect(Buffer.from(response.body).toString()).toBe('fake-image-bytes');
+  });
+
+  it('returns 404 for an evidence id not attached to the finding', async () => {
+    const { app } = await buildApp({ roles: ['inspector'] });
+
+    const response = await request(app)
+      .get('/api/findings/H-MDPPA0001-AVIS-001/evidence/unknown-evidence/content')
+      .set('Cookie', 'compliance_session_id=session-1');
+
+    expect(response.status).toBe(404);
+    expect(response.body.code).toBe('EVIDENCE_NOT_FOUND');
+  });
+
+  it('filters findings list by reviewStatus', async () => {
+    const { app, fixture } = await buildApp({ roles: ['inspector'] });
+    fixture.findingNode.properties['vso:findingReviewStatus'] = 'Pending Review';
+
+    const response = await request(app)
+      .get('/api/findings')
+      .query({ reviewStatus: 'Pending Review' })
+      .set('Cookie', 'compliance_session_id=session-1');
+
+    expect(response.status).toBe(200);
+    expect(response.body.list).toHaveLength(1);
+    expect(response.body.list[0].findingReviewStatus).toBe('Pending Review');
+  });
+
+  it('allows inspector review and updates CAP acceptance status', async () => {
+    const { app } = await buildApp({ roles: ['inspector'] });
+
+    await request(app)
+      .put('/api/caps/P-MDPPA0001-AVIS001-01/evaluation')
+      .set('Cookie', 'compliance_session_id=session-1')
+      .set('x-csrf-token', 'csrf-token-1')
+      .send({ criteria: buildCompleteCapEvaluationCriteria() });
+
+    const response = await request(app)
+      .patch('/api/caps/P-MDPPA0001-AVIS001-01/review')
       .set('Cookie', 'compliance_session_id=session-1')
       .set('x-csrf-token', 'csrf-token-1')
       .send({
@@ -683,16 +1021,93 @@ describe('Findings and CAP API', () => {
     expect(response.body.cap.acceptanceStatus).toBe('Accepted');
   });
 
-  it('registers follow-up report and closes finding when closure is effective', async () => {
+  it('rejects a review decision while the manual PAC evaluation is incomplete', async () => {
+    const { app } = await buildApp({ roles: ['inspector'] });
+
+    const response = await request(app)
+      .patch('/api/caps/P-MDPPA0001-AVIS001-01/review')
+      .set('Cookie', 'compliance_session_id=session-1')
+      .set('x-csrf-token', 'csrf-token-1')
+      .send({ acceptanceStatus: 'Accepted' });
+
+    expect(response.status).toBe(409);
+    expect(response.body.code).toBe('CAP_EVALUATION_INCOMPLETE');
+    expect(response.body.missingCriteria.length).toBeGreaterThan(0);
+  });
+
+  it('saves a partial manual PAC evaluation and lets a reviewer resume it', async () => {
+    const { app } = await buildApp({ roles: ['inspector'] });
+
+    const saveResponse = await request(app)
+      .put('/api/caps/P-MDPPA0001-AVIS001-01/evaluation')
+      .set('Cookie', 'compliance_session_id=session-1')
+      .set('x-csrf-token', 'csrf-token-1')
+      .send({ criteria: [{ code: 'ADMIN.WITHIN_DEADLINE', response: 'Sí', observations: 'On time' }] });
+
+    expect(saveResponse.status).toBe(200);
+    expect(saveResponse.body.evaluation.criteria).toHaveLength(1);
+    expect(saveResponse.body.evaluation.criteria[0].criterionResponse).toBe('Sí');
+
+    const detailResponse = await request(app)
+      .get('/api/caps/P-MDPPA0001-AVIS001-01')
+      .set('Cookie', 'compliance_session_id=session-1');
+
+    expect(detailResponse.status).toBe(200);
+    expect(detailResponse.body.currentEvaluation.criteria).toHaveLength(1);
+    expect(detailResponse.body.currentEvaluation.evaluatedBy).toBe('tester');
+  });
+
+  it('rejects an unknown criterion code on evaluation save', async () => {
+    const { app } = await buildApp({ roles: ['inspector'] });
+
+    const response = await request(app)
+      .put('/api/caps/P-MDPPA0001-AVIS001-01/evaluation')
+      .set('Cookie', 'compliance_session_id=session-1')
+      .set('x-csrf-token', 'csrf-token-1')
+      .send({ criteria: [{ code: 'NOT.A.REAL.CODE', response: 'Sí' }] });
+
+    expect(response.status).toBe(400);
+    expect(response.body.code).toBe('CAP_EVALUATION_BAD_CRITERION');
+  });
+
+  it('notifies the cap_entry inbox when a CAP is reviewed', async () => {
+    const originalEmail = process.env.CAP_ENTRY_NOTIFICATIONS_EMAIL;
+    process.env.CAP_ENTRY_NOTIFICATIONS_EMAIL = 'cap-entry@example.com';
+    try {
+      const { service, sent } = buildTestNotificationService();
+      const { app } = await buildApp({ roles: ['inspector'], notificationService: service });
+
+      await request(app)
+        .put('/api/caps/P-MDPPA0001-AVIS001-01/evaluation')
+        .set('Cookie', 'compliance_session_id=session-1')
+        .set('x-csrf-token', 'csrf-token-1')
+        .send({ criteria: buildCompleteCapEvaluationCriteria() });
+
+      const response = await request(app)
+        .patch('/api/caps/P-MDPPA0001-AVIS001-01/review')
+        .set('Cookie', 'compliance_session_id=session-1')
+        .set('x-csrf-token', 'csrf-token-1')
+        .send({ acceptanceStatus: 'Accepted' });
+
+      expect(response.status).toBe(200);
+      expect(sent).toHaveLength(1);
+      expect(sent[0].to).toBe('cap-entry@example.com');
+      expect(sent[0].subject).toContain('P-MDPPA0001-AVIS001-01');
+    } finally {
+      process.env.CAP_ENTRY_NOTIFICATIONS_EMAIL = originalEmail;
+    }
+  });
+
+  it('registers a follow-up report as Pending Review, without changing finding status', async () => {
     const { app, fixture } = await buildApp({ roles: ['inspector'] });
 
     const response = await request(app)
-      .post('/api/findings/MDPP001-AYVIS-01/follow-ups')
+      .post('/api/findings/H-MDPPA0001-AVIS-001/follow-ups')
       .set('Cookie', 'compliance_session_id=session-1')
       .set('x-csrf-token', 'csrf-token-1')
       .send({
         followUpType: 'Closure Verification',
-        inheritedCapId: 'CA-MDPP001AYVIS-01-01',
+        inheritedCapId: 'P-MDPPA0001-AVIS001-01',
         followUpDate: '2026-04-03T10:00:00.000Z',
         findingClosed: true,
         effectivenessConfirmed: true,
@@ -703,9 +1118,499 @@ describe('Findings and CAP API', () => {
 
     expect(response.status).toBe(201);
     expect(response.body.followUpReport.effectivenessConfirmed).toBe(true);
-    expect(response.body.followUpReport.followUpId).toBe('FU-MDPP001AYVIS-01-01');
-    expect(response.body.followUpReport.inheritedCapId).toBe('CA-MDPP001AYVIS-01-01');
+    expect(response.body.followUpReport.followUpId).toBe('S-MDPPA0001-AVIS001-01');
+    expect(response.body.followUpReport.inheritedCapId).toBe('P-MDPPA0001-AVIS001-01');
+    // A follow-up can never affect finding status until its evidence is
+    // reviewed and confirmed Adequate (PATCH .../evidence-review below).
+    expect(response.body.followUpReport.evidenceReviewStatus).toBe('Pending Review');
+    expect(fixture.findingNode.properties['vso:findingStatus']).toBe('Open');
+  });
+
+  it('rolls back the created follow-up node when the CAP association step fails', async () => {
+    const { app, fixture, alfrescoClient } = await buildApp({ roles: ['inspector'] });
+
+    alfrescoClient.createTargetAssociation = async () => {
+      throw new Error('Association failed');
+    };
+
+    const response = await request(app)
+      .post('/api/findings/H-MDPPA0001-AVIS-001/follow-ups')
+      .set('Cookie', 'compliance_session_id=session-1')
+      .set('x-csrf-token', 'csrf-token-1')
+      .send({
+        followUpType: 'Progress Review',
+        inheritedCapId: 'P-MDPPA0001-AVIS001-01',
+        percentComplete: 10,
+      });
+
+    expect(response.status).toBe(502);
+    expect(fixture.deletedNodeIds).toContain('follow-up-node-created');
+    expect(fixture.followUpNodes.find((node) => node.id === 'follow-up-node-created')).toBeUndefined();
+  });
+
+  it('cleans up an orphaned follow-up node when node creation succeeds server-side despite a client-side error', async () => {
+    const { app, fixture, alfrescoClient } = await buildApp({ roles: ['inspector'] });
+
+    alfrescoClient.createChildNode = async ({ parentNodeId, nodeType, name, properties }) => {
+      // Simulates a write that reaches and completes on Alfresco even
+      // though the client (e.g. due to a timeout) sees this call fail.
+      const next = { id: 'follow-up-node-orphaned', parentId: parentNodeId, nodeType, name, properties };
+      fixture.followUpNodes = [...fixture.followUpNodes, next];
+      throw new Error('timeout of 10000ms exceeded');
+    };
+
+    const response = await request(app)
+      .post('/api/findings/H-MDPPA0001-AVIS-001/follow-ups')
+      .set('Cookie', 'compliance_session_id=session-1')
+      .set('x-csrf-token', 'csrf-token-1')
+      .send({
+        followUpType: 'Progress Review',
+        percentComplete: 10,
+      });
+
+    expect(response.status).toBe(502);
+    expect(fixture.deletedNodeIds).toContain('follow-up-node-orphaned');
+    expect(fixture.followUpNodes.find((node) => node.id === 'follow-up-node-orphaned')).toBeUndefined();
+  });
+
+  it('marking evidence Adequate on a closure-verification follow-up moves the finding to Pending Closure Approval', async () => {
+    const { app, fixture } = await buildApp({ roles: ['inspector'] });
+
+    const createResponse = await request(app)
+      .post('/api/findings/H-MDPPA0001-AVIS-001/follow-ups')
+      .set('Cookie', 'compliance_session_id=session-1')
+      .set('x-csrf-token', 'csrf-token-1')
+      .send({
+        followUpType: 'Closure Verification',
+        followUpDate: '2026-04-03T10:00:00.000Z',
+        findingClosed: true,
+        effectivenessConfirmed: true,
+        percentComplete: 100,
+      });
+    expect(createResponse.status).toBe(201);
+    expect(fixture.findingNode.properties['vso:findingStatus']).toBe('Open');
+
+    const reviewResponse = await request(app)
+      .patch('/api/findings/H-MDPPA0001-AVIS-001/follow-ups/S-MDPPA0001-AVIS001-01/evidence-review')
+      .set('Cookie', 'compliance_session_id=session-1')
+      .set('x-csrf-token', 'csrf-token-1')
+      .send({ decision: 'Adequate' });
+
+    expect(reviewResponse.status).toBe(200);
+    expect(reviewResponse.body.followUpReport.evidenceReviewStatus).toBe('Adequate');
+    expect(reviewResponse.body.finding.findingStatus).toBe('Pending Closure Approval');
+    expect(fixture.findingNode.properties['vso:findingStatus']).toBe('Pending Closure Approval');
+  });
+
+  it('marking evidence Inadequate never changes finding status', async () => {
+    const { app, fixture } = await buildApp({ roles: ['inspector'] });
+
+    await request(app)
+      .post('/api/findings/H-MDPPA0001-AVIS-001/follow-ups')
+      .set('Cookie', 'compliance_session_id=session-1')
+      .set('x-csrf-token', 'csrf-token-1')
+      .send({
+        followUpType: 'Closure Verification',
+        followUpDate: '2026-04-03T10:00:00.000Z',
+        findingClosed: true,
+        effectivenessConfirmed: true,
+        percentComplete: 100,
+      });
+
+    const reviewResponse = await request(app)
+      .patch('/api/findings/H-MDPPA0001-AVIS-001/follow-ups/S-MDPPA0001-AVIS001-01/evidence-review')
+      .set('Cookie', 'compliance_session_id=session-1')
+      .set('x-csrf-token', 'csrf-token-1')
+      .send({ decision: 'Inadequate', notes: 'Missing photographic evidence' });
+
+    expect(reviewResponse.status).toBe(200);
+    expect(reviewResponse.body.followUpReport.evidenceReviewStatus).toBe('Inadequate');
+    expect(reviewResponse.body.followUpReport.evidenceReviewNotes).toBe('Missing photographic evidence');
+    expect(reviewResponse.body.finding.findingStatus).toBe('Open');
+    expect(fixture.findingNode.properties['vso:findingStatus']).toBe('Open');
+  });
+
+  it('records the reviewing user on evidence-review decisions', async () => {
+    const { app } = await buildApp({ roles: ['inspector'] });
+
+    await request(app)
+      .post('/api/findings/H-MDPPA0001-AVIS-001/follow-ups')
+      .set('Cookie', 'compliance_session_id=session-1')
+      .set('x-csrf-token', 'csrf-token-1')
+      .send({ followUpType: 'Progress Review', followUpDate: '2026-04-03T10:00:00.000Z', percentComplete: 50 });
+
+    const reviewResponse = await request(app)
+      .patch('/api/findings/H-MDPPA0001-AVIS-001/follow-ups/S-MDPPA0001-AVIS001-01/evidence-review')
+      .set('Cookie', 'compliance_session_id=session-1')
+      .set('x-csrf-token', 'csrf-token-1')
+      .send({ decision: 'Adequate' });
+
+    expect(reviewResponse.status).toBe(200);
+    expect(reviewResponse.body.followUpReport.evidenceReviewedBy).toBe('tester');
+  });
+
+  it('uploads Remote evidence for a follow-up and lists it on the finding detail view', async () => {
+    const { app, fixture } = await buildApp({ roles: ['inspector'] });
+
+    await request(app)
+      .post('/api/findings/H-MDPPA0001-AVIS-001/follow-ups')
+      .set('Cookie', 'compliance_session_id=session-1')
+      .set('x-csrf-token', 'csrf-token-1')
+      .send({ followUpType: 'Progress Review', followUpDate: '2026-04-03T10:00:00.000Z', percentComplete: 50 });
+
+    const uploadResponse = await request(app)
+      .post('/api/findings/H-MDPPA0001-AVIS-001/follow-ups/S-MDPPA0001-AVIS001-01/evidence')
+      .set('Cookie', 'compliance_session_id=session-1')
+      .set('x-csrf-token', 'csrf-token-1')
+      .field('evidenceRole', 'Progress Evidence')
+      .field('collectionMethod', 'Remote')
+      .attach('file', Buffer.from('%PDF-1.4 test'), { filename: 'evidence.pdf', contentType: 'application/pdf' });
+
+    expect(uploadResponse.status).toBe(201);
+    expect(uploadResponse.body.evidence.evidenceRole).toBe('Progress Evidence');
+    expect(uploadResponse.body.evidence.collectionMethod).toBe('Remote');
+    expect(fixture.lastCreatedChildNodeArgs.parentNodeId).toBe('inspection-node-1');
+    expect(fixture.lastCreatedChildNodeArgs.associationType).toBe('cm:contains');
+    expect(fixture.lastCreatedChildNodeArgs.properties['vso:inspectionId']).toBe('MDPP-001');
+    expect(fixture.lastCreatedChildNodeArgs.properties['vso:providerName']).toBe('Provider 1');
+    expect(fixture.lastCreatedChildNodeArgs.properties['vso:hashValue']).toMatch(/^[a-f0-9]{64}$/);
+
+    const detailResponse = await request(app)
+      .get('/api/findings/H-MDPPA0001-AVIS-001')
+      .set('Cookie', 'compliance_session_id=session-1');
+
+    expect(detailResponse.status).toBe(200);
+    expect(detailResponse.body.followUpReports).toHaveLength(1);
+    expect(detailResponse.body.followUpReports[0].evidence).toHaveLength(1);
+    expect(detailResponse.body.followUpReports[0].evidence[0].collectionMethod).toBe('Remote');
+    expect(detailResponse.body.followUpReports[0].evidence[0].evidenceRole).toBe('Progress Evidence');
+  });
+
+  it('retrieves the content of uploaded follow-up evidence', async () => {
+    const { app } = await buildApp({ roles: ['inspector'] });
+
+    await request(app)
+      .post('/api/findings/H-MDPPA0001-AVIS-001/follow-ups')
+      .set('Cookie', 'compliance_session_id=session-1')
+      .set('x-csrf-token', 'csrf-token-1')
+      .send({ followUpType: 'Progress Review', followUpDate: '2026-04-03T10:00:00.000Z', percentComplete: 50 });
+
+    const uploadResponse = await request(app)
+      .post('/api/findings/H-MDPPA0001-AVIS-001/follow-ups/S-MDPPA0001-AVIS001-01/evidence')
+      .set('Cookie', 'compliance_session_id=session-1')
+      .set('x-csrf-token', 'csrf-token-1')
+      .field('evidenceRole', 'Progress Evidence')
+      .field('collectionMethod', 'Provider-submitted')
+      .attach('file', Buffer.from('%PDF-1.4 test'), { filename: 'evidence.pdf', contentType: 'application/pdf' });
+
+    const evidenceNodeId = uploadResponse.body.evidence.nodeId;
+
+    const contentResponse = await request(app)
+      .get(`/api/findings/H-MDPPA0001-AVIS-001/follow-ups/S-MDPPA0001-AVIS001-01/evidence/${evidenceNodeId}/content`)
+      .set('Cookie', 'compliance_session_id=session-1');
+
+    expect(contentResponse.status).toBe(200);
+    expect(contentResponse.body.toString()).toBe('fake-upload-bytes');
+  });
+
+  it('rejects follow-up evidence upload with an On-site collectionMethod (reserved for canonical import)', async () => {
+    const { app } = await buildApp({ roles: ['inspector'] });
+
+    await request(app)
+      .post('/api/findings/H-MDPPA0001-AVIS-001/follow-ups')
+      .set('Cookie', 'compliance_session_id=session-1')
+      .set('x-csrf-token', 'csrf-token-1')
+      .send({ followUpType: 'Progress Review', followUpDate: '2026-04-03T10:00:00.000Z', percentComplete: 50 });
+
+    const response = await request(app)
+      .post('/api/findings/H-MDPPA0001-AVIS-001/follow-ups/S-MDPPA0001-AVIS001-01/evidence')
+      .set('Cookie', 'compliance_session_id=session-1')
+      .set('x-csrf-token', 'csrf-token-1')
+      .field('evidenceRole', 'Progress Evidence')
+      .field('collectionMethod', 'On-site')
+      .attach('file', Buffer.from('%PDF-1.4 test'), { filename: 'evidence.pdf', contentType: 'application/pdf' });
+
+    expect(response.status).toBe(400);
+    expect(response.body.code).toBe('EVIDENCE_BAD_REQUEST');
+  });
+
+  it('rejects follow-up evidence upload with an invalid evidenceRole', async () => {
+    const { app } = await buildApp({ roles: ['inspector'] });
+
+    await request(app)
+      .post('/api/findings/H-MDPPA0001-AVIS-001/follow-ups')
+      .set('Cookie', 'compliance_session_id=session-1')
+      .set('x-csrf-token', 'csrf-token-1')
+      .send({ followUpType: 'Progress Review', followUpDate: '2026-04-03T10:00:00.000Z', percentComplete: 50 });
+
+    const response = await request(app)
+      .post('/api/findings/H-MDPPA0001-AVIS-001/follow-ups/S-MDPPA0001-AVIS001-01/evidence')
+      .set('Cookie', 'compliance_session_id=session-1')
+      .set('x-csrf-token', 'csrf-token-1')
+      .field('evidenceRole', 'RCA Evidence')
+      .field('collectionMethod', 'Remote')
+      .attach('file', Buffer.from('%PDF-1.4 test'), { filename: 'evidence.pdf', contentType: 'application/pdf' });
+
+    expect(response.status).toBe(400);
+    expect(response.body.code).toBe('EVIDENCE_BAD_REQUEST');
+  });
+
+  it('returns 404 uploading evidence to an unknown follow-up id', async () => {
+    const { app } = await buildApp({ roles: ['inspector'] });
+
+    const response = await request(app)
+      .post('/api/findings/H-MDPPA0001-AVIS-001/follow-ups/S-MDPPA0001-AVIS999-99/evidence')
+      .set('Cookie', 'compliance_session_id=session-1')
+      .set('x-csrf-token', 'csrf-token-1')
+      .field('evidenceRole', 'Progress Evidence')
+      .field('collectionMethod', 'Remote')
+      .attach('file', Buffer.from('%PDF-1.4 test'), { filename: 'evidence.pdf', contentType: 'application/pdf' });
+
+    expect(response.status).toBe(404);
+    expect(response.body.code).toBe('FOLLOW_UP_NOT_FOUND');
+  });
+
+  it('rejects reviewing evidence a second time once already reviewed', async () => {
+    const { app } = await buildApp({ roles: ['inspector'] });
+
+    await request(app)
+      .post('/api/findings/H-MDPPA0001-AVIS-001/follow-ups')
+      .set('Cookie', 'compliance_session_id=session-1')
+      .set('x-csrf-token', 'csrf-token-1')
+      .send({ followUpType: 'Progress Review', followUpDate: '2026-04-03T10:00:00.000Z', percentComplete: 50 });
+
+    await request(app)
+      .patch('/api/findings/H-MDPPA0001-AVIS-001/follow-ups/S-MDPPA0001-AVIS001-01/evidence-review')
+      .set('Cookie', 'compliance_session_id=session-1')
+      .set('x-csrf-token', 'csrf-token-1')
+      .send({ decision: 'Adequate' });
+
+    const secondReview = await request(app)
+      .patch('/api/findings/H-MDPPA0001-AVIS-001/follow-ups/S-MDPPA0001-AVIS001-01/evidence-review')
+      .set('Cookie', 'compliance_session_id=session-1')
+      .set('x-csrf-token', 'csrf-token-1')
+      .send({ decision: 'Inadequate' });
+
+    expect(secondReview.status).toBe(409);
+    expect(secondReview.body.code).toBe('EVIDENCE_NOT_REVIEWABLE');
+  });
+
+  it('returns 404 for evidence review on an unknown follow-up id', async () => {
+    const { app } = await buildApp({ roles: ['inspector'] });
+
+    const response = await request(app)
+      .patch('/api/findings/H-MDPPA0001-AVIS-001/follow-ups/S-MDPPA0001-AVIS999-99/evidence-review')
+      .set('Cookie', 'compliance_session_id=session-1')
+      .set('x-csrf-token', 'csrf-token-1')
+      .send({ decision: 'Adequate' });
+
+    expect(response.status).toBe(404);
+    expect(response.body.code).toBe('FOLLOW_UP_NOT_FOUND');
+  });
+
+  it('rejects evidence review from roles other than inspector/admin', async () => {
+    const { app } = await buildApp({ roles: ['cap_entry'] });
+
+    const response = await request(app)
+      .patch('/api/findings/H-MDPPA0001-AVIS-001/follow-ups/S-MDPPA0001-AVIS001-01/evidence-review')
+      .set('Cookie', 'compliance_session_id=session-1')
+      .set('x-csrf-token', 'csrf-token-1')
+      .send({ decision: 'Adequate' });
+
+    expect(response.status).toBe(403);
+  });
+
+  it('rejects a follow-up that attempts closure with the wrong type/flag combination', async () => {
+    const { app, fixture } = await buildApp({ roles: ['inspector'] });
+
+    const response = await request(app)
+      .post('/api/findings/H-MDPPA0001-AVIS-001/follow-ups')
+      .set('Cookie', 'compliance_session_id=session-1')
+      .set('x-csrf-token', 'csrf-token-1')
+      .send({
+        followUpType: 'Progress Review',
+        followUpDate: '2026-04-03T10:00:00.000Z',
+        findingClosed: true,
+        effectivenessConfirmed: true,
+        percentComplete: 100,
+      });
+
+    expect(response.status).toBe(400);
+    expect(response.body.code).toBe('FOLLOW_UP_INVALID_CLOSURE');
+    expect(fixture.findingNode.properties['vso:findingStatus']).toBe('Open');
+  });
+
+  it('approves a pending closure and closes the finding', async () => {
+    const { app, fixture } = await buildApp({ roles: ['inspector'] });
+    fixture.findingNode.properties['vso:findingStatus'] = 'Pending Closure Approval';
+
+    const response = await request(app)
+      .patch('/api/findings/H-MDPPA0001-AVIS-001/closure-review')
+      .set('Cookie', 'compliance_session_id=session-1')
+      .set('x-csrf-token', 'csrf-token-1')
+      .send({ decision: 'approve' });
+
+    expect(response.status).toBe(200);
+    expect(response.body.finding.findingStatus).toBe('Closed');
     expect(fixture.findingNode.properties['vso:findingStatus']).toBe('Closed');
+    expect(fixture.findingNode.properties['vso:findingClosureDate']).toBeTruthy();
+  });
+
+  it('rejects a pending closure and reopens the finding for further work', async () => {
+    const { app, fixture } = await buildApp({ roles: ['inspector'] });
+    fixture.findingNode.properties['vso:findingStatus'] = 'Pending Closure Approval';
+
+    const response = await request(app)
+      .patch('/api/findings/H-MDPPA0001-AVIS-001/closure-review')
+      .set('Cookie', 'compliance_session_id=session-1')
+      .set('x-csrf-token', 'csrf-token-1')
+      .send({ decision: 'reject' });
+
+    expect(response.status).toBe(200);
+    expect(response.body.finding.findingStatus).toBe('In Progress');
+    expect(fixture.findingNode.properties['vso:findingStatus']).toBe('In Progress');
+  });
+
+  it('rejects closure review when the finding is not pending approval', async () => {
+    const { app } = await buildApp({ roles: ['inspector'] });
+
+    const response = await request(app)
+      .patch('/api/findings/H-MDPPA0001-AVIS-001/closure-review')
+      .set('Cookie', 'compliance_session_id=session-1')
+      .set('x-csrf-token', 'csrf-token-1')
+      .send({ decision: 'approve' });
+
+    expect(response.status).toBe(409);
+    expect(response.body.code).toBe('FINDING_NOT_REVIEWABLE');
+  });
+
+  it('rejects closure review from roles other than inspector/admin', async () => {
+    const { app } = await buildApp({ roles: ['cap_entry'] });
+
+    const response = await request(app)
+      .patch('/api/findings/H-MDPPA0001-AVIS-001/closure-review')
+      .set('Cookie', 'compliance_session_id=session-1')
+      .set('x-csrf-token', 'csrf-token-1')
+      .send({ decision: 'approve' });
+
+    expect(response.status).toBe(403);
+  });
+
+  it('creates a deadline extension request', async () => {
+    const { app, fixture } = await buildApp({ roles: ['cap_entry'] });
+
+    const response = await request(app)
+      .post('/api/findings/H-MDPPA0001-AVIS-001/deadline-extension-requests')
+      .set('Cookie', 'compliance_session_id=session-1')
+      .set('x-csrf-token', 'csrf-token-1')
+      .send({ requestedResolutionDeadline: '2026-06-01', reason: 'Awaiting parts' });
+
+    expect(response.status).toBe(201);
+    expect(response.body.finding.deadlineExtensionStatus).toBe('Requested');
+    expect(response.body.finding.requestedResolutionDeadline).toBe('2026-06-01');
+    expect(fixture.findingNode.properties['vso:deadlineExtensionStatus']).toBe('Requested');
+    expect(fixture.findingNode.properties['vso:deadlineExtensionRequestedDate']).toBeTruthy();
+  });
+
+  it('rejects a deadline extension request with an invalid date', async () => {
+    const { app } = await buildApp({ roles: ['cap_entry'] });
+
+    const response = await request(app)
+      .post('/api/findings/H-MDPPA0001-AVIS-001/deadline-extension-requests')
+      .set('Cookie', 'compliance_session_id=session-1')
+      .set('x-csrf-token', 'csrf-token-1')
+      .send({ requestedResolutionDeadline: 'not-a-date' });
+
+    expect(response.status).toBe(400);
+    expect(response.body.code).toBe('DEADLINE_EXTENSION_BAD_REQUEST');
+  });
+
+  it('rejects a deadline extension request that is not later than the current deadline', async () => {
+    const { app, fixture } = await buildApp({ roles: ['cap_entry'] });
+    fixture.findingNode.properties['vso:resolutionDeadline'] = '2026-06-01';
+
+    const response = await request(app)
+      .post('/api/findings/H-MDPPA0001-AVIS-001/deadline-extension-requests')
+      .set('Cookie', 'compliance_session_id=session-1')
+      .set('x-csrf-token', 'csrf-token-1')
+      .send({ requestedResolutionDeadline: '2026-05-01' });
+
+    expect(response.status).toBe(400);
+    expect(response.body.code).toBe('DEADLINE_EXTENSION_NOT_LATER');
+  });
+
+  it('rejects a new deadline extension request while one is already pending', async () => {
+    const { app, fixture } = await buildApp({ roles: ['cap_entry'] });
+    fixture.findingNode.properties['vso:deadlineExtensionStatus'] = 'Requested';
+
+    const response = await request(app)
+      .post('/api/findings/H-MDPPA0001-AVIS-001/deadline-extension-requests')
+      .set('Cookie', 'compliance_session_id=session-1')
+      .set('x-csrf-token', 'csrf-token-1')
+      .send({ requestedResolutionDeadline: '2026-06-01' });
+
+    expect(response.status).toBe(409);
+    expect(response.body.code).toBe('DEADLINE_EXTENSION_ALREADY_PENDING');
+  });
+
+  it('rejects deadline extension requests from roles other than cap_entry/admin', async () => {
+    const { app } = await buildApp({ roles: ['inspector'] });
+
+    const response = await request(app)
+      .post('/api/findings/H-MDPPA0001-AVIS-001/deadline-extension-requests')
+      .set('Cookie', 'compliance_session_id=session-1')
+      .set('x-csrf-token', 'csrf-token-1')
+      .send({ requestedResolutionDeadline: '2026-06-01' });
+
+    expect(response.status).toBe(403);
+  });
+
+  it('accepts a deadline extension request and updates the resolution deadline', async () => {
+    const { app, fixture } = await buildApp({ roles: ['inspector'] });
+    fixture.findingNode.properties['vso:deadlineExtensionStatus'] = 'Requested';
+    fixture.findingNode.properties['vso:requestedResolutionDeadline'] = '2026-06-01';
+
+    const response = await request(app)
+      .patch('/api/findings/H-MDPPA0001-AVIS-001/deadline-extension-review')
+      .set('Cookie', 'compliance_session_id=session-1')
+      .set('x-csrf-token', 'csrf-token-1')
+      .send({ decision: 'Accepted' });
+
+    expect(response.status).toBe(200);
+    expect(response.body.finding.deadlineExtensionStatus).toBe('Accepted');
+    expect(response.body.finding.resolutionDeadline).toBe('2026-06-01');
+    expect(fixture.findingNode.properties['vso:resolutionDeadline']).toBe('2026-06-01');
+    expect(fixture.findingNode.properties['vso:deadlineExtensionDecisionDate']).toBeTruthy();
+  });
+
+  it('rejects a deadline extension request without changing the resolution deadline', async () => {
+    const { app, fixture } = await buildApp({ roles: ['inspector'] });
+    fixture.findingNode.properties['vso:resolutionDeadline'] = '2026-05-01';
+    fixture.findingNode.properties['vso:deadlineExtensionStatus'] = 'Requested';
+    fixture.findingNode.properties['vso:requestedResolutionDeadline'] = '2026-06-01';
+
+    const response = await request(app)
+      .patch('/api/findings/H-MDPPA0001-AVIS-001/deadline-extension-review')
+      .set('Cookie', 'compliance_session_id=session-1')
+      .set('x-csrf-token', 'csrf-token-1')
+      .send({ decision: 'Rejected' });
+
+    expect(response.status).toBe(200);
+    expect(response.body.finding.deadlineExtensionStatus).toBe('Rejected');
+    expect(fixture.findingNode.properties['vso:resolutionDeadline']).toBe('2026-05-01');
+  });
+
+  it('rejects reviewing a deadline extension that is not pending', async () => {
+    const { app } = await buildApp({ roles: ['inspector'] });
+
+    const response = await request(app)
+      .patch('/api/findings/H-MDPPA0001-AVIS-001/deadline-extension-review')
+      .set('Cookie', 'compliance_session_id=session-1')
+      .set('x-csrf-token', 'csrf-token-1')
+      .send({ decision: 'Accepted' });
+
+    expect(response.status).toBe(409);
+    expect(response.body.code).toBe('DEADLINE_EXTENSION_NOT_REVIEWABLE');
   });
 
   it('returns follow-ups using finding-first scope with status semantics and paging metadata', async () => {
@@ -716,13 +1621,13 @@ describe('Findings and CAP API', () => {
         id: 'follow-up-node-1',
         parentId: fixture.findingNode.id,
         properties: {
-          'vso:followUpId': 'FU-MDPP001AYVIS-01-01',
+          'vso:followUpId': 'S-MDPPA0001-AVIS001-01',
           'vso:followUpType': 'Progress Review',
           'vso:followUpDate': '2026-04-03T10:00:00.000Z',
           'vso:percentComplete': 20,
           'vso:inspectionId': 'MDPP-001',
           'vso:locationId': 'LOC-01',
-          'vso:specialtyCode': 'AYVIS',
+          'vso:specialtyCode': 'AVIS',
           'vso:providerId': 'PR-01',
         },
       },
@@ -730,13 +1635,13 @@ describe('Findings and CAP API', () => {
         id: 'follow-up-node-2',
         parentId: fixture.findingNode.id,
         properties: {
-          'vso:followUpId': 'FU-MDPP001AYVIS-01-02',
+          'vso:followUpId': 'S-MDPPA0001-AVIS001-02',
           'vso:followUpType': 'CAP Verification',
           'vso:followUpDate': '2026-04-02T10:00:00.000Z',
           'vso:percentComplete': 10,
           'vso:inspectionId': 'MDPP-001',
           'vso:locationId': 'LOC-01',
-          'vso:specialtyCode': 'AYVIS',
+          'vso:specialtyCode': 'AVIS',
           'vso:providerId': 'PR-01',
         },
       },
@@ -758,10 +1663,157 @@ describe('Findings and CAP API', () => {
     expect(response.status).toBe(200);
     expect(response.body.list).toHaveLength(1);
     expect(response.body.list[0].followUpType).toBe('Progress Review');
-    expect(response.body.list[0].inheritedCapId).toBe('CA-MDPP001AYVIS-01-01');
+    expect(response.body.list[0].inheritedCapId).toBe('P-MDPPA0001-AVIS001-01');
     expect(response.body.paging.totalItems).toBe(1);
     expect(response.body.paging.maxItems).toBe(1);
     expect(response.body.scopeMeta.statusMode).toBe('stored');
     expect(response.body.scopeMeta.matchedFindings).toBe(1);
+  });
+});
+
+describe('Findings and CAP API notifications', () => {
+  const originalInspectorEmail = process.env.INSPECTOR_NOTIFICATIONS_EMAIL;
+  const originalCapEntryEmail = process.env.CAP_ENTRY_NOTIFICATIONS_EMAIL;
+  const originalNotificationLocale = process.env.NOTIFICATION_LOCALE;
+
+  beforeEach(() => {
+    process.env.INSPECTOR_NOTIFICATIONS_EMAIL = 'inspectors@example.com';
+    process.env.CAP_ENTRY_NOTIFICATIONS_EMAIL = 'cap-entry@example.com';
+    // These assertions check that the right event fires the right notification,
+    // not which locale is configured by default — pin it so the test stays
+    // correct regardless of NOTIFICATION_LOCALE's production default.
+    process.env.NOTIFICATION_LOCALE = 'en';
+  });
+
+  afterEach(() => {
+    process.env.INSPECTOR_NOTIFICATIONS_EMAIL = originalInspectorEmail;
+    process.env.CAP_ENTRY_NOTIFICATIONS_EMAIL = originalCapEntryEmail;
+    process.env.NOTIFICATION_LOCALE = originalNotificationLocale;
+  });
+
+  it('notifies inspectors when a follow-up is submitted (evidence review pending)', async () => {
+    const { service, sent } = buildTestNotificationService();
+    const { app } = await buildApp({ roles: ['inspector'], notificationService: service });
+
+    const response = await request(app)
+      .post('/api/findings/H-MDPPA0001-AVIS-001/follow-ups')
+      .set('Cookie', 'compliance_session_id=session-1')
+      .set('x-csrf-token', 'csrf-token-1')
+      .send({ followUpType: 'Progress Review', followUpDate: '2026-04-03T10:00:00.000Z', percentComplete: 40 });
+
+    expect(response.status).toBe(201);
+    expect(sent).toHaveLength(1);
+    expect(sent[0].to).toBe('inspectors@example.com');
+    expect(sent[0].subject).toContain('H-MDPPA0001-AVIS-001');
+  });
+
+  it('notifies inspectors when evidence is marked Adequate and pushes a finding to Pending Closure Approval', async () => {
+    const { service, sent } = buildTestNotificationService();
+    const { app } = await buildApp({ roles: ['inspector'], notificationService: service });
+
+    await request(app)
+      .post('/api/findings/H-MDPPA0001-AVIS-001/follow-ups')
+      .set('Cookie', 'compliance_session_id=session-1')
+      .set('x-csrf-token', 'csrf-token-1')
+      .send({ followUpType: 'Closure Verification', followUpDate: '2026-04-03T10:00:00.000Z', findingClosed: true, effectivenessConfirmed: true, percentComplete: 100 });
+    sent.length = 0; // discard the "evidence review pending" notification from creation
+
+    const response = await request(app)
+      .patch('/api/findings/H-MDPPA0001-AVIS-001/follow-ups/S-MDPPA0001-AVIS001-01/evidence-review')
+      .set('Cookie', 'compliance_session_id=session-1')
+      .set('x-csrf-token', 'csrf-token-1')
+      .send({ decision: 'Adequate' });
+
+    expect(response.status).toBe(200);
+    expect(sent).toHaveLength(1);
+    expect(sent[0].subject).toContain('awaiting approval');
+  });
+
+  it('notifies inspectors when evidence is marked Inadequate', async () => {
+    const { service, sent } = buildTestNotificationService();
+    const { app } = await buildApp({ roles: ['inspector'], notificationService: service });
+
+    await request(app)
+      .post('/api/findings/H-MDPPA0001-AVIS-001/follow-ups')
+      .set('Cookie', 'compliance_session_id=session-1')
+      .set('x-csrf-token', 'csrf-token-1')
+      .send({ followUpType: 'Progress Review', followUpDate: '2026-04-03T10:00:00.000Z', percentComplete: 40 });
+    sent.length = 0;
+
+    const response = await request(app)
+      .patch('/api/findings/H-MDPPA0001-AVIS-001/follow-ups/S-MDPPA0001-AVIS001-01/evidence-review')
+      .set('Cookie', 'compliance_session_id=session-1')
+      .set('x-csrf-token', 'csrf-token-1')
+      .send({ decision: 'Inadequate', notes: 'Missing photos' });
+
+    expect(response.status).toBe(200);
+    expect(sent).toHaveLength(1);
+    expect(sent[0].subject).toContain('resubmission');
+  });
+
+  it('notifies cap_entry when a finding closure is approved', async () => {
+    const { service, sent } = buildTestNotificationService();
+    const { app, fixture } = await buildApp({ roles: ['inspector'], notificationService: service });
+    fixture.findingNode.properties['vso:findingStatus'] = 'Pending Closure Approval';
+
+    const response = await request(app)
+      .patch('/api/findings/H-MDPPA0001-AVIS-001/closure-review')
+      .set('Cookie', 'compliance_session_id=session-1')
+      .set('x-csrf-token', 'csrf-token-1')
+      .send({ decision: 'approve' });
+
+    expect(response.status).toBe(200);
+    expect(sent).toHaveLength(1);
+    expect(sent[0].to).toBe('cap-entry@example.com');
+    expect(sent[0].subject).toContain('closed');
+  });
+
+  it('notifies inspectors when a finding closure is rejected', async () => {
+    const { service, sent } = buildTestNotificationService();
+    const { app, fixture } = await buildApp({ roles: ['inspector'], notificationService: service });
+    fixture.findingNode.properties['vso:findingStatus'] = 'Pending Closure Approval';
+
+    const response = await request(app)
+      .patch('/api/findings/H-MDPPA0001-AVIS-001/closure-review')
+      .set('Cookie', 'compliance_session_id=session-1')
+      .set('x-csrf-token', 'csrf-token-1')
+      .send({ decision: 'reject' });
+
+    expect(response.status).toBe(200);
+    expect(sent).toHaveLength(1);
+    expect(sent[0].to).toBe('inspectors@example.com');
+    expect(sent[0].subject).toContain('rejected');
+  });
+
+  it('notifies inspectors when a deadline extension is requested', async () => {
+    const { service, sent } = buildTestNotificationService();
+    const { app } = await buildApp({ roles: ['cap_entry'], notificationService: service });
+
+    const response = await request(app)
+      .post('/api/findings/H-MDPPA0001-AVIS-001/deadline-extension-requests')
+      .set('Cookie', 'compliance_session_id=session-1')
+      .set('x-csrf-token', 'csrf-token-1')
+      .send({ requestedResolutionDeadline: '2026-06-01' });
+
+    expect(response.status).toBe(201);
+    expect(sent).toHaveLength(1);
+    expect(sent[0].to).toBe('inspectors@example.com');
+  });
+
+  it('notifies cap_entry when a deadline extension is reviewed', async () => {
+    const { service, sent } = buildTestNotificationService();
+    const { app, fixture } = await buildApp({ roles: ['inspector'], notificationService: service });
+    fixture.findingNode.properties['vso:deadlineExtensionStatus'] = 'Requested';
+    fixture.findingNode.properties['vso:requestedResolutionDeadline'] = '2026-06-01';
+
+    const response = await request(app)
+      .patch('/api/findings/H-MDPPA0001-AVIS-001/deadline-extension-review')
+      .set('Cookie', 'compliance_session_id=session-1')
+      .set('x-csrf-token', 'csrf-token-1')
+      .send({ decision: 'Accepted' });
+
+    expect(response.status).toBe(200);
+    expect(sent).toHaveLength(1);
+    expect(sent[0].to).toBe('cap-entry@example.com');
   });
 });

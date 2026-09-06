@@ -2,7 +2,12 @@ import { describe, it, expect } from 'vitest';
 import { createRequire } from 'node:module';
 
 const require = createRequire(import.meta.url);
-const { FINDING_STATUS, computeEffectiveFindingStatus, canSubmitCap } = require('../../server/domain/statusRules.cjs');
+const {
+  FINDING_STATUS,
+  computeEffectiveFindingStatus,
+  canSubmitCap,
+  resolveFindingStatusFromFollowUp,
+} = require('../../server/domain/statusRules.cjs');
 
 const NOW = new Date('2026-04-03T10:00:00.000Z');
 const PAST_DEADLINE = '2026-04-01';
@@ -151,5 +156,52 @@ describe('canSubmitCap', () => {
     expect(canSubmitCap(FINDING_STATUS.CAP_SUBMITTED)).toBe(false);
     expect(canSubmitCap(FINDING_STATUS.CAP_ACCEPTED)).toBe(false);
     expect(canSubmitCap(FINDING_STATUS.CLOSED)).toBe(false);
+  });
+});
+
+describe('resolveFindingStatusFromFollowUp', () => {
+  it('resolves to Pending Closure Approval for a valid closure verification', () => {
+    const status = resolveFindingStatusFromFollowUp({
+      followUpType: 'Closure Verification',
+      effectivenessConfirmed: true,
+      percentComplete: 100,
+    });
+    expect(status).toBe(FINDING_STATUS.PENDING_CLOSURE_APPROVAL);
+  });
+
+  it('does not resolve to closure approval when effectivenessConfirmed is false, even with the right type', () => {
+    const status = resolveFindingStatusFromFollowUp({
+      followUpType: 'Closure Verification',
+      effectivenessConfirmed: false,
+      percentComplete: 100,
+    });
+    expect(status).toBe(FINDING_STATUS.PENDING_CLOSURE_REVIEW);
+  });
+
+  it('does not resolve to closure approval for a different follow-up type, even with effectivenessConfirmed', () => {
+    const status = resolveFindingStatusFromFollowUp({
+      followUpType: 'Progress Review',
+      effectivenessConfirmed: true,
+      percentComplete: 100,
+    });
+    expect(status).toBe(FINDING_STATUS.PENDING_CLOSURE_REVIEW);
+  });
+
+  it('resolves to Pending Closure Review at 100% without a closure attempt', () => {
+    const status = resolveFindingStatusFromFollowUp({
+      followUpType: 'Progress Review',
+      effectivenessConfirmed: false,
+      percentComplete: 100,
+    });
+    expect(status).toBe(FINDING_STATUS.PENDING_CLOSURE_REVIEW);
+  });
+
+  it('resolves to In Progress below 100% completion', () => {
+    const status = resolveFindingStatusFromFollowUp({
+      followUpType: 'Progress Review',
+      effectivenessConfirmed: false,
+      percentComplete: 40,
+    });
+    expect(status).toBe(FINDING_STATUS.IN_PROGRESS);
   });
 });

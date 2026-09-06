@@ -16,6 +16,7 @@ This document defines the design tokens, component conventions, and layout patte
 10. [View-Specific Patterns](#10-view-specific-patterns)
 11. [Date Smart Defaults](#11-date-smart-defaults)
 12. [Inspection Status Lifecycle](#12-inspection-status-lifecycle)
+13. [Internationalization (i18n)](#13-internationalization-i18n)
 
 ---
 
@@ -433,4 +434,26 @@ src/
 
 ---
 
-*Last updated: August 2026. Maintained by the compliance_web development team.*
+## 13. Internationalization (i18n)
+
+The app supports English and Spanish via `vue-i18n` (Composition API mode). Translation resources live in `src/i18n/locales/en.json` and `es.json`; the configured instance is `src/i18n/index.js`.
+
+Keys are namespaced per view, matching the component name: `findingManager.title`, `findingManager.table.findingId`, etc. `BaseButton`/`StatusBadge`/`LoadingSpinner` take text via props/slots and hold no strings of their own — translate at the call site, not inside the base component.
+
+The active locale is resolved once, in `src/router/guards.js`, in this order: the user's persisted session preference (`POST /api/auth/locale`, see `docs/auth/phase-1-contract/AUTH_CHUNK1_API_SPEC.md` §4.4) → browser language → `en` fallback. Server-side strings (notification subject/body in `server/notifications/messages.cjs`) are separate — see `NOTIFICATION_LOCALE` in the root `README.md`, since those go to fixed shared inboxes rather than a browsing session.
+
+### Do
+
+- Add new UI strings to both `en.json` and `es.json` in the same commit — never let one locale fall behind.
+- Use `useI18n()` inside components; import the `i18n` instance directly in non-component code (services, stores).
+- Keep keys namespaced by view/component so two views can use a short key like `title` without colliding.
+
+### Don't
+
+- Don't hardcode user-facing text in a `.vue` template or a server-side string the client displays — route it through `t()` or the message catalog.
+- Don't put translated strings inside `src/components/base/*.vue` — they take text as props/slots so callers can localize it.
+- Don't assume `formatDate`/`formatDateTime` (`src/utils/formatDate.js`) default to a fixed locale — they follow the active i18n locale.
+
+---
+
+*Last updated: September 2026. Maintained by the compliance_web development team.*

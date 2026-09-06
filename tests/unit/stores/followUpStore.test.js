@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { createPinia, setActivePinia } from 'pinia';
 import { useFollowUpStore } from '@/stores/followUpStore';
-import { apiFollowUps, apiCreateFindingFollowUp } from '@/services/apiServices';
+import { apiFollowUps, apiCreateFindingFollowUp, apiUploadFollowUpEvidence } from '@/services/apiServices';
 
 vi.mock('../../../src/services/apiServices.js');
 
@@ -35,7 +35,7 @@ describe('followUpStore', () => {
 
   it('createFollowUp returns API payload and tracks errors', async () => {
     const payload = {
-      findingId: 'MDPP001-AYVIS-01',
+      findingId: 'H-MDPPA0001-AVIS-001',
       payload: { followUpType: 'Progress Review', percentComplete: 25 },
       csrfToken: 'csrf-token',
     };
@@ -43,7 +43,7 @@ describe('followUpStore', () => {
 
     await expect(store.createFollowUp(payload)).resolves.toEqual({ followUpReport: { followUpId: 'FU-X' } });
     expect(apiCreateFindingFollowUp).toHaveBeenCalledWith(
-      'MDPP001-AYVIS-01',
+      'H-MDPPA0001-AVIS-001',
       { followUpType: 'Progress Review', percentComplete: 25 },
       'csrf-token'
     );
@@ -51,6 +51,33 @@ describe('followUpStore', () => {
     vi.mocked(apiCreateFindingFollowUp).mockRejectedValueOnce(new Error('follow-up create failed'));
     await expect(store.createFollowUp(payload)).rejects.toThrow('follow-up create failed');
     expect(store.error).toBe('follow-up create failed');
+  });
+
+  it('uploadFollowUpEvidence returns API payload and tracks errors', async () => {
+    const file = new File(['x'], 'evidence.pdf');
+    const args = {
+      findingId: 'H-MDPPA0001-AVIS-001',
+      followUpId: 'S-MDPPA0001-AVIS001-01',
+      file,
+      evidenceRole: 'Progress Evidence',
+      collectionMethod: 'Remote',
+      csrfToken: 'csrf-token',
+    };
+    vi.mocked(apiUploadFollowUpEvidence).mockResolvedValue({ data: { evidence: { nodeId: 'ev-1' } } });
+
+    await expect(store.uploadFollowUpEvidence(args)).resolves.toEqual({ evidence: { nodeId: 'ev-1' } });
+    expect(apiUploadFollowUpEvidence).toHaveBeenCalledWith(
+      'H-MDPPA0001-AVIS-001',
+      'S-MDPPA0001-AVIS001-01',
+      file,
+      'Progress Evidence',
+      'Remote',
+      'csrf-token'
+    );
+
+    vi.mocked(apiUploadFollowUpEvidence).mockRejectedValueOnce(new Error('evidence upload failed'));
+    await expect(store.uploadFollowUpEvidence(args)).rejects.toThrow('evidence upload failed');
+    expect(store.error).toBe('evidence upload failed');
   });
 
   it('setFilter updates only known filters', () => {
