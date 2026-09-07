@@ -3,14 +3,14 @@ import { mount } from '@vue/test-utils';
 import { createPinia, setActivePinia } from 'pinia';
 import ChecklistManager from '@/views/ChecklistManager.vue';
 import { useAuthStore } from '@/stores/authStore';
-import { useProtocolQuestionStore } from '@/stores/protocolQuestionStore';
+import { useChecklistQuestionStore } from '@/stores/checklistQuestionStore';
 import { useInspectionQuestionStore } from '@/stores/inspectionQuestionStore';
 import { useInspectedSpecialtyStore } from '@/stores/inspectedSpecialtyStore';
 import { useSiteVisitStore } from '@/stores/siteVisitStore';
 import { useToast } from 'vue-toastification';
 
 // Mock dependencies
-vi.mock('../../../src/stores/protocolQuestionStore');
+vi.mock('../../../src/stores/checklistQuestionStore');
 vi.mock('../../../src/stores/inspectionQuestionStore');
 vi.mock('../../../src/stores/inspectedSpecialtyStore');
 vi.mock('../../../src/stores/siteVisitStore');
@@ -35,7 +35,7 @@ vi.mock('vue-toastification', () => ({
 describe('ChecklistManager Component', () => {
   let pinia;
   let wrapper;
-  let mockProtocolQuestionStore;
+  let mockChecklistQuestionStore;
   let mockInspectionQuestionStore;
   let mockInspectedSpecialtyStore;
   let mockSiteVisitStore;
@@ -46,7 +46,7 @@ describe('ChecklistManager Component', () => {
     setActivePinia(pinia);
     vi.clearAllMocks();
 
-    mockProtocolQuestionStore = {
+    mockChecklistQuestionStore = {
       getQuestionsBySpecialty: vi.fn().mockResolvedValue({
         T1: {
           id: 'T1',
@@ -93,10 +93,10 @@ describe('ChecklistManager Component', () => {
 
     mockInspectionQuestionStore = {
       getInspectionQuestions: vi.fn().mockResolvedValue([
-        { id: 'IQ1', protocolQuestionId: 'Q1', inspectedSpecialtyId: 'IS1', code: 'SYS-001', sequence: 1 },
+        { id: 'IQ1', checklistQuestionId: 'Q1', inspectedSpecialtyId: 'IS1', code: 'SYS-001', sequence: 1 },
       ]),
       addMultipleQuestions: vi.fn().mockResolvedValue([
-        { id: 'IQ1', protocolQuestionId: 'Q1' },
+        { id: 'IQ1', checklistQuestionId: 'Q1' },
       ]),
       deleteAllForSpecialty: vi.fn().mockResolvedValue(true),
       upsertChecklist: vi.fn().mockResolvedValue({ deleted: 0, added: 2, updated: 0 }),
@@ -154,7 +154,7 @@ describe('ChecklistManager Component', () => {
       warning: vi.fn(),
     };
 
-    vi.mocked(useProtocolQuestionStore).mockReturnValue(mockProtocolQuestionStore);
+    vi.mocked(useChecklistQuestionStore).mockReturnValue(mockChecklistQuestionStore);
     vi.mocked(useInspectionQuestionStore).mockReturnValue(mockInspectionQuestionStore);
     vi.mocked(useInspectedSpecialtyStore).mockReturnValue(mockInspectedSpecialtyStore);
     vi.mocked(useSiteVisitStore).mockReturnValue(mockSiteVisitStore);
@@ -275,7 +275,7 @@ describe('ChecklistManager Component', () => {
       await wrapper.vm.onSpecialtyChange();
       await wrapper.vm.$nextTick();
 
-      expect(mockProtocolQuestionStore.getQuestionsBySpecialty).toHaveBeenCalled();
+      expect(mockChecklistQuestionStore.getQuestionsBySpecialty).toHaveBeenCalled();
     });
 
     it('should pre-populate selected questions when specialty changes', async () => {
@@ -430,7 +430,7 @@ describe('ChecklistManager Component', () => {
     });
 
     it('should handle question loading errors', async () => {
-      mockProtocolQuestionStore.getQuestionsBySpecialty.mockRejectedValueOnce(
+      mockChecklistQuestionStore.getQuestionsBySpecialty.mockRejectedValueOnce(
         new Error('API Error')
       );
 
@@ -472,7 +472,7 @@ describe('ChecklistManager Component', () => {
 describe('ChecklistManager Component', () => {
   let pinia;
   let wrapper;
-  let mockProtocolQuestionStore;
+  let mockChecklistQuestionStore;
   let mockInspectionQuestionStore;
   let mockInspectedSpecialtyStore;
 
@@ -481,7 +481,7 @@ describe('ChecklistManager Component', () => {
     setActivePinia(pinia);
     vi.clearAllMocks();
 
-    mockProtocolQuestionStore = {
+    mockChecklistQuestionStore = {
       getQuestionsBySpecialty: vi.fn().mockResolvedValue({
         T1: {
           id: 'T1',
@@ -528,10 +528,10 @@ describe('ChecklistManager Component', () => {
 
     mockInspectionQuestionStore = {
       getInspectionQuestions: vi.fn().mockResolvedValue([
-        { id: 'IQ1', protocolQuestionId: 'Q1', inspectedSpecialtyId: 'IS1', code: 'SYS-001', sequence: 1 },
+        { id: 'IQ1', checklistQuestionId: 'Q1', inspectedSpecialtyId: 'IS1', code: 'SYS-001', sequence: 1 },
       ]),
       addMultipleQuestions: vi.fn().mockResolvedValue([
-        { id: 'IQ1', protocolQuestionId: 'Q1' },
+        { id: 'IQ1', checklistQuestionId: 'Q1' },
       ]),
       deleteAllForSpecialty: vi.fn().mockResolvedValue(true),
       upsertChecklist: vi.fn().mockResolvedValue({ deleted: 0, added: 2, updated: 0 }),
@@ -553,7 +553,7 @@ describe('ChecklistManager Component', () => {
       },
     };
 
-    vi.mocked(useProtocolQuestionStore).mockReturnValue(mockProtocolQuestionStore);
+    vi.mocked(useChecklistQuestionStore).mockReturnValue(mockChecklistQuestionStore);
     vi.mocked(useInspectionQuestionStore).mockReturnValue(mockInspectionQuestionStore);
     vi.mocked(useInspectedSpecialtyStore).mockReturnValue(mockInspectedSpecialtyStore);
   });
@@ -619,7 +619,7 @@ describe('ChecklistManager Component', () => {
       await wrapper.vm.onSpecialtyChange();
       await wrapper.vm.$nextTick();
 
-      expect(mockProtocolQuestionStore.getQuestionsBySpecialty).toHaveBeenCalled();
+      expect(mockChecklistQuestionStore.getQuestionsBySpecialty).toHaveBeenCalled();
     });
 
     it('should pre-populate selected questions when specialty changes', async () => {
@@ -824,7 +824,7 @@ describe('ChecklistManager Component', () => {
 
   describe('Edge Cases', () => {
     it('should handle API errors gracefully', async () => {
-      mockProtocolQuestionStore.getQuestionsBySpecialty.mockRejectedValueOnce(
+      mockChecklistQuestionStore.getQuestionsBySpecialty.mockRejectedValueOnce(
         new Error('API Error')
       );
 

@@ -16,7 +16,7 @@
 
 The Inspection Checklist Manager is a comprehensive feature for managing inspection question checklists. It allows users to:
 - Select an inspected specialty
-- View available protocol questions grouped by topic
+- View available checklist questions grouped by topic
 - Select relevant questions for the inspection
 - Save selections to persistent storage
 - Pre-select previously saved questions
@@ -27,7 +27,7 @@ The Inspection Checklist Manager is a comprehensive feature for managing inspect
 ```
 User Selects Specialty
         ↓
-Load Protocol Questions (protocolQuestionStore)
+Load Checklist Questions (checklistQuestionStore)
         ↓
 Load Inspection Questions (inspectionQuestionStore)
         ↓
@@ -52,7 +52,7 @@ Persist to Database
 ```
 src/
 ├── stores/
-│   ├── protocolQuestionStore.js       # Master question database
+│   ├── checklistQuestionStore.js       # Master question database
 │   └── inspectionQuestionStore.js     # Question selections
 │
 ├── components/
@@ -62,7 +62,7 @@ src/
 └── App.vue                            # Updated with new navigation
 
 tests/
-├── protocolQuestionStore.test.js      # 35+ tests for protocol store
+├── checklistQuestionStore.test.js      # 35+ tests for checklist store
 ├── inspectionQuestionStore.test.js    # 45+ tests for inspection store
 ├── TopicChecklistGroup.test.js        # 30+ tests for topic component
 └── ChecklistManager.test.js           # 35+ tests for main component
@@ -75,14 +75,14 @@ Documentation/
 
 ## Store Architecture
 
-### protocolQuestionStore.js
+### checklistQuestionStore.js
 
-**Purpose**: Manages the master database of protocol questions
+**Purpose**: Manages the master database of checklist questions
 
 **State Structure**:
 ```javascript
 {
-  protocolQuestions: {
+  checklistQuestions: {
     [questionId]: {
       id, code, texto, topic, topicName, sequence,
       verification, normativas, references, specialty, activo
@@ -108,11 +108,11 @@ await store.getQuestionsBySpecialty(specialtyId)
 // Returns: { [topicId]: { id, name, questions: [...] } }
 
 // Get single question with caching
-await store.getProtocolQuestion(questionId)
+await store.getChecklistQuestion(questionId)
 // Returns: Question object
 
 // Fetch all active questions
-await store.getAllProtocolQuestions()
+await store.getAllChecklistQuestions()
 // Returns: Array of all questions
 
 // Cache management
@@ -141,12 +141,12 @@ store.isLoadedForSpecialty(specialtyId)
 {
   inspectionQuestions: {
     [questionId]: {
-      id, code, inspectedSpecialty, protocolQuestion
+      id, code, inspectedSpecialty, checklistQuestion
     }
   },
   inspectionQuestionsBySpecialty: {
     [inspectedSpecialtyId]: [
-      { id, code, inspectedSpecialty, protocolQuestion }
+      { id, code, inspectedSpecialty, checklistQuestion }
     ]
   },
   loading: Boolean,
@@ -162,14 +162,14 @@ await store.getInspectionQuestions(inspectedSpecialtyId)
 
 // Add single selection
 await store.addInspectionQuestion({
-  code, inspectedSpecialty, protocolQuestion
+  code, inspectedSpecialty, checklistQuestion
 })
 // Returns: Created question object
 
 // Batch add multiple
 await store.addMultipleQuestions(
   inspectedSpecialtyId,
-  [protocolQuestionId1, protocolQuestionId2, ...]
+  [checklistQuestionId1, checklistQuestionId2, ...]
 )
 // Returns: Array of created questions
 
@@ -178,8 +178,8 @@ await store.deleteInspectionQuestion(questionId)
 await store.deleteAllForSpecialty(inspectedSpecialtyId)
 
 // Query methods
-store.getSelectedProtocolQuestionIds(inspectedSpecialtyId)
-store.isQuestionSelected(inspectedSpecialtyId, protocolQuestionId)
+store.getSelectedChecklistQuestionIds(inspectedSpecialtyId)
+store.isQuestionSelected(inspectedSpecialtyId, checklistQuestionId)
 
 // Cache management
 store.clearSpecialtyCache(inspectedSpecialtyId)
@@ -272,9 +272,9 @@ hasDetails(question)                // Check if question has details
 
 ### API Endpoints Used
 
-**1. Query Protocol Questions**
+**1. Query Checklist Questions**
 ```javascript
-apiEntityCRUD('query', 'ProtocolQuestion', null, {
+apiEntityCRUD('query', 'ChecklistQuestion', null, {
   specialty: specialtyId,
   activo: true
 })
@@ -292,7 +292,7 @@ apiEntityCRUD('query', 'InspectionQuestion', null, {
 apiEntityCRUD('add', 'InspectionQuestion', null, {
   code: questionCode,
   inspectedSpecialty: inspectedSpecialtyId,
-  protocolQuestion: protocolQuestionId
+  checklistQuestion: checklistQuestionId
 })
 ```
 
@@ -303,7 +303,7 @@ apiEntityCRUD('delete', 'InspectionQuestion', questionId)
 
 ### Data Models
 
-**Protocol Question** (from database):
+**Checklist Question** (from database):
 ```javascript
 {
   id: String,
@@ -326,8 +326,8 @@ apiEntityCRUD('delete', 'InspectionQuestion', questionId)
   id: String,
   code: String,
   inspectedSpecialty: String, // Link to inspected specialty
-  protocolQuestion: String,   // Link to protocol question
-  protocolQuestionId: String  // Denormalized
+  checklistQuestion: String,   // Link to checklist question
+  checklistQuestionId: String  // Denormalized
 }
 ```
 
@@ -364,7 +364,7 @@ describe('Module/Component Name', () => {
 npm run test
 
 # Run specific test file
-npm run test protocolQuestionStore
+npm run test checklistQuestionStore
 
 # Run with UI
 npm run test:ui
@@ -375,7 +375,7 @@ npm run test -- --coverage
 
 ### Test Coverage
 
-**protocolQuestionStore.test.js** (35+ tests):
+**checklistQuestionStore.test.js** (35+ tests):
 - Question fetching and grouping
 - Topic sorting
 - Caching behavior
@@ -462,10 +462,10 @@ npm run test -- --coverage
 
 **Enable store debugging**:
 ```javascript
-import { useProtocolQuestionStore } from '../stores/protocolQuestionStore';
-const store = useProtocolQuestionStore();
+import { useChecklistQuestionStore } from '../stores/checklistQuestionStore';
+const store = useChecklistQuestionStore();
 console.log(store.$state); // View entire state
-console.log(store.protocolQuestions); // View specific part
+console.log(store.checklistQuestions); // View specific part
 ```
 
 **Enable component debugging**:
@@ -493,10 +493,10 @@ console.log('groupedQuestions:', groupedQuestions.value);
 
 <script setup>
 import { ref, computed } from 'vue';
-import { useProtocolQuestionStore } from '../stores/protocolQuestionStore';
+import { useChecklistQuestionStore } from '../stores/checklistQuestionStore';
 import { useInspectionQuestionStore } from '../stores/inspectionQuestionStore';
 
-const protocolStore = useProtocolQuestionStore();
+const checklistStore = useChecklistQuestionStore();
 const inspectionStore = useInspectionQuestionStore();
 
 const specialtyId = ref('S1');
@@ -504,8 +504,8 @@ const questions = ref(null);
 
 const loadChecklist = async () => {
   try {
-    // Load protocol questions
-    const grouped = await protocolStore.getQuestionsBySpecialty(specialtyId.value);
+    // Load checklist questions
+    const grouped = await checklistStore.getQuestionsBySpecialty(specialtyId.value);
     questions.value = grouped;
     
     // Load saved selections
@@ -535,11 +535,11 @@ const totalCount = computed(() => {
 ### Extending the Store
 
 ```javascript
-// In protocolQuestionStore.js
+// In checklistQuestionStore.js
 actions: {
   async getQuestionsByTopic(topicId) {
     try {
-      const { data: queryResults } = await apiEntityCRUD('query', 'ProtocolQuestion', null, {
+      const { data: queryResults } = await apiEntityCRUD('query', 'ChecklistQuestion', null, {
         topic: topicId,
         activo: true,
       });

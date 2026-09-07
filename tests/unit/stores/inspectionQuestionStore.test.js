@@ -1,12 +1,12 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { createPinia, setActivePinia } from 'pinia';
 import { useInspectionQuestionStore } from '@/stores/inspectionQuestionStore';
-import { useProtocolQuestionStore } from '@/stores/protocolQuestionStore';
+import { useChecklistQuestionStore } from '@/stores/checklistQuestionStore';
 import { apiEntityCRUD } from '@/services/apiServices';
 
 // Mock dependencies
 vi.mock('../../../src/services/apiServices.js');
-vi.mock('../../../src/stores/protocolQuestionStore');
+vi.mock('../../../src/stores/checklistQuestionStore');
 
 describe('Inspection Question Store', () => {
   let pinia;
@@ -14,7 +14,7 @@ describe('Inspection Question Store', () => {
   let mockInspectionQuestions;
   let mockEmptyResult;
   let mockAddedQuestion;
-  let mockProtocolQuestionStore;
+  let mockChecklistQuestionStore;
 
   beforeEach(() => {
     pinia = createPinia();
@@ -27,21 +27,21 @@ describe('Inspection Question Store', () => {
           id: 'IQ1',
           code: 'P-Q1',
           inspectedSpecialtyId: 'IS1',
-          protocolQuestionId: 'Q1',
+          checklistQuestionId: 'Q1',
           sequence: 1,
         },
         {
           id: 'IQ2',
           code: 'P-Q2',
           inspectedSpecialtyId: 'IS1',
-          protocolQuestionId: 'Q2',
+          checklistQuestionId: 'Q2',
           sequence: 2,
         },
         {
           id: 'IQ3',
           code: 'P-Q3',
           inspectedSpecialtyId: 'IS1',
-          protocolQuestionId: 'Q3',
+          checklistQuestionId: 'Q3',
           sequence: 3,
         },
       ],
@@ -51,7 +51,7 @@ describe('Inspection Question Store', () => {
       id: 'IQ1',
       code: 'P-Q1',
       inspectedSpecialtyId: 'IS1',
-      protocolQuestionId: 'Q1',
+      checklistQuestionId: 'Q1',
       sequence: 1,
     };
 
@@ -59,12 +59,12 @@ describe('Inspection Question Store', () => {
       list: [],
     };
 
-    mockProtocolQuestionStore = {
+    mockChecklistQuestionStore = {
       getQuestionById: vi.fn((questionId) => ({ id: questionId, code: `P-${questionId}` })),
-      getProtocolQuestion: vi.fn(async (questionId) => ({ id: questionId, code: `P-${questionId}` })),
+      getChecklistQuestion: vi.fn(async (questionId) => ({ id: questionId, code: `P-${questionId}` })),
     };
 
-    vi.mocked(useProtocolQuestionStore).mockReturnValue(mockProtocolQuestionStore);
+    vi.mocked(useChecklistQuestionStore).mockReturnValue(mockChecklistQuestionStore);
 
     store = useInspectionQuestionStore();
   });
@@ -134,7 +134,7 @@ describe('Inspection Question Store', () => {
       const questionData = {
         code: 'INQ-001',
         inspectedSpecialtyId: 'IS1',
-        protocolQuestionId: 'Q1',
+        checklistQuestionId: 'Q1',
       };
 
       const result = await store.addInspectionQuestion(questionData);
@@ -153,7 +153,7 @@ describe('Inspection Question Store', () => {
 
       const questionData = {
         inspectedSpecialtyId: 'IS1',
-        protocolQuestionId: 'Q1',
+        checklistQuestionId: 'Q1',
       };
 
       await expect(store.addInspectionQuestion(questionData)).rejects.toThrow();
@@ -170,7 +170,7 @@ describe('Inspection Question Store', () => {
       const questionData = {
         code: 'INQ-001',
         inspectedSpecialtyId: 'IS1',
-        protocolQuestionId: 'Q1',
+        checklistQuestionId: 'Q1',
       };
 
       await store.addInspectionQuestion(questionData);
@@ -196,7 +196,7 @@ describe('Inspection Question Store', () => {
       store.inspectionQuestions['IQ1'] = mockAddedQuestion;
       store.inspectionQuestionsBySpecialty['IS1'] = [
         mockAddedQuestion,
-        { id: 'IQ2', protocolQuestionId: 'Q2', inspectedSpecialtyId: 'IS1' },
+        { id: 'IQ2', checklistQuestionId: 'Q2', inspectedSpecialtyId: 'IS1' },
       ];
 
       apiEntityCRUD.mockResolvedValue({ data: { success: true } });
@@ -219,8 +219,8 @@ describe('Inspection Question Store', () => {
   describe('deleteAllForSpecialty', () => {
     it('should delete all questions for a specialty', async () => {
       store.inspectionQuestionsBySpecialty['IS1'] = [
-        { id: 'IQ1', protocolQuestionId: 'Q1', inspectedSpecialtyId: 'IS1' },
-        { id: 'IQ2', protocolQuestionId: 'Q2', inspectedSpecialtyId: 'IS1' },
+        { id: 'IQ1', checklistQuestionId: 'Q1', inspectedSpecialtyId: 'IS1' },
+        { id: 'IQ2', checklistQuestionId: 'Q2', inspectedSpecialtyId: 'IS1' },
       ];
       store.inspectionQuestions['IQ1'] = store.inspectionQuestionsBySpecialty['IS1'][0];
       store.inspectionQuestions['IQ2'] = store.inspectionQuestionsBySpecialty['IS1'][1];
@@ -244,9 +244,9 @@ describe('Inspection Question Store', () => {
     it('should add multiple questions at once', async () => {
       apiEntityCRUD
         .mockResolvedValueOnce({ data: { id: 'IQ1' } })
-        .mockResolvedValueOnce({ data: { list: [{ id: 'IQ1', protocolQuestionId: 'Q1', inspectedSpecialtyId: 'IS1', code: 'P-Q1', sequence: 1 }] } })
+        .mockResolvedValueOnce({ data: { list: [{ id: 'IQ1', checklistQuestionId: 'Q1', inspectedSpecialtyId: 'IS1', code: 'P-Q1', sequence: 1 }] } })
         .mockResolvedValueOnce({ data: { id: 'IQ2' } })
-        .mockResolvedValueOnce({ data: { list: [{ id: 'IQ2', protocolQuestionId: 'Q2', inspectedSpecialtyId: 'IS1', code: 'P-Q2', sequence: 2 }] } });
+        .mockResolvedValueOnce({ data: { list: [{ id: 'IQ2', checklistQuestionId: 'Q2', inspectedSpecialtyId: 'IS1', code: 'P-Q2', sequence: 2 }] } });
 
       const result = await store.addMultipleQuestions('IS1', [
         { id: 'Q1', code: 'P-Q1', sequence: 1 },
@@ -266,7 +266,7 @@ describe('Inspection Question Store', () => {
       await expect(store.addMultipleQuestions('IS1', [])).rejects.toThrow();
     });
 
-    it('should throw error if protocolQuestionIds is not an array', async () => {
+    it('should throw error if checklistQuestionIds is not an array', async () => {
       await expect(store.addMultipleQuestions('IS1', 'Q1')).rejects.toThrow();
     });
   });
@@ -274,14 +274,14 @@ describe('Inspection Question Store', () => {
   describe('upsertChecklist', () => {
     it('should add new questions and delete removed ones', async () => {
       store.inspectionQuestionsBySpecialty['IS1'] = [
-        { id: 'IQ1', protocolQuestionId: 'Q1', inspectedSpecialtyId: 'IS1', sequence: 1, riskLevel: null },
-        { id: 'IQ2', protocolQuestionId: 'Q2', inspectedSpecialtyId: 'IS1', sequence: 2, riskLevel: null },
-        { id: 'IQ3', protocolQuestionId: 'Q3', inspectedSpecialtyId: 'IS1', sequence: 3, riskLevel: null },
+        { id: 'IQ1', checklistQuestionId: 'Q1', inspectedSpecialtyId: 'IS1', sequence: 1, riskLevel: null },
+        { id: 'IQ2', checklistQuestionId: 'Q2', inspectedSpecialtyId: 'IS1', sequence: 2, riskLevel: null },
+        { id: 'IQ3', checklistQuestionId: 'Q3', inspectedSpecialtyId: 'IS1', sequence: 3, riskLevel: null },
       ];
       store.inspectionQuestions = {
-        'IQ1': { id: 'IQ1', protocolQuestionId: 'Q1' },
-        'IQ2': { id: 'IQ2', protocolQuestionId: 'Q2' },
-        'IQ3': { id: 'IQ3', protocolQuestionId: 'Q3' },
+        'IQ1': { id: 'IQ1', checklistQuestionId: 'Q1' },
+        'IQ2': { id: 'IQ2', checklistQuestionId: 'Q2' },
+        'IQ3': { id: 'IQ3', checklistQuestionId: 'Q3' },
       };
 
       await store.upsertChecklist('IS1', [
@@ -291,24 +291,24 @@ describe('Inspection Question Store', () => {
 
       expect(apiEntityCRUD).toHaveBeenCalledWith('delete', 'InspectionQuestion', 'IQ1');
       expect(apiEntityCRUD).toHaveBeenCalledWith('delete', 'InspectionQuestion', 'IQ3');
-      expect(apiEntityCRUD).toHaveBeenCalledWith('add', 'InspectionQuestion', null, expect.objectContaining({ protocolQuestionId: 'Q4' }));
+      expect(apiEntityCRUD).toHaveBeenCalledWith('add', 'InspectionQuestion', null, expect.objectContaining({ checklistQuestionId: 'Q4' }));
     });
   });
 
-  describe('getSelectedProtocolQuestionIds', () => {
+  describe('getSelectedChecklistQuestionIds', () => {
     it('should return array of selected protocol question IDs', () => {
       store.inspectionQuestionsBySpecialty['IS1'] = [
-        { id: 'IQ1', protocolQuestionId: 'Q1', inspectedSpecialtyId: 'IS1' },
-        { id: 'IQ2', protocolQuestionId: 'Q2', inspectedSpecialtyId: 'IS1' },
+        { id: 'IQ1', checklistQuestionId: 'Q1', inspectedSpecialtyId: 'IS1' },
+        { id: 'IQ2', checklistQuestionId: 'Q2', inspectedSpecialtyId: 'IS1' },
       ];
 
-      const result = store.getSelectedProtocolQuestionIds('IS1');
+      const result = store.getSelectedChecklistQuestionIds('IS1');
 
       expect(result).toEqual(['Q1', 'Q2']);
     });
 
     it('should return empty array for unknown specialty', () => {
-      const result = store.getSelectedProtocolQuestionIds('UNKNOWN');
+      const result = store.getSelectedChecklistQuestionIds('UNKNOWN');
 
       expect(result).toEqual([]);
     });
@@ -317,7 +317,7 @@ describe('Inspection Question Store', () => {
   describe('isQuestionSelected', () => {
     it('should return true if question is selected', () => {
       store.inspectionQuestionsBySpecialty['IS1'] = [
-        { id: 'IQ1', protocolQuestionId: 'Q1', inspectedSpecialtyId: 'IS1' },
+        { id: 'IQ1', checklistQuestionId: 'Q1', inspectedSpecialtyId: 'IS1' },
       ];
 
       const result = store.isQuestionSelected('IS1', 'Q1');
@@ -327,7 +327,7 @@ describe('Inspection Question Store', () => {
 
     it('should return false if question is not selected', () => {
       store.inspectionQuestionsBySpecialty['IS1'] = [
-        { id: 'IQ1', protocolQuestionId: 'Q1', inspectedSpecialtyId: 'IS1' },
+        { id: 'IQ1', checklistQuestionId: 'Q1', inspectedSpecialtyId: 'IS1' },
       ];
 
       const result = store.isQuestionSelected('IS1', 'Q2');

@@ -1,12 +1,12 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { createPinia, setActivePinia } from 'pinia';
-import { useProtocolQuestionStore } from '@/stores/protocolQuestionStore';
+import { useChecklistQuestionStore } from '@/stores/checklistQuestionStore';
 import { apiEntityCRUD } from '@/services/apiServices';
 
 // Mock dependencies
 vi.mock('../../../src/services/apiServices.js');
 
-describe('Protocol Question Store', () => {
+describe('Checklist Question Store', () => {
   let pinia;
   let store;
   let mockQuestions;
@@ -79,7 +79,7 @@ describe('Protocol Question Store', () => {
       ],
     };
 
-    store = useProtocolQuestionStore();
+    store = useChecklistQuestionStore();
   });
 
   describe('getQuestionsBySpecialty', () => {
@@ -130,11 +130,11 @@ describe('Protocol Question Store', () => {
     });
   });
 
-  describe('getProtocolQuestion', () => {
+  describe('getChecklistQuestion', () => {
     it('should fetch a single question by ID', async () => {
       apiEntityCRUD.mockResolvedValue({ data: mockSingleQuestion });
 
-      const result = await store.getProtocolQuestion('Q1');
+      const result = await store.getChecklistQuestion('Q1');
 
       expect(result).toBeDefined();
       expect(result.id).toBe('Q1');
@@ -142,51 +142,51 @@ describe('Protocol Question Store', () => {
     });
 
     it('should return cached question if already loaded', async () => {
-      store.protocolQuestions['Q1'] = mockSingleQuestion.list[0];
+      store.checklistQuestions['Q1'] = mockSingleQuestion.list[0];
 
-      const result = await store.getProtocolQuestion('Q1');
+      const result = await store.getChecklistQuestion('Q1');
 
       expect(result.id).toBe('Q1');
       expect(apiEntityCRUD).not.toHaveBeenCalled();
     });
 
     it('should throw error for empty question ID', async () => {
-      await expect(store.getProtocolQuestion('')).rejects.toThrow();
+      await expect(store.getChecklistQuestion('')).rejects.toThrow();
     });
 
     it('should throw error when question not found', async () => {
       apiEntityCRUD.mockResolvedValue({ data: { list: [] } });
 
-      await expect(store.getProtocolQuestion('NONEXISTENT')).rejects.toThrow();
+      await expect(store.getChecklistQuestion('NONEXISTENT')).rejects.toThrow();
     });
   });
 
-  describe('getAllProtocolQuestions', () => {
+  describe('getAllChecklistQuestions', () => {
     it('should fetch all active questions', async () => {
       apiEntityCRUD.mockResolvedValue({ data: mockQuestions });
 
-      const result = await store.getAllProtocolQuestions();
+      const result = await store.getAllChecklistQuestions();
 
       expect(result).toBeDefined();
       expect(Array.isArray(result)).toBe(true);
       expect(result.length).toBe(3);
     });
 
-    it('should populate protocolQuestions map', async () => {
+    it('should populate checklistQuestions map', async () => {
       apiEntityCRUD.mockResolvedValue({ data: mockQuestions });
 
-      await store.getAllProtocolQuestions();
+      await store.getAllChecklistQuestions();
 
-      expect(store.protocolQuestions['Q1']).toBeDefined();
-      expect(store.protocolQuestions['Q2']).toBeDefined();
-      expect(store.protocolQuestions['Q3']).toBeDefined();
+      expect(store.checklistQuestions['Q1']).toBeDefined();
+      expect(store.checklistQuestions['Q2']).toBeDefined();
+      expect(store.checklistQuestions['Q3']).toBeDefined();
     });
 
     it('should set loading state correctly', async () => {
       apiEntityCRUD.mockResolvedValue({ data: mockQuestions });
 
       expect(store.loading).toBe(false);
-      const promise = store.getAllProtocolQuestions();
+      const promise = store.getAllChecklistQuestions();
       expect(store.loading).toBe(true);
 
       await promise;
@@ -196,7 +196,7 @@ describe('Protocol Question Store', () => {
     it('should throw error when API returns invalid data', async () => {
       apiEntityCRUD.mockResolvedValue({ data: { invalid: 'data' } });
 
-      await expect(store.getAllProtocolQuestions()).rejects.toThrow();
+      await expect(store.getAllChecklistQuestions()).rejects.toThrow();
     });
   });
 
@@ -222,11 +222,11 @@ describe('Protocol Question Store', () => {
       apiEntityCRUD.mockResolvedValue({ data: mockQuestions });
 
       await store.getQuestionsBySpecialty('S1');
-      expect(Object.keys(store.protocolQuestions).length).toBeGreaterThan(0);
+      expect(Object.keys(store.checklistQuestions).length).toBeGreaterThan(0);
 
       store.clearAll();
 
-      expect(Object.keys(store.protocolQuestions).length).toBe(0);
+      expect(Object.keys(store.checklistQuestions).length).toBe(0);
       expect(Object.keys(store.questionsBySpecialty).length).toBe(0);
       expect(store.error).toBeNull();
     });
