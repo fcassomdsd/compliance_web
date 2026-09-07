@@ -42,7 +42,7 @@ function buildCapNode(overrides = {}) {
   };
 }
 
-async function buildApp({ roles = ['inspector'], findingNodes, capNodes, now = new Date('2026-04-03T10:00:00.000Z'), generateCeEvidenceReport } = {}) {
+async function buildApp({ roles = ['inspector'], findingNodes, capNodes, now = new Date('2026-04-03T10:00:00.000Z'), generateCeEvidenceReport, getNodeContent } = {}) {
   const session = {
     sessionId: 'session-1',
     username: 'tester',
@@ -71,6 +71,11 @@ async function buildApp({ roles = ['inspector'], findingNodes, capNodes, now = n
       return [];
     },
     generateCeEvidenceReport: generateCeEvidenceReport || (async () => ({ success: true, ce: 'CE-7', year: 'All', summary: { total: 0, gaps: [] }, byPq: {}, artifacts: [] })),
+    getNodeContent:
+      getNodeContent ||
+      (async () => {
+        throw Object.assign(new Error('Not found'), { response: { status: 404 } });
+      }),
   };
 
   const app = createApp({
@@ -328,5 +333,74 @@ describe('GET /api/reports/usoap-ce-evidence', () => {
       .set('Cookie', 'compliance_session_id=session-1');
 
     expect(response.status).toBe(403);
+  });
+});
+
+describe('GET /api/reports/usoap-ce-evidence/candidates/:nodeId/content', () => {
+  it('streams candidate content for a bare node id', async () => {
+    const { app } = await buildApp({
+      roles: ['inspector'],
+      getNodeContent: async ({ nodeId }) => {
+        if (nodeId === 'abc-123') {
+          return { buffer: Buffer.from('fake-pdf-bytes'), contentType: 'application/pdf' };
+        }
+        throw Object.assign(new Error('Not found'), { response: { status: 404 } });
+      },
+    });
+
+    const response = await request(app)
+      .get('/api/reports/usoap-ce-evidence/candidates/abc-123/content')
+      .set('Cookie', 'compliance_session_id=session-1');
+
+    expect(response.status).toBe(200);
+    expect(response.headers['content-type']).toBe('application/pdf');
+    expect(response.body.toString()).toBe('fake-pdf-bytes');
+  });
+
+  it('normalizes a full nodeRef to the bare node id before calling Alfresco', async () => {
+    let receivedNodeId = null;
+    const { app } = await buildApp({
+      roles: ['inspector'],
+      getNodeContent: async ({ nodeId }) => {
+        receivedNodeId = nodeId;
+        return { buffer: Buffer.from('fake-pdf-bytes'), contentType: 'application/pdf' };
+      },
+    });
+
+    const response = await request(app)
+      .get('/api/reports/usoap-ce-evidence/candidates/workspace%3A%2F%2FSpacesStore%2Fabc-123/content')
+      .set('Cookie', 'compliance_session_id=session-1');
+
+    expect(response.status).toBe(200);
+    expect(receivedNodeId).toBe('abc-123');
+  });
+
+  it('maps an upstream 404 to a 404 response', async () => {
+    const { app } = await buildApp({ roles: ['inspector'] });
+
+    const response = await request(app)
+      .get('/api/reports/usoap-ce-evidence/candidates/missing-node/content')
+      .set('Cookie', 'compliance_session_id=session-1');
+
+    expect(response.status).toBe(404);
+    expect(response.body.code).toBe('USOAP_CE_EVIDENCE_CANDIDATE_NOT_FOUND');
+  });
+
+  it('rejects a role with no access', async () => {
+    const { app } = await buildApp({ roles: ['cap_entry'] });
+
+    const response = await request(app)
+      .get('/api/reports/usoap-ce-evidence/candidates/abc-123/content')
+      .set('Cookie', 'compliance_session_id=session-1');
+
+    expect(response.status).toBe(403);
+  });
+
+  it('rejects an unauthenticated request', async () => {
+    const { app } = await buildApp({ roles: ['inspector'] });
+
+    const response = await request(app).get('/api/reports/usoap-ce-evidence/candidates/abc-123/content');
+
+    expect(response.status).toBe(401);
   });
 });

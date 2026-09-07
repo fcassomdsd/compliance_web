@@ -59,6 +59,7 @@
             <li v-for="candidate in population.candidates" :key="candidate.nodeRef">
               <span class="candidate-name">{{ candidate.name }}</span>
               <span class="candidate-meta">{{ candidate.path }}</span>
+              <BaseButton variant="ghost" size="sm" @click="viewCandidate(candidate)">{{ t('common.view') }}</BaseButton>
             </li>
           </ul>
         </div>
@@ -97,6 +98,7 @@ import BaseManager from '@/components/base/BaseManager.vue';
 import BaseButton from '@/components/base/BaseButton.vue';
 import LoadingSpinner from '@/components/base/LoadingSpinner.vue';
 import { useUsoapEvidenceReportStore } from '@/stores/usoapEvidenceReportStore';
+import { apiUsoapCeEvidenceCandidateContentUrl } from '@/services/apiServices';
 
 const { t } = useI18n();
 const usoapEvidenceReportStore = useUsoapEvidenceReportStore();
@@ -104,6 +106,10 @@ const ce = ref('');
 const year = ref('');
 
 const CE_OPTIONS = ['CE-1', 'CE-2', 'CE-3', 'CE-4', 'CE-5', 'CE-6', 'CE-7', 'CE-8'];
+
+function viewCandidate(candidate) {
+  window.open(apiUsoapCeEvidenceCandidateContentUrl(candidate.nodeRef, candidate.name), '_blank', 'noopener');
+}
 
 async function loadReport() {
   if (!ce.value) {
@@ -243,6 +249,11 @@ async function loadReport() {
   font-size: var(--text-sm);
   color: var(--color-gray-500);
   overflow-wrap: anywhere;
+}
+
+.candidate-list li > button {
+  align-self: flex-start;
+  margin-top: var(--space-1);
 }
 
 .hint {

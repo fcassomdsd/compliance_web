@@ -1066,3 +1066,11 @@ export async function apiUsoapCeEvidenceReport({ ce, year, populationQueries }) 
   }
 }
 
+export function apiUsoapCeEvidenceCandidateContentUrl(nodeId, name) {
+  if (!nodeId) {
+    throw new Error('apiUsoapCeEvidenceCandidateContentUrl: nodeId is required');
+  }
+  const query = name ? `?name=${encodeURIComponent(name)}` : '';
+  return `${complianceApiServer}/reports/usoap-ce-evidence/candidates/${encodeURIComponent(nodeId)}/content${query}`;
+}
+

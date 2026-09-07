@@ -228,6 +228,44 @@ function createReportsRouter({ auth, alfrescoClient, now = () => new Date() }) {
     }
   );
 
+  router.get(
+    '/usoap-ce-evidence/candidates/:nodeId/content',
+    auth.authenticate,
+    auth.authorize(['inspector', 'planner', 'reporter', 'admin']),
+    async (req, res) => {
+      try {
+        // The report returns full nodeRefs (workspace://SpacesStore/<uuid>),
+        // but Alfresco's stock content REST API needs a bare node id.
+        const nodeId = String(req.params.nodeId || '').replace(/^[^:]+:\/\/[^/]+\//, '');
+        if (!nodeId) {
+          return res.status(400).json(buildError('USOAP_CE_EVIDENCE_CANDIDATE_BAD_REQUEST', 'nodeId is required'));
+        }
+
+        const { buffer, contentType } = await alfrescoClient.getNodeContent({
+          ticket: req.auth.ticket,
+          nodeId,
+        });
+
+        const name = String(req.query?.name || 'evidence').replace(/"/g, '');
+        res.setHeader('Content-Type', contentType);
+        res.setHeader('Content-Disposition', `inline; filename="${name}"`);
+        return res.status(200).send(buffer);
+      } catch (error) {
+        const upstreamStatus = Number(error?.response?.status || 0);
+        const upstreamDetail = error?.response?.data?.error || error?.response?.data?.message || error.message;
+
+        if (upstreamStatus === 404) {
+          return res.status(404).json(buildError('USOAP_CE_EVIDENCE_CANDIDATE_NOT_FOUND', upstreamDetail));
+        }
+        if (upstreamStatus === 403) {
+          return res.status(403).json(buildError('USOAP_CE_EVIDENCE_CANDIDATE_FORBIDDEN', upstreamDetail));
+        }
+
+        return res.status(502).json(buildError('USOAP_CE_EVIDENCE_CANDIDATE_CONTENT_FAILED', upstreamDetail));
+      }
+    }
+  );
+
   return router;
 }
 
