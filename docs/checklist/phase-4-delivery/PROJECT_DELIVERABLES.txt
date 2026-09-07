@@ -1,6 +1,13 @@
 ================================================================================
     INSPECTION CHECKLIST MANAGER - COMPLETE PROJECT DELIVERABLES
 ================================================================================
+NOTE (2026-09): point-in-time snapshot. protocolQuestionStore.js /
+protocolQuestionStore.test.js mentioned below were later renamed to
+checklistQuestionStore.js / checklistQuestionStore.test.js (the ProtocolQuestion
+AtroCore entity was renamed to ChecklistQuestion to disambiguate it from
+UsoapProtocolQuestion). See CHECKLIST_MODULE_DOCS.md / CHECKLIST_DEVELOPER_GUIDE.md
+for current names.
+================================================================================
 Project Completion Date: February 4, 2026
 Module Version: 1.0
 Status: ✅ PRODUCTION READY

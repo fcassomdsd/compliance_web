@@ -17,10 +17,10 @@ const normalizeRiskLevel = (riskLevel) => {
   return matched || null;
 };
 
-export const useProtocolQuestionStore = defineStore('protocolQuestion', {
+export const useChecklistQuestionStore = defineStore('checklistQuestion', {
 
   state: () => ({
-    protocolQuestions: {},
+    checklistQuestions: {},
     questionsBySpecialty: {},
     questionsByTopic: {},
     topics: {},
@@ -30,7 +30,7 @@ export const useProtocolQuestionStore = defineStore('protocolQuestion', {
 
   actions: {
     /**
-     * Fetch all protocol questions for a given specialty
+     * Fetch all checklist questions for a given specialty
      * Groups them by topic and orders by sequence
      * @param {string} specialtyId - The specialty ID to fetch questions for
      * @returns {Promise<object>} - Object with topics containing grouped questions
@@ -43,8 +43,8 @@ export const useProtocolQuestionStore = defineStore('protocolQuestion', {
           throw new Error('specialtyId is required');
         }
 
-        // Fetch all protocol questions for the specialty
-        const { data: queryResults } = await apiEntityCRUD('query', 'ProtocolQuestion', null, {
+        // Fetch all checklist questions for the specialty
+        const { data: queryResults } = await apiEntityCRUD('query', 'ChecklistQuestion', null, {
           "specialtyId": specialtyId,
           "activo": true
         });
@@ -61,7 +61,7 @@ export const useProtocolQuestionStore = defineStore('protocolQuestion', {
         const topicMap = {};
         for (const question of queryResults.list) {
           const topicId = question.topicId || 'uncategorized';
-          
+
           if (!topicMap[topicId]) {
             topicMap[topicId] = {
               id: topicId,
@@ -92,10 +92,10 @@ export const useProtocolQuestionStore = defineStore('protocolQuestion', {
 
         // Store grouped questions
         this.questionsBySpecialty[specialtyId] = topicMap;
-        
+
         // Also maintain a flat structure for lookups
         for (const question of queryResults.list) {
-          this.protocolQuestions[question.id] = {
+          this.checklistQuestions[question.id] = {
             id: question.id,
             code: question.code,
             texto: question.texto,
@@ -121,30 +121,30 @@ export const useProtocolQuestionStore = defineStore('protocolQuestion', {
     },
 
     /**
-     * Get a single protocol question by ID
+     * Get a single checklist question by ID
      * @param {string} questionId - The question ID
-     * @returns {Promise<object>} - The protocol question object
+     * @returns {Promise<object>} - The checklist question object
      */
-    async getProtocolQuestion(questionId) {
+    async getChecklistQuestion(questionId) {
       try {
         if (!questionId || questionId.length === 0) {
           throw new Error('questionId is required');
         }
 
-        if (this.protocolQuestions[questionId]) {
-          return this.protocolQuestions[questionId];
+        if (this.checklistQuestions[questionId]) {
+          return this.checklistQuestions[questionId];
         }
 
-        const { data: queryResults } = await apiEntityCRUD('query', 'ProtocolQuestion', null, {
+        const { data: queryResults } = await apiEntityCRUD('query', 'ChecklistQuestion', null, {
           id: questionId,
         });
 
         if (!('list' in queryResults) || queryResults.list.length === 0) {
-          throw new Error('Protocol question not found');
+          throw new Error('Checklist question not found');
         }
 
         const question = queryResults.list[0];
-        this.protocolQuestions[questionId] = {
+        this.checklistQuestions[questionId] = {
           id: question.id,
           code: question.code,
           texto: question.texto,
@@ -159,21 +159,21 @@ export const useProtocolQuestionStore = defineStore('protocolQuestion', {
           activo: question.activo,
         };
 
-        return this.protocolQuestions[questionId];
+        return this.checklistQuestions[questionId];
       } catch (error) {
-        throw new Error('getProtocolQuestion: ' + error.message);
+        throw new Error('getChecklistQuestion: ' + error.message);
       }
     },
 
     /**
-     * Get all active protocol questions (for seeding or reference)
-     * @returns {Promise<array>} - Array of all active protocol questions
+     * Get all active checklist questions (for seeding or reference)
+     * @returns {Promise<array>} - Array of all active checklist questions
      */
-    async getAllProtocolQuestions() {
+    async getAllChecklistQuestions() {
       this.loading = true;
       this.error = null;
       try {
-        const { data: queryResults } = await apiEntityCRUD('query', 'ProtocolQuestion', null, {
+        const { data: queryResults } = await apiEntityCRUD('query', 'ChecklistQuestion', null, {
           activo: true,
         });
 
@@ -182,7 +182,7 @@ export const useProtocolQuestionStore = defineStore('protocolQuestion', {
         }
 
         for (const question of queryResults.list) {
-          this.protocolQuestions[question.id] = {
+          this.checklistQuestions[question.id] = {
             id: question.id,
             code: question.code,
             texto: question.texto,
@@ -201,7 +201,7 @@ export const useProtocolQuestionStore = defineStore('protocolQuestion', {
         return queryResults.list;
       } catch (error) {
         this.error = error.message;
-        throw new Error('getAllProtocolQuestions: ' + error.message);
+        throw new Error('getAllChecklistQuestions: ' + error.message);
       } finally {
         this.loading = false;
       }
@@ -224,7 +224,7 @@ export const useProtocolQuestionStore = defineStore('protocolQuestion', {
      * Clear all cached data
      */
     clearAll() {
-      this.protocolQuestions = {};
+      this.checklistQuestions = {};
       this.questionsBySpecialty = {};
       this.questionsByTopic = {};
       this.error = null;
@@ -245,7 +245,7 @@ export const useProtocolQuestionStore = defineStore('protocolQuestion', {
      * @returns {function} - Function that takes questionId and returns the question
      */
     getQuestionById: (state) => (questionId) => {
-      return state.protocolQuestions[questionId] || null;
+      return state.checklistQuestions[questionId] || null;
     },
 
     /**

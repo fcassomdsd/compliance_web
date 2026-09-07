@@ -1,5 +1,7 @@
 # Inspection Checklist Module - Implementation Summary
 
+> **Note (2026-09)**: this is a point-in-time delivery snapshot from February 2026. `protocolQuestionStore.js`/`protocolQuestionStore.test.js` mentioned below were later renamed to `checklistQuestionStore.js`/`checklistQuestionStore.test.js` (the `ProtocolQuestion` AtroCore entity was renamed to `ChecklistQuestion` to disambiguate it from `UsoapProtocolQuestion`). For current names, see `CHECKLIST_MODULE_DOCS.md` and `CHECKLIST_DEVELOPER_GUIDE.md`.
+
 ## Project Completion Summary
 
 I have successfully developed a comprehensive Inspection Checklist Manager module for the compliance application. Below is a detailed breakdown of what has been created.

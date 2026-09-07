@@ -2,16 +2,16 @@
 
 ## Overview
 
-The Inspection Checklist Manager is a comprehensive Vue 3 / Pinia-based module that allows users to manage inspection checklists by selecting relevant protocol questions for each inspected specialty. The module organizes questions by topic, provides filtering and bulk selection capabilities, and persists selections to the database.
+The Inspection Checklist Manager is a comprehensive Vue 3 / Pinia-based module that allows users to manage inspection checklists by selecting relevant checklist questions for each inspected specialty. The module organizes questions by topic, provides filtering and bulk selection capabilities, and persists selections to the database.
 
 ## Architecture
 
 ### Stores
 
-#### `protocolQuestionStore.js`
-Manages the master database of protocol questions with the following key features:
+#### `checklistQuestionStore.js`
+Manages the master database of checklist questions with the following key features:
 - **State:**
-  - `protocolQuestions`: Flat map of all protocol questions by ID
+  - `checklistQuestions`: Flat map of all checklist questions by ID
   - `questionsBySpecialty`: Questions grouped by specialty
   - `questionsByTopic`: Questions grouped by topic for each specialty
   - `loading`: Loading state flag
@@ -19,8 +19,8 @@ Manages the master database of protocol questions with the following key feature
 
 - **Actions:**
   - `getQuestionsBySpecialty(specialtyId)`: Fetches all active questions for a specialty, groups them by topic, and sorts by sequence
-  - `getProtocolQuestion(questionId)`: Fetches a single protocol question, with caching
-  - `getAllProtocolQuestions()`: Fetches all active protocol questions
+  - `getChecklistQuestion(questionId)`: Fetches a single checklist question, with caching
+  - `getAllChecklistQuestions()`: Fetches all active checklist questions
   - `clearSpecialtyCache(specialtyId)`: Clears cached data for a specific specialty
   - `clearAll()`: Clears all cached data
 
@@ -42,9 +42,9 @@ Manages the inspection-specific question selections with the following key featu
   - `addInspectionQuestion(questionData)`: Adds a single inspection question
   - `deleteInspectionQuestion(questionId)`: Deletes a specific inspection question
   - `deleteAllForSpecialty(inspectedSpecialtyId)`: Deletes all inspection questions for a specialty
-  - `addMultipleQuestions(inspectedSpecialtyId, protocolQuestionIds)`: Batch adds multiple questions
-  - `getSelectedProtocolQuestionIds(inspectedSpecialtyId)`: Returns array of selected protocol question IDs
-  - `isQuestionSelected(inspectedSpecialtyId, protocolQuestionId)`: Checks if a question is selected
+  - `addMultipleQuestions(inspectedSpecialtyId, checklistQuestionIds)`: Batch adds multiple questions
+  - `getSelectedChecklistQuestionIds(inspectedSpecialtyId)`: Returns array of selected checklist question IDs
+  - `isQuestionSelected(inspectedSpecialtyId, checklistQuestionId)`: Checks if a question is selected
 
 - **Getters:**
   - `getQuestionsForSpecialty(inspectedSpecialtyId)`: Returns inspection questions for a specialty
@@ -57,7 +57,7 @@ Manages the inspection-specific question selections with the following key featu
 The primary user interface component with the following features:
 - **Functionality:**
   - Specialty selector dropdown (populated from inspected specialties)
-  - Loads protocol questions grouped by topic when a specialty is selected
+  - Loads checklist questions grouped by topic when a specialty is selected
   - Pre-selects previously saved inspection questions
   - Provides global "Select All" and "Clear All" buttons
   - Displays selection count vs. total available questions
@@ -99,7 +99,7 @@ Displays questions for a single topic with grouping and filtering:
 
 ## Data Model
 
-### Protocol Question Entity
+### Checklist Question Entity
 ```javascript
 {
   id: String,           // Unique identifier
@@ -122,8 +122,8 @@ Displays questions for a single topic with grouping and filtering:
   id: String,               // Unique identifier
   code: String,             // Question code
   inspectedSpecialty: String, // Link to inspected specialty
-  protocolQuestion: String,  // Link to protocol question
-  protocolQuestionId: String // Denormalized protocol question ID
+  checklistQuestion: String,  // Link to checklist question
+  checklistQuestionId: String // Denormalized checklist question ID
 }
 ```
 
@@ -150,7 +150,7 @@ Displays questions for a single topic with grouping and filtering:
 ### Selecting a Specialty and Creating a Checklist
 1. User clicks "Inspection Checklist" in the navigation
 2. Selects a specialty from the dropdown
-3. The module loads all active protocol questions for that specialty
+3. The module loads all active checklist questions for that specialty
 4. Previously saved inspection questions are pre-selected (if any exist)
 5. Questions are displayed grouped by topic, ordered by sequence
 6. User can:
@@ -175,11 +175,11 @@ Displays questions for a single topic with grouping and filtering:
 The module uses the existing `apiEntityCRUD` and `apiEntityLinks` functions from `apiServices.js`:
 
 ### Queries
-- **ProtocolQuestion**: Query by `specialty: specialtyId` and `activo: true`
+- **ChecklistQuestion**: Query by `specialty: specialtyId` and `activo: true`
 - **InspectionQuestion**: Query by `inspectedSpecialty: inspectedSpecialtyId`
 
 ### Mutations
-- **Add InspectionQuestion**: Create new records with code, inspectedSpecialty, protocolQuestion
+- **Add InspectionQuestion**: Create new records with code, inspectedSpecialty, checklistQuestion
 - **Delete InspectionQuestion**: Delete by question ID
 - **Batch Operations**: Multiple adds/deletes handled sequentially
 
@@ -200,7 +200,7 @@ The module uses the existing CSS variables and follows the application's design 
 ## Testing
 
 ### Unit Tests
-- **`protocolQuestionStore.test.js`**: Tests for protocol question store actions and getters
+- **`checklistQuestionStore.test.js`**: Tests for checklist question store actions and getters
 - **`inspectionQuestionStore.test.js`**: Tests for inspection question store actions and getters
 - **`TopicChecklistGroup.test.js`**: Component tests for question grouping and selection
 - **`ChecklistManager.test.js`**: Component tests for specialty selection and checklist saving
@@ -244,7 +244,7 @@ import ChecklistManager from './components/ChecklistManager.vue';
 ## Troubleshooting
 
 ### No questions appear after selecting a specialty
-- Check that the specialty has active protocol questions in the database
+- Check that the specialty has active checklist questions in the database
 - Verify the specialty ID is correct
 - Check browser console for API errors
 

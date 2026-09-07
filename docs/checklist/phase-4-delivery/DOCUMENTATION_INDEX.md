@@ -2,6 +2,8 @@
 
 Welcome to the Inspection Checklist Manager documentation. Use this index to find the right guide for your needs.
 
+> **Note (2026-09)**: `protocolQuestionStore.js`/`protocolQuestionStore.test.js` referenced below (and in the other point-in-time delivery docs in this folder — `START_HERE.md`, `DELIVERY_SUMMARY.md`, `CHECKLIST_IMPLEMENTATION_SUMMARY.md`, `PROJECT_DELIVERABLES.txt`) were renamed to `checklistQuestionStore.js`/`checklistQuestionStore.test.js` (the `ProtocolQuestion` AtroCore entity was renamed to `ChecklistQuestion` to disambiguate it from `UsoapProtocolQuestion`). `CHECKLIST_MODULE_DOCS.md` and `CHECKLIST_DEVELOPER_GUIDE.md` reflect the current names.
+
 ## 📋 Quick Navigation
 
 ### For End Users 👥

@@ -113,7 +113,7 @@ import BaseManager from '@/components/base/BaseManager.vue';
 import TopicChecklistGroup from '@/components/TopicChecklistGroup.vue';
 import BaseButton from '@/components/base/BaseButton.vue';
 import LoadingSpinner from '@/components/base/LoadingSpinner.vue';
-import { useProtocolQuestionStore } from '@/stores/protocolQuestionStore';
+import { useChecklistQuestionStore } from '@/stores/checklistQuestionStore';
 import { useInspectionQuestionStore } from '@/stores/inspectionQuestionStore';
 import { useInspectedSpecialtyStore } from '@/stores/inspectedSpecialtyStore';
 import { useSiteVisitStore } from '@/stores/siteVisitStore';
@@ -124,7 +124,7 @@ import { useToast } from 'vue-toastification';
 import { isActive } from '@/utils/siteVisitStatus';
 
 const { t } = useI18n();
-const protocolQuestionStore = useProtocolQuestionStore();
+const checklistQuestionStore = useChecklistQuestionStore();
 const inspectionQuestionStore = useInspectionQuestionStore();
 const inspectedSpecialtyStore = useInspectedSpecialtyStore();
 const siteVisitStore = useSiteVisitStore();
@@ -316,9 +316,9 @@ const onSpecialtyChange = async () => {
       throw new Error(t('checklistManager.toast.specialtyNotFound'));
     }
 
-    // Load protocol questions for this specialty
+    // Load checklist questions for this specialty
     const specialtyId = inspectedSpecialty.specialtyId;
-    const questionsByTopic = await protocolQuestionStore.getQuestionsBySpecialty(specialtyId);
+    const questionsByTopic = await checklistQuestionStore.getQuestionsBySpecialty(specialtyId);
     groupedQuestions.value = questionsByTopic;
 
     // Load previously selected inspection questions
@@ -326,17 +326,17 @@ const onSpecialtyChange = async () => {
       selectedInspectedSpecialtyId.value
     );
 
-    // Create a map of protocolQuestionId -> sequence from inspection questions
+    // Create a map of checklistQuestionId -> sequence from inspection questions
     const sequenceMap = {};
     const riskLevelMap = {};
     existingQuestions.forEach((q) => {
-      sequenceMap[q.protocolQuestionId] = q.sequence;
+      sequenceMap[q.checklistQuestionId] = q.sequence;
       if (q.riskLevel) {
-        riskLevelMap[q.protocolQuestionId] = q.riskLevel;
+        riskLevelMap[q.checklistQuestionId] = q.riskLevel;
       }
     });
 
-    // Reorder protocol questions within each topic to match saved sequence
+    // Reorder checklist questions within each topic to match saved sequence
     if (Object.keys(sequenceMap).length > 0) {
       for (const topicId in groupedQuestions.value) {
         const topic = groupedQuestions.value[topicId];
@@ -360,7 +360,7 @@ const onSpecialtyChange = async () => {
       }
     }
 
-    // Keep saved risk level visible even if legacy protocol records do not include it.
+    // Keep saved risk level visible even if legacy checklist records do not include it.
     for (const topicId in groupedQuestions.value) {
       const topic = groupedQuestions.value[topicId];
       for (const question of topic.questions) {
@@ -372,7 +372,7 @@ const onSpecialtyChange = async () => {
 
     // Pre-populate selected questions with their sequence
     selectedQuestionIds.value = existingQuestions.map((q) => ({
-      id: q.protocolQuestionId,
+      id: q.checklistQuestionId,
       code: q.code,
       sequence: q.sequence,
       riskLevel: q.riskLevel || null,

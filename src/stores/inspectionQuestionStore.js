@@ -56,8 +56,7 @@ export const useInspectionQuestionStore = defineStore('inspectionQuestion', {
             id: question.id,
             code: question.code,
             inspectedSpecialtyId: question.inspectedSpecialtyId,
-//            protocolQuestion: question.protocolQuestion,
-            protocolQuestionId: question.protocolQuestionId,
+            checklistQuestionId: question.checklistQuestionId,
             sequence: question.sequence ?? null,
             riskLevel: normalizeRiskLevel(question.riskLevel),
           };
@@ -76,7 +75,7 @@ export const useInspectionQuestionStore = defineStore('inspectionQuestion', {
 
     /**
      * Add a new inspection question
-     * @param {object} questionData - Object with inspectedSpecialtyId, protocolQuestionId, code, sequence (optional)
+     * @param {object} questionData - Object with inspectedSpecialtyId, checklistQuestionId, code, sequence (optional)
      * @returns {Promise<object>} - The created inspection question
      */
     async addInspectionQuestion(questionData) {
@@ -85,14 +84,14 @@ export const useInspectionQuestionStore = defineStore('inspectionQuestion', {
           throw new Error('No question data provided');
         }
 
-        if (!questionData.inspectedSpecialtyId || !questionData.protocolQuestionId || !questionData.code) {
-          throw new Error('Missing required fields: inspectedSpecialtyId, protocolQuestionId, code');
+        if (!questionData.inspectedSpecialtyId || !questionData.checklistQuestionId || !questionData.code) {
+          throw new Error('Missing required fields: inspectedSpecialtyId, checklistQuestionId, code');
         }
 
         const addData = {
           code: questionData.code,
           inspectedSpecialtyId: questionData.inspectedSpecialtyId,
-          protocolQuestionId: questionData.protocolQuestionId,
+          checklistQuestionId: questionData.checklistQuestionId,
         };
 
         if (Number.isInteger(questionData.sequence)) {
@@ -126,7 +125,7 @@ export const useInspectionQuestionStore = defineStore('inspectionQuestion', {
           id: entity.id,
           code: entity.code,
           inspectedSpecialtyId: entity.inspectedSpecialtyId,
-          protocolQuestionId: entity.protocolQuestionId,
+          checklistQuestionId: entity.checklistQuestionId,
           sequence: entity.sequence ?? null,
           riskLevel: normalizeRiskLevel(entity.riskLevel),
         };
@@ -211,36 +210,36 @@ export const useInspectionQuestionStore = defineStore('inspectionQuestion', {
     /**
      * Batch add multiple inspection questions
      * @param {string} inspectedSpecialtyId - The inspected specialty ID
-    * @param {array} protocolQuestions - Array of protocol question objects to add ({ id, code, sequence })
+    * @param {array} checklistQuestions - Array of checklist question objects to add ({ id, code, sequence })
      * @returns {Promise<array>} - Array of created inspection questions
      */
-    async addMultipleQuestions(inspectedSpecialtyId, protocolQuestions) {
+    async addMultipleQuestions(inspectedSpecialtyId, checklistQuestions) {
       try {
         if (!inspectedSpecialtyId || inspectedSpecialtyId.length === 0) {
           throw new Error('inspectedSpecialtyId is required');
         }
 
-        if (!Array.isArray(protocolQuestions) || protocolQuestions.length === 0) {
-          throw new Error('protocolQuestions must be a non-empty array');
+        if (!Array.isArray(checklistQuestions) || checklistQuestions.length === 0) {
+          throw new Error('checklistQuestions must be a non-empty array');
         }
 
         const createdQuestions = [];
 
-        for (const protocolQuestion of protocolQuestions) {
+        for (const checklistQuestion of checklistQuestions) {
           try {
             const questionData = {
               inspectedSpecialtyId: inspectedSpecialtyId,
-              protocolQuestionId: protocolQuestion.id,
-              code: protocolQuestion.code,
-              sequence: protocolQuestion.sequence,
-              riskLevel: protocolQuestion.riskLevel,
+              checklistQuestionId: checklistQuestion.id,
+              code: checklistQuestion.code,
+              sequence: checklistQuestion.sequence,
+              riskLevel: checklistQuestion.riskLevel,
             };
 
             const addedQuestion = await this.addInspectionQuestion(questionData);
             createdQuestions.push(addedQuestion);
           } catch (error) {
             // Continue with next question but track error
-            console.error(`Failed to add protocol question ${protocolQuestion?.id}: ${error.message}`);
+            console.error(`Failed to add checklist question ${checklistQuestion?.id}: ${error.message}`);
           }
         }
 
@@ -258,7 +257,7 @@ export const useInspectionQuestionStore = defineStore('inspectionQuestion', {
         }
 
         const existing = this.inspectionQuestionsBySpecialty[inspectedSpecialtyId] || [];
-        const existingById = new Map(existing.map((q) => [q.protocolQuestionId, q]));
+        const existingById = new Map(existing.map((q) => [q.checklistQuestionId, q]));
         const selectedIds = new Set(selectedQuestions.map((q) => q.id));
 
         const selectedMap = new Map();
@@ -271,7 +270,7 @@ export const useInspectionQuestionStore = defineStore('inspectionQuestion', {
         let updated = 0;
 
         for (const q of existing) {
-          if (!selectedIds.has(q.protocolQuestionId)) {
+          if (!selectedIds.has(q.checklistQuestionId)) {
             await apiEntityCRUD('delete', 'InspectionQuestion', q.id);
             delete this.inspectionQuestions[q.id];
             if (this.inspectionQuestionsBySpecialty[inspectedSpecialtyId]) {
@@ -288,7 +287,7 @@ export const useInspectionQuestionStore = defineStore('inspectionQuestion', {
             try {
               const questionData = {
                 inspectedSpecialtyId,
-                protocolQuestionId: sq.id,
+                checklistQuestionId: sq.id,
                 code: sq.code,
                 sequence: sq.sequence,
                 riskLevel: sq.riskLevel || null,
@@ -296,7 +295,7 @@ export const useInspectionQuestionStore = defineStore('inspectionQuestion', {
               await this.addInspectionQuestion(questionData);
               added++;
             } catch (error) {
-              console.error(`Failed to add protocol question ${sq?.id}: ${error.message}`);
+              console.error(`Failed to add checklist question ${sq?.id}: ${error.message}`);
             }
           } else if (
             existingQ.sequence !== sq.sequence ||
@@ -313,7 +312,7 @@ export const useInspectionQuestionStore = defineStore('inspectionQuestion', {
               }
               updated++;
             } catch (error) {
-              console.error(`Failed to update protocol question ${sq?.id}: ${error.message}`);
+              console.error(`Failed to update checklist question ${sq?.id}: ${error.message}`);
             }
           }
         }
@@ -326,24 +325,24 @@ export const useInspectionQuestionStore = defineStore('inspectionQuestion', {
     },
 
     /**
-     * Get selected protocol question IDs for a specialty
+     * Get selected checklist question IDs for a specialty
      * @param {string} inspectedSpecialtyId - The inspected specialty ID
-     * @returns {array} - Array of protocol question IDs
+     * @returns {array} - Array of checklist question IDs
      */
-    getSelectedProtocolQuestionIds(inspectedSpecialtyId) {
+    getSelectedChecklistQuestionIds(inspectedSpecialtyId) {
       const questions = this.inspectionQuestionsBySpecialty[inspectedSpecialtyId] || [];
-      return questions.map((q) => q.protocolQuestionId);
+      return questions.map((q) => q.checklistQuestionId);
     },
 
     /**
-     * Check if a protocol question is selected for a specialty
+     * Check if a checklist question is selected for a specialty
      * @param {string} inspectedSpecialtyId - The inspected specialty ID
-     * @param {string} protocolQuestionId - The protocol question ID
+     * @param {string} checklistQuestionId - The checklist question ID
      * @returns {boolean} - True if selected
      */
-    isQuestionSelected(inspectedSpecialtyId, protocolQuestionId) {
-      const selectedIds = this.getSelectedProtocolQuestionIds(inspectedSpecialtyId);
-      return selectedIds.includes(protocolQuestionId);
+    isQuestionSelected(inspectedSpecialtyId, checklistQuestionId) {
+      const selectedIds = this.getSelectedChecklistQuestionIds(inspectedSpecialtyId);
+      return selectedIds.includes(checklistQuestionId);
     },
 
     /**
