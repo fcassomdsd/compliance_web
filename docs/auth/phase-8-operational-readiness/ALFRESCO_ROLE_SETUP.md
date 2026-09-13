@@ -230,6 +230,6 @@ VALUES ('app-cap-entry', '<uuid-from-above>', true, 10);
 ## Related Documentation
 
 - [Authentication Chunk 1 Route Auth Matrix](../phase-1-contract/AUTH_CHUNK1_ROUTE_AUTH_MATRIX.md) - Role and route mapping
-- [Auth Chunk 1 SQL Draft](../../../AUTH_CHUNK1_SQL_DRAFT.sql) - Database schema
+- [Initial database schema](../../../migrations/0001_initial_schema.sql) - Database schema
 - [Operational Readiness](./AUTH_CHUNK8_OPERATIONAL_READINESS.md) - Deployment and troubleshooting
 

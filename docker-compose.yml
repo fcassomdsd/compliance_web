@@ -15,9 +15,28 @@ services:
       retries: 10
     volumes:
       - pgdata:/var/lib/postgresql/data
-      - ./AUTH_CHUNK1_SQL_DRAFT.sql:/docker-entrypoint-initdb.d/001-auth-schema.sql:ro
+
+  # Applies migrations/*.sql before the backend starts. Replaces the previous
+  # docker-entrypoint-initdb.d mount, which only ran on a brand-new volume and
+  # only supplied the auth schema — the CAP-draft and notification tables were
+  # missing on a fresh database.
+  migrate:
+    image: compliance-web-backend:local
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+      target: ${BACKEND_BUILD_TARGET:-dev}
+    container_name: compliance-migrate
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-compliance}:${POSTGRES_PASSWORD:-compliance}@db:5432/${POSTGRES_DB:-compliance}
+    command: ["npm", "run", "db:migrate"]
+    restart: "no"
+    depends_on:
+      db:
+        condition: service_healthy
 
   backend:
+    image: compliance-web-backend:local
     build:
       context: .
       dockerfile: Dockerfile.backend
@@ -39,6 +58,8 @@ services:
     depends_on:
       db:
         condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
 
   frontend-dev:
     profiles: ["dev"]

@@ -35,7 +35,7 @@ Optional:
 
 ## Prerequisites
 
-1. Apply schema from AUTH_CHUNK1_SQL_DRAFT.sql to PostgreSQL.
+1. Apply the schema with `npm run db:migrate` (migrations live in `migrations/`).
 2. Ensure Alfresco authentication endpoint is reachable.
 
 ## Run

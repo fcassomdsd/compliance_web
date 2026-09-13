@@ -91,6 +91,6 @@ docker compose down -v
 
 ## Notes
 
-1. `AUTH_CHUNK1_SQL_DRAFT.sql` is mounted as init script and runs on first db initialization.
+1. The `migrate` service applies `migrations/*.sql` before the backend starts (`npm run db:migrate`). It runs on every `docker compose up`, so schema changes are picked up without recreating the volume.
 2. `AUTH_COOKIE_SECURE=false` is recommended for local HTTP testing.
 3. For real production behind TLS, set `AUTH_COOKIE_SECURE=true`.

@@ -122,7 +122,7 @@ Common optional auth settings:
 - `AUTH_TICKET_ENCRYPTION_KEY` (required in production — server refuses to start without it)
 - `AUTH_LOGIN_RATE_LIMIT_MAX_ATTEMPTS`
 
-Notification settings (see `NOTIFICATIONS_SQL.sql` for the schema):
+Notification settings (see `migrations/0001_initial_schema.sql` for the schema):
 
 - `SMTP_HOST` — if unset, email notifications queue as `pending` and fail on every retry attempt until configured; in-app notifications are unaffected.
 - `SMTP_PORT` (default `587`), `SMTP_SECURE` (default `false`), `SMTP_USER`, `SMTP_PASS`, `SMTP_FROM` (default `noreply@compliance.local`)
@@ -237,7 +237,7 @@ Community participation is guided by [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md).
 ## Troubleshooting
 
 - Auth/session issues:
-  - Verify `DATABASE_URL` and initialize schema from [AUTH_CHUNK1_SQL_DRAFT.sql](AUTH_CHUNK1_SQL_DRAFT.sql).
+  - Verify `DATABASE_URL` and apply the schema with `npm run db:migrate` (see [migrations/](migrations)).
   - Verify provider connectivity using `ALFRESCO_BASE_URL`.
   - Check [server/README.md](server/README.md) and auth readiness docs.
 - Frontend cannot reach auth routes:
