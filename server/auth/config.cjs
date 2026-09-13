@@ -5,6 +5,18 @@ const AUTH_CONFIG = {
   cookiePath: process.env.AUTH_COOKIE_PATH || '/',
   cookieSameSite: process.env.AUTH_COOKIE_SAMESITE || 'lax',
   cookieSecure: typeof cookieSecureOverride === 'string' ? cookieSecureOverride === 'true' : process.env.NODE_ENV === 'production',
+  // Express `trust proxy`. The documented deployment terminates TLS at a single
+  // nginx hop, so trusting one hop makes req.ip the real client address. Without
+  // it req.ip is the proxy container, which keyed every login through the same
+  // rate-limit bucket and recorded the proxy IP in the audit log.
+  trustProxy: (() => {
+    const raw = process.env.TRUST_PROXY;
+    if (raw === undefined || raw === '') return 1;
+    if (raw === 'true') return true;
+    if (raw === 'false') return false;
+    const hops = Number.parseInt(raw, 10);
+    return Number.isInteger(hops) ? hops : raw;
+  })(),
   csrfHeaderName: process.env.AUTH_CSRF_HEADER_NAME || 'x-csrf-token',
   idleTimeoutSeconds: Number(process.env.AUTH_IDLE_TIMEOUT_SECONDS || 1800),
   absoluteTimeoutSeconds: Number(process.env.AUTH_ABSOLUTE_TIMEOUT_SECONDS || 43200),

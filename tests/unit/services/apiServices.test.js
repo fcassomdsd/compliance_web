@@ -67,7 +67,7 @@ describe('apiServices', () => {
     it('calls axios correctly with valid parameters', async () => {
       const config = {
         method : "post",
-        url : "http://localhost:1880/queryEntity?entity=Inspection",
+        url : "/nodered/queryEntity?entity=Inspection",
         data : { status : "Cerrada" }      
       };
       const result = await apiEntityCRUD("query", "Inspection", null, {status : "Cerrada"});
@@ -86,7 +86,7 @@ describe('apiServices', () => {
     it('calls axios correctly with valid parameters', async () => {
       const config = {
         method : "post",
-        url : "http://localhost:1880/addEntity?entity=Inspection",
+        url : "/nodered/addEntity?entity=Inspection",
         data : { status : "Cerrada" }      
       };
       const result = await apiEntityCRUD("add", "Inspection", null, {status : "Cerrada"});
@@ -106,7 +106,7 @@ describe('apiServices', () => {
     it('calls axios correctly with valid parameters', async () => {
       const config = {
         method : "put",
-        url : "http://localhost:1880/updateEntity?entity=Inspection&id=123",
+        url : "/nodered/updateEntity?entity=Inspection&id=123",
         data : { status : "Cerrada" }      
       };
       const result = await apiEntityCRUD("update", "Inspection", "123", {status : "Cerrada"});
@@ -126,7 +126,7 @@ describe('apiServices', () => {
     it('calls axios correctly with valid parameters', async () => {
       const config = {
         method : "delete",
-        url : "http://localhost:1880/deleteEntity?entity=Inspection&id=123",
+        url : "/nodered/deleteEntity?entity=Inspection&id=123",
       };
       const result = await apiEntityCRUD("delete", "Inspection", "123", null);
       expect(result.data).toEqual(config);
@@ -183,7 +183,7 @@ describe('apiServices', () => {
     it('calls axios correctly with valid parameters', async () => {
       const config = {
         method : "post",
-        url : "http://localhost:1880/addLinks?entity=Inspection&id=EntityId&link=EntityLink",
+        url : "/nodered/addLinks?entity=Inspection&id=EntityId&link=EntityLink",
         data : { ids : ["LinkId"] }      
       };
       const result = await apiEntityLinks("addLinks", "Inspection", "EntityId", "EntityLink", {ids : ["LinkId"]});
@@ -202,7 +202,7 @@ describe('apiServices', () => {
     it('calls axios correctly with valid parameters', async () => {
       const config = {
         method : "post",
-        url : "http://localhost:1880/deleteLinks?entity=Inspection&id=EntityId&link=EntityLink",
+        url : "/nodered/deleteLinks?entity=Inspection&id=EntityId&link=EntityLink",
         data : { ids : ["LinkId"] }      
       };
       const result = await apiEntityLinks("deleteLinks", "Inspection", "EntityId", "EntityLink", {ids : ["LinkId"]});
@@ -221,7 +221,7 @@ describe('apiServices', () => {
     it('calls axios correctly with valid parameters', async () => {
       const config = {
         method : "get",
-        url : "http://localhost:1880/getLinks?entity=Inspection&id=EntityId&link=EntityLink",
+        url : "/nodered/getLinks?entity=Inspection&id=EntityId&link=EntityLink",
       };
       const result = await apiEntityLinks("getLinks", "Inspection", "EntityId", "EntityLink", null);
       expect(result.data).toEqual(config);
@@ -235,7 +235,7 @@ describe('apiServices', () => {
       const result = await apiInspectorByAlfrescoUser('fernando.casso');
       expect(result.data).toEqual({
         method: 'get',
-        url: 'http://localhost:1880/inspector/fernando.casso',
+        url: '/nodered/inspector/fernando.casso',
       });
     });
 
@@ -243,7 +243,7 @@ describe('apiServices', () => {
       const result = await apiInspectionByIdOrCode('MDPP-2026-01');
       expect(result.data).toEqual({
         method: 'get',
-        url: 'http://localhost:1880/siteVisit/MDPP-2026-01',
+        url: '/nodered/siteVisit/MDPP-2026-01',
       });
     });
 
@@ -251,7 +251,7 @@ describe('apiServices', () => {
       const result = await apiAssignmentGroup('GROUP_U-VSO-IN_Assigner');
       expect(result.data).toEqual({
         method: 'get',
-        url: 'http://localhost:1880/assignmentGroup/GROUP_U-VSO-IN_Assigner',
+        url: '/nodered/assignmentGroup/GROUP_U-VSO-IN_Assigner',
       });
     });
 
@@ -277,11 +277,11 @@ describe('apiServices', () => {
     it('calls inspection plan/report endpoints on valid payloads', async () => {
       const plan = await apiInspectionPlan(' CODE-001 ');
       expect(plan.data.method).toBe('get');
-      expect(plan.data.url).toBe('http://localhost:1880/inspectionPlan?siteVisit=CODE-001&locale=en');
+      expect(plan.data.url).toBe('/nodered/inspectionPlan?siteVisit=CODE-001&locale=en');
 
       const report = await apiInspectionReport(' CODE-001 ', ' 2026-04-02 ', ' PROVIDER-1 ');
       expect(report.data.method).toBe('get');
-      expect(report.data.url).toBe('http://localhost:1880/inspectionReport?siteVisit=CODE-001&reportDate=2026-04-02&provider=PROVIDER-1&locale=en');
+      expect(report.data.url).toBe('/nodered/inspectionReport?siteVisit=CODE-001&reportDate=2026-04-02&provider=PROVIDER-1&locale=en');
     });
 
     it('wraps axios failures for inspection plan/report', async () => {

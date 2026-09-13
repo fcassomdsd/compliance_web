@@ -6,7 +6,7 @@ const require = createRequire(import.meta.url);
 const { createApp } = require('../../server/app.cjs');
 const { InMemorySessionRepository } = require('../setup/mocks/InMemorySessionRepository.cjs');
 
-function buildTestApp({ now } = {}) {
+function buildTestApp({ now, config: configOverrides = {}, loginRateLimiter } = {}) {
   const repo = new InMemorySessionRepository();
   const alfrescoClient = {
     createTicket: vi.fn(async (username) => ({
@@ -36,12 +36,14 @@ function buildTestApp({ now } = {}) {
     loginRateLimitWindowSeconds: 300,
     loginRateLimitBlockSeconds: 600,
     loginRateLimitMaxAttempts: 5,
+    ...configOverrides,
   };
 
   const app = createApp({
     config,
     sessionRepository: repo,
     alfrescoClient,
+    loginRateLimiter,
     logger: {
       error: vi.fn(),
       warn: vi.fn(),
@@ -87,6 +89,27 @@ describe('Auth Router Chunk 2 foundation', () => {
     const response = await request(app).get('/api/auth/session');
     expect(response.status).toBe(401);
     expect(response.body.code).toBe('AUTH_SESSION_EXPIRED');
+  });
+
+  it('keys login rate limiting on the client IP behind one trusted proxy hop', async () => {
+    const isBlocked = vi.fn(async () => false);
+    const { app } = buildTestApp({
+      config: { trustProxy: 1 },
+      loginRateLimiter: {
+        isBlocked,
+        registerFailure: vi.fn(async () => undefined),
+        clear: vi.fn(async () => undefined),
+      },
+    });
+
+    await request(app)
+      .post('/api/auth/login')
+      .set('X-Forwarded-For', '203.0.113.7')
+      .send({ username: 'alice', password: 'secret' });
+
+    // Without `trust proxy`, req.ip is the nginx container and every user shares
+    // one rate-limit bucket.
+    expect(isBlocked).toHaveBeenCalledWith('203.0.113.7', 'alice');
   });
 
   it('supports idempotent logout and async ticket revocation', async () => {

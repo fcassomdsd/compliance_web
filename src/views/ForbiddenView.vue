@@ -19,8 +19,14 @@ const router = useRouter();
 const authStore = useAuthStore();
 
 async function onLogout() {
-  await authStore.logout();
-  await router.push({ name: 'login' });
+  try {
+    await authStore.logout();
+    await router.push({ name: 'login' });
+  } catch {
+    // The session could not be destroyed, so it is still live on the server.
+    // Stay on the page (authStore.error carries the reason) rather than sending
+    // the user to a login screen while a valid session cookie remains.
+  }
 }
 </script>
 

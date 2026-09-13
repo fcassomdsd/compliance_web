@@ -68,13 +68,17 @@ describe('authStore', () => {
     expect(store.roles).toEqual(['planner', 'reporter']);
   });
 
-  it('logout clears state even when API fails', async () => {
-    vi.mocked(authLogout).mockRejectedValue(new Error('authLogout: network')); 
-
-    const store = useAuthStore();
+  function seedAuthenticatedState(store) {
     store.authenticated = true;
     store.user = { id: 'u3', username: 'carol', displayName: 'Carol' };
     store.roles = ['admin'];
+  }
+
+  it('logout clears state when the server destroys the session', async () => {
+    vi.mocked(authLogout).mockResolvedValue({ status: 200, data: { ok: true } });
+
+    const store = useAuthStore();
+    seedAuthenticatedState(store);
 
     const result = await store.logout();
 
@@ -83,6 +87,88 @@ describe('authStore', () => {
     expect(store.authenticated).toBe(false);
     expect(store.user).toBeNull();
     expect(store.roles).toEqual([]);
+  });
+
+  it('logout clears state when the session is already gone (401)', async () => {
+    const gone = new Error('authLogout: Request failed with status code 401');
+    gone.status = 401;
+    vi.mocked(authLogout).mockRejectedValue(gone);
+
+    const store = useAuthStore();
+    seedAuthenticatedState(store);
+
+    const result = await store.logout();
+
+    expect(result).toBe(true);
+    expect(store.authenticated).toBe(false);
+    expect(store.user).toBeNull();
+    expect(store.error).toBeNull();
+  });
+
+  it('logout refreshes a stale CSRF token (403) and retries once', async () => {
+    const csrfFailure = new Error('authLogout: Request failed with status code 403');
+    csrfFailure.status = 403;
+    vi.mocked(authLogout)
+      .mockRejectedValueOnce(csrfFailure)
+      .mockResolvedValueOnce({ status: 200, data: { ok: true } });
+    vi.mocked(authSession).mockResolvedValue({
+      status: 200,
+      data: {
+        authenticated: true,
+        user: { id: 'u3', username: 'carol', displayName: 'Carol' },
+        roles: ['admin'],
+        session: { expiresAt: '2026-03-31T20:00:00Z' },
+      },
+    });
+
+    const store = useAuthStore();
+    seedAuthenticatedState(store);
+
+    const result = await store.logout();
+
+    expect(result).toBe(true);
+    expect(authLogout).toHaveBeenCalledTimes(2);
+    expect(store.authenticated).toBe(false);
+  });
+
+  it('logout keeps client state when the session cannot be destroyed', async () => {
+    const networkFailure = new Error('authLogout: network');
+    vi.mocked(authLogout).mockRejectedValue(networkFailure);
+
+    const store = useAuthStore();
+    seedAuthenticatedState(store);
+
+    await expect(store.logout()).rejects.toThrow('authLogout: network');
+
+    // The server session is still live, so the UI must not pretend otherwise.
+    expect(store.authenticated).toBe(true);
+    expect(store.user).not.toBeNull();
+    expect(store.roles).toEqual(['admin']);
+    expect(store.error).toBe('authLogout: network');
+    expect(store.initialized).toBe(false);
+  });
+
+  it('logout keeps client state when an unrecoverable CSRF failure persists', async () => {
+    const csrfFailure = new Error('authLogout: Request failed with status code 403');
+    csrfFailure.status = 403;
+    vi.mocked(authLogout).mockRejectedValue(csrfFailure);
+    vi.mocked(authSession).mockResolvedValue({
+      status: 200,
+      data: {
+        authenticated: true,
+        user: { id: 'u3', username: 'carol', displayName: 'Carol' },
+        roles: ['admin'],
+        session: { expiresAt: '2026-03-31T20:00:00Z' },
+      },
+    });
+
+    const store = useAuthStore();
+    seedAuthenticatedState(store);
+
+    await expect(store.logout()).rejects.toThrow('authLogout: Request failed with status code 403');
+
+    expect(store.authenticated).toBe(true);
+    expect(store.error).toBe('authLogout: Request failed with status code 403');
   });
 
   it('hasRole uses any-role matching and case-insensitive checks', () => {

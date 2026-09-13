@@ -1,7 +1,10 @@
 import { default as axios } from 'axios';
 import i18n from '../i18n/index.js';
 
-const apiServer = 'http://localhost:1880';
+// Node-RED is reached same-origin (/nodered), proxied by nginx in production and
+// by the Vite dev server locally, so a deployed browser never calls the end
+// user's own machine. Override with VITE_NODE_RED_BASE_URL for other topologies.
+const apiServer = import.meta.env.VITE_NODE_RED_BASE_URL || '/nodered';
 const complianceApiServer = import.meta.env.VITE_COMPLIANCE_API_BASE_URL || '/api';
 
 let cachedTicket = null

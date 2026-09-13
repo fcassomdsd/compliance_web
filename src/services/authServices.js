@@ -52,7 +52,11 @@ export async function authLogout(csrfToken = null) {
 
     return { data: result.data, status: result.status };
   } catch (error) {
-    throw new Error('authLogout: ' + error.message);
+    const failure = new Error('authLogout: ' + error.message);
+    // Callers need the HTTP status: a CSRF mismatch (403) means the server kept
+    // the session, which must not be treated like a dead session.
+    failure.status = error?.response?.status;
+    throw failure;
   }
 }
 

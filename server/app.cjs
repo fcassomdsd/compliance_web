@@ -11,6 +11,9 @@ const { createUsoapRouter } = require('./usoap/router.cjs');
 
 function createApp({ config, sessionRepository, alfrescoClient, loginRateLimiter, logger, capDraftRepository, notificationRepository, notificationService, nodeRedClient, now }) {
   const app = express();
+  // Required for correct client IPs behind the nginx terminator (login rate
+  // limiting and audit logging both key off req.ip).
+  app.set('trust proxy', config?.trustProxy ?? 1);
   app.use(express.json());
   app.use(cookieParser());
 

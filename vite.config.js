@@ -27,6 +27,13 @@ export default defineConfig({
         target: process.env.VITE_API_PROXY_TARGET || process.env.VITE_AUTH_PROXY_TARGET || 'http://localhost:4000',
         changeOrigin: true,
       },
+      // Same-origin Node-RED access in development, mirroring the nginx route
+      // used in production so the frontend never hardcodes a host.
+      '/nodered': {
+        target: process.env.VITE_NODE_RED_PROXY_TARGET || 'http://localhost:1880',
+        changeOrigin: true,
+        rewrite: (requestPath) => requestPath.replace(/^\/nodered/, ''),
+      },
     },
   },
 })
