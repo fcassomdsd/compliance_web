@@ -69,6 +69,7 @@ services:
       target: prod
       args:
         VITE_AUTH_API_BASE_URL: /api/auth
+        VITE_NODE_RED_BASE_URL: /nodered
     container_name: compliance-frontend-prod
     ports:
       - "8080:80"

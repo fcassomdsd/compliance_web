@@ -203,6 +203,9 @@ function parseNonNegativeInt(value, fallback, { max = 100000 } = {}) {
   return Math.min(parsed, max);
 }
 
+// Concurrency cap for the per-finding follow-up lookups on GET /api/findings.
+const FINDING_STATUS_CONCURRENCY = 8;
+
 async function mapWithConcurrency(items, concurrency, mapper) {
   if (!Array.isArray(items) || items.length === 0) {
     return [];
@@ -344,8 +347,13 @@ function createFindingsRouter({ auth, alfrescoClient, notificationService, nodeR
           maxItems: 1000,
         });
 
-        const findings = await Promise.all(
-          findingNodes.map(async (findingNode) => {
+        // Bounded fan-out: each finding triggers its own follow-up query, so an
+        // unbounded Promise.all over up to 1000 findings could open thousands of
+        // concurrent Alfresco calls.
+        const findings = await mapWithConcurrency(
+          findingNodes,
+          FINDING_STATUS_CONCURRENCY,
+          async (findingNode) => {
             const finding = mapFindingNode(findingNode);
             const followUpReports = await getFollowUpReportsForFinding({
               alfrescoClient,
@@ -362,7 +370,7 @@ function createFindingsRouter({ auth, alfrescoClient, notificationService, nodeR
               ...finding,
               ...statusMeta,
             };
-          })
+          }
         );
 
         const filtered = applyFindingFilters({

@@ -86,8 +86,12 @@ const authStore = useAuthStore()
 const navOpen = ref(false)
 
 async function onLogout() {
-  await authStore.logout()
-  await router.push({ name: 'login' })
+  try {
+    await authStore.logout()
+    await router.push({ name: 'login' })
+  } catch {
+    // Session is still live on the server; authStore.error carries the reason.
+  }
 }
 
 async function onLocaleChange(nextLocale) {

@@ -168,16 +168,45 @@ export const useAuthStore = defineStore('auth', {
       this.loading = true;
       this.error = null;
       try {
-        await authLogout(this.csrfToken);
-      } catch (error) {
-        this.error = error.message;
-      } finally {
+        try {
+          await authLogout(this.csrfToken);
+        } catch (error) {
+          if (error.status === 401) {
+            // The session is already gone server-side, so clearing is correct.
+            this.clearAuthState();
+            this.initialized = true;
+            this.lastCheckedAt = Date.now();
+            return true;
+          }
+          if (error.status !== 403) {
+            throw error;
+          }
+          // Stale CSRF token. The server deliberately keeps the session on a
+          // mismatch, so refresh the token from the session endpoint and retry
+          // once instead of abandoning a live session.
+          await this.init({ force: true });
+          if (!this.authenticated) {
+            this.clearAuthState();
+            this.initialized = true;
+            this.lastCheckedAt = Date.now();
+            return true;
+          }
+          await authLogout(this.csrfToken);
+        }
+
         this.clearAuthState();
         this.initialized = true;
         this.lastCheckedAt = Date.now();
+        return true;
+      } catch (error) {
+        // The server session is still live; clearing client state here would
+        // leave a valid session behind a UI that looks logged out. Keep the
+        // state and surface the failure so the caller can retry.
+        this.error = error.message;
+        throw error;
+      } finally {
         this.loading = false;
       }
-      return true;
     },
 
     async ensureSessionFresh(maxAgeMs = 60000) {
