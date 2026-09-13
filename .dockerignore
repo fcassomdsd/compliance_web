@@ -7,3 +7,6 @@ dist
 .vscode
 .DS_Store
 *.local
+.env
+.env.*
+!.env.docker.example

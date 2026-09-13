@@ -28,9 +28,14 @@ services:
       DATABASE_URL: postgresql://${POSTGRES_USER:-compliance}:${POSTGRES_PASSWORD:-compliance}@db:5432/${POSTGRES_DB:-compliance}
       ALFRESCO_BASE_URL: ${ALFRESCO_BASE_URL:-http://proxy:8080}
       NODE_RED_BASE_URL: ${NODE_RED_BASE_URL:-http://node-red:1880}
-      AUTH_TICKET_ENCRYPTION_KEY: ${AUTH_TICKET_ENCRYPTION_KEY:-dev-only-ticket-encryption-key-change-me}
-      AUTH_COOKIE_SECURE: ${AUTH_COOKIE_SECURE:-false}
-      NODE_ENV: ${AUTH_NODE_ENV:-development}
+      # Shared secret for Node-RED's X-API-Key gateway guard (see compliance_flow).
+      NODE_RED_API_KEY: ${NODE_RED_API_KEY:-}
+      # No fallback: a committed default key would silently encrypt every session
+      # ticket with a value that is public knowledge.
+      AUTH_TICKET_ENCRYPTION_KEY: ${AUTH_TICKET_ENCRYPTION_KEY:?AUTH_TICKET_ENCRYPTION_KEY must be set}
+      # Secure by default. Local HTTP development must opt out explicitly.
+      AUTH_COOKIE_SECURE: ${AUTH_COOKIE_SECURE:-true}
+      NODE_ENV: ${AUTH_NODE_ENV:-production}
     depends_on:
       db:
         condition: service_healthy
