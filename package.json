@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite",
     "server": "node server/index.cjs",
+    "db:migrate": "node server/db/migrate.cjs",
     "build": "vite build",
     "preview": "vite preview",
     "test": "vitest",

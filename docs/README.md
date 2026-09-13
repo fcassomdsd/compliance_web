@@ -53,4 +53,4 @@ Rationale:
 ## Related Reference Kept in Place
 
 - `server/README.md` remains in `server/` because it documents that module directly.
-- `AUTH_CHUNK1_SQL_DRAFT.sql` remains at repository root because it is a schema artifact, not markdown documentation.
+- `migrations/` holds the database schema. It is SQL, not markdown documentation, and is applied with `npm run db:migrate`.
