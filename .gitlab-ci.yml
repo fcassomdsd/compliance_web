@@ -19,18 +19,18 @@ cache:
     - .npm/
     - node_modules/
 
-# Lint stage - Check code quality
+# Lint stage - Check code quality. Blocking: a lint failure fails the pipeline.
 lint:eslint:
   stage: lint
   image: node:20-alpine
   script:
     - npm ci --cache .npm --prefer-offline
-    - npm run lint || true
+    - npm run lint:report
   artifacts:
+    when: always
     reports:
       codequality: eslint-report.json
     expire_in: 1 week
-  allow_failure: true
   only:
     - merge_requests
     - main
@@ -52,6 +52,32 @@ test:unit:
       - coverage/
     expire_in: 30 days
   coverage: '/Lines\s*:\s*(\d+\.\d+)%/'
+  only:
+    - merge_requests
+    - main
+    - develop
+
+# The documented pre-merge auth gate (see
+# docs/auth/phase-8-operational-readiness/AUTH_CHUNK8_OPERATIONAL_READINESS.md)
+# lists the consolidated auth suite and the session load probe. Neither ran in
+# CI before.
+test:auth:
+  stage: test
+  image: node:20-alpine
+  script:
+    - npm ci --cache .npm --prefer-offline
+    - npm run test:auth:all
+  only:
+    - merge_requests
+    - main
+    - develop
+
+load:auth:probe:
+  stage: test
+  image: node:20-alpine
+  script:
+    - npm ci --cache .npm --prefer-offline
+    - npm run load:auth:probe
   only:
     - merge_requests
     - main
