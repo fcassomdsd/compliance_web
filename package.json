@@ -14,7 +14,8 @@
     "test:auth:all": "vitest run tests/server tests/e2e tests/unit/router/guards.test.js tests/unit/stores/authStore.test.js",
     "load:auth:probe": "node scripts/auth-session-load-probe.cjs",
     "test:ui": "vitest --ui",
-    "lint": "eslint . --ext .js,.vue,.json --format json --output-file eslint-report.json || true && eslint . --ext .js,.vue,.json",
+    "lint": "eslint . --ext .js,.vue,.json",
+    "lint:report": "eslint . --ext .js,.vue,.json --format json --output-file eslint-report.json",
     "lint:fix": "eslint . --ext .js,.vue,.json --fix"
   },
   "dependencies": {
