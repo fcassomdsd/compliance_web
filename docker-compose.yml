@@ -81,6 +81,12 @@ services:
       start_period: 20s
     depends_on:
       - backend
+    # The Vite dev server proxies /nodered to VITE_NODE_RED_PROXY_TARGET
+    # (docker-compose.dev.yml); the container must share a network with
+    # compliance_flow/node-red for that name to resolve.
+    networks:
+      - default
+      - alfresco_backend
 
   frontend-prod:
     profiles: ["prod"]
@@ -102,6 +108,16 @@ services:
       start_period: 20s
     depends_on:
       - backend
+    # nginx proxies /nodered/ to http://node-red:1880 (docker/nginx/default.conf),
+    # so the production frontend needs the same shared network as the backend.
+    networks:
+      - default
+      - alfresco_backend
 
 volumes:
   pgdata:
+
+networks:
+  alfresco_backend:
+    name: alfresco_backend
+    external: true

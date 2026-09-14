@@ -12,6 +12,15 @@ services:
       - default
       - alfresco_backend
 
+  # Without this the Vite dev server falls back to http://localhost:1880, which
+  # is the frontend container itself — the /nodered proxy then fails with
+  # ECONNREFUSED and Vite answers the browser with HTTP 500 ("apiEntityCRUD:
+  # Request failed with status code 500"). node-red is reached through the
+  # alfresco_backend network declared in docker-compose.yml.
+  frontend-dev:
+    environment:
+      VITE_NODE_RED_PROXY_TARGET: http://node-red:1880
+
 networks:
   alfresco_backend:
     name: alfresco_backend
