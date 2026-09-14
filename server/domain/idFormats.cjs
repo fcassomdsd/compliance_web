@@ -1,5 +1,9 @@
 // Canonical "Nomenclatura" document identifier formats (server side).
 //
+// The fragments and patterns come from the shared, cross-repo spec vendored
+// at domain-rules/nomenclatura.spec.json (canonical copy owned by
+// compliance_cmis). Do not reintroduce literal formats here.
+//
 // MIRROR: src/utils/documentCodes.js holds the ESM copy of the SiteVisit and
 // Activity halves for the Pinia stores (Vite cannot cleanly import this CJS
 // module from src/). Keep the two in lockstep — tests/server/idFormats.test.js
@@ -21,21 +25,26 @@
 // The compact activity code (XXXXT####) is the Activity code with its "AV-"
 // prefix and dashes stripped: AV-MDSD-A-0002 -> MDSDA0002.
 
-const ICAO_FRAGMENT = '[A-Z0-9]{4}';
-const ACTIVITY_TYPE_FRAGMENT = '[A-Z]';
-const SPECIALTY_FRAGMENT = '[A-Z]{3,4}';
-const COMPACT_ACTIVITY_FRAGMENT = `${ICAO_FRAGMENT}${ACTIVITY_TYPE_FRAGMENT}\\d{4}`;
+// The fragments/patterns themselves live in the shared domain-rule spec that
+// compliance_cmis owns and every consumer vendors at domain-rules/. Keep this
+// module a thin consumer rather than a fourth hand-maintained copy.
+const domainSpec = require('../../domain-rules/nomenclatura.spec.json');
 
-const SITE_VISIT_CODE_PATTERN = new RegExp(`^V-(${ICAO_FRAGMENT})-(\\d{4})-(\\d{2})$`);
-const ACTIVITY_CODE_PATTERN = new RegExp(`^AV-(${ICAO_FRAGMENT})-(${ACTIVITY_TYPE_FRAGMENT})-(\\d{4})$`);
-const CHECKLIST_ID_PATTERN = new RegExp(`^LV-(${COMPACT_ACTIVITY_FRAGMENT})-(${SPECIALTY_FRAGMENT})$`);
-const FINDING_ID_PATTERN = new RegExp(`^H-(${COMPACT_ACTIVITY_FRAGMENT})-(${SPECIALTY_FRAGMENT})-(\\d{3})$`);
-const CAP_ID_PATTERN = new RegExp(`^P-(${COMPACT_ACTIVITY_FRAGMENT})-(${SPECIALTY_FRAGMENT})(\\d{3})-(\\d{2})$`);
-const FOLLOW_UP_ID_PATTERN = new RegExp(`^S-(${COMPACT_ACTIVITY_FRAGMENT})-(${SPECIALTY_FRAGMENT})(\\d{3})-(\\d{2})$`);
+const ICAO_FRAGMENT = domainSpec.fragments.icao;
+const ACTIVITY_TYPE_FRAGMENT = domainSpec.fragments.activityType;
+const SPECIALTY_FRAGMENT = domainSpec.fragments.specialty;
+const COMPACT_ACTIVITY_FRAGMENT = domainSpec.fragments.compactActivity;
 
-const FINDING_ID_SHAPE = 'H-XXXXT####-EEE-###';
-const CAP_ID_SHAPE = 'P-XXXXT####-EEE###-##';
-const FOLLOW_UP_ID_SHAPE = 'S-XXXXT####-EEE###-##';
+const SITE_VISIT_CODE_PATTERN = new RegExp(domainSpec.ids.siteVisit.pattern);
+const ACTIVITY_CODE_PATTERN = new RegExp(domainSpec.ids.activity.pattern);
+const CHECKLIST_ID_PATTERN = new RegExp(domainSpec.ids.checklist.pattern);
+const FINDING_ID_PATTERN = new RegExp(domainSpec.ids.finding.pattern);
+const CAP_ID_PATTERN = new RegExp(domainSpec.ids.correctiveAction.pattern);
+const FOLLOW_UP_ID_PATTERN = new RegExp(domainSpec.ids.followUp.pattern);
+
+const FINDING_ID_SHAPE = domainSpec.ids.finding.shape;
+const CAP_ID_SHAPE = domainSpec.ids.correctiveAction.shape;
+const FOLLOW_UP_ID_SHAPE = domainSpec.ids.followUp.shape;
 
 function normalize(value) {
   return String(value || '').trim().toUpperCase();

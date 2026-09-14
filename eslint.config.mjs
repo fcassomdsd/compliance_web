@@ -5,7 +5,10 @@ import vueParser from "vue-eslint-parser";
 
 export default [
   {
-    ignores: ["node_modules/", "dist/", ".git/", "coverage/", "*.lock.json", "package-lock.json", "package.json", "src/i18n/locales/*.json"]
+    // domain-rules/ holds the vendored, byte-identical domain-rule spec JSON
+    // (see domain-rules/README.md in compliance_cmis); it is data consumed by
+    // the conformance tests, not lintable JavaScript.
+    ignores: ["node_modules/", "dist/", ".git/", "coverage/", "*.lock.json", "package-lock.json", "package.json", "src/i18n/locales/*.json", "domain-rules/"]
   },
   {
     files: ["src/**/*.js"],

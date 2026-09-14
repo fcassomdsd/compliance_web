@@ -1,10 +1,15 @@
 // Canonical "Nomenclatura" document code helpers (client side).
 //
+// The fragments and patterns come from the shared, cross-repo spec vendored
+// at domain-rules/nomenclatura.spec.json (canonical copy owned by
+// compliance_cmis).
+//
 // MIRROR: server/domain/idFormats.cjs is the server-side copy and additionally
 // covers the checklist/finding/CAP/follow-up formats. Vite cannot cleanly
 // import that CJS module from src/, so the SiteVisit and Activity halves are
 // duplicated here. Keep the two in lockstep — tests/unit/utils/documentCodes.test.js
-// cross-checks both builders on a shared example set.
+// cross-checks both builders on a shared example set, and
+// tests/server/domainRulesConformance.test.js pins both to the shared vectors.
 //
 //   Visita (SiteVisit)      V-XXXX-YYYY-##   e.g. V-MDSD-2026-01
 //   Actividad (Inspection)  AV-XXXX-T-####   e.g. AV-MDSD-A-0002
@@ -12,11 +17,13 @@
 // SiteVisit sequences reset per location per year. Activity sequences do NOT
 // reset per year — they run continuously per location per activity type.
 
-const ICAO_FRAGMENT = '[A-Z0-9]{4}';
-const ACTIVITY_TYPE_FRAGMENT = '[A-Z]';
+import domainSpec from '../../domain-rules/nomenclatura.spec.json';
 
-export const SITE_VISIT_CODE_PATTERN = new RegExp(`^V-(${ICAO_FRAGMENT})-(\\d{4})-(\\d{2})$`);
-export const ACTIVITY_CODE_PATTERN = new RegExp(`^AV-(${ICAO_FRAGMENT})-(${ACTIVITY_TYPE_FRAGMENT})-(\\d{4})$`);
+const ICAO_FRAGMENT = domainSpec.fragments.icao;
+const ACTIVITY_TYPE_FRAGMENT = domainSpec.fragments.activityType;
+
+export const SITE_VISIT_CODE_PATTERN = new RegExp(domainSpec.ids.siteVisit.pattern);
+export const ACTIVITY_CODE_PATTERN = new RegExp(domainSpec.ids.activity.pattern);
 
 // Default activity type letter when none has been chosen yet. The Inspection
 // record is created before the user picks a type (see InspectionManager.vue),
