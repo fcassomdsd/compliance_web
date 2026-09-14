@@ -83,6 +83,19 @@ load:auth:probe:
     - main
     - develop
 
+# The server endpoint manifest (docs/endpoints.md) is derived from the routers
+# and their mounts; this job fails when the two drift so the documented API
+# surface can never silently go stale.
+verify:endpoints:
+  stage: test
+  image: node:20-alpine
+  script:
+    - node scripts/verify-endpoints.mjs
+  only:
+    - merge_requests
+    - main
+    - develop
+
 # Build stage - Build the application
 build:
   stage: build

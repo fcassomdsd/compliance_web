@@ -56,7 +56,7 @@ Core paths:
 - [src](src): frontend modules (components, stores, router, services, views).
 - [server](server): auth/session backend and supporting domain routes.
 - [tests](tests): unit, e2e, and server tests.
-- [docs](docs): phase-based project documentation.
+- [docs](docs): project documentation index (`docs/README.md`).
 
 ## Tech Stack
 
@@ -172,8 +172,8 @@ Auth endpoints exposed by the backend:
 
 Auth documentation:
 
-- Contract and policy docs: [docs/auth/phase-1-contract](docs/auth/phase-1-contract)
-- Readiness and role-setup docs: [docs/auth/phase-8-operational-readiness](docs/auth/phase-8-operational-readiness)
+- Contract and policy docs: [docs/auth](docs/auth) (`AUTH_CHUNK1_API_SPEC.md`, `AUTH_CHUNK1_ROUTE_AUTH_MATRIX.md`)
+- Readiness and role-setup docs: [docs/auth](docs/auth) (`AUTH_CHUNK8_OPERATIONAL_READINESS.md`, `ALFRESCO_ROLE_SETUP.md`)
 
 ## Testing and Quality
 
@@ -198,9 +198,9 @@ Start at [docs/README.md](docs/README.md).
 
 Direct entry points:
 
-- Checklist delivery docs: [docs/checklist/phase-4-delivery/DOCUMENTATION_INDEX.md](docs/checklist/phase-4-delivery/DOCUMENTATION_INDEX.md)
-- Authentication contract docs: [docs/auth/phase-1-contract](docs/auth/phase-1-contract)
-- Authentication operational readiness docs: [docs/auth/phase-8-operational-readiness](docs/auth/phase-8-operational-readiness)
+- Checklist module docs: [docs/checklist](docs/checklist) (`CHECKLIST_MODULE_DOCS.md`)
+- Authentication contract docs: [docs/auth](docs/auth)
+- Authentication operational readiness docs: [docs/auth](docs/auth)
 - Shared operations docs: [docs/shared/operations](docs/shared/operations)
 
 ## Repository Structure
@@ -210,7 +210,7 @@ compliance_web/
 ├── src/            # Vue frontend
 ├── server/         # Auth/session backend
 ├── tests/          # Unit, e2e, and server tests
-├── docs/           # Domain- and phase-organized documentation
+├── docs/           # Current-state documentation index (docs/README.md)
 ├── docker/         # Docker and nginx configuration
 └── scripts/        # Utility and load-probe scripts
 ```
@@ -232,7 +232,7 @@ Community participation is guided by [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md).
 
 - Use project issues for bug reports and feature requests.
 - Include reproduction steps, expected behavior, and environment details in reports.
-- For authentication-related topics, attach relevant logs and reference [docs/auth/phase-8-operational-readiness](docs/auth/phase-8-operational-readiness).
+- For authentication-related topics, attach relevant logs and reference [docs/auth](docs/auth).
 
 ## Troubleshooting
 
