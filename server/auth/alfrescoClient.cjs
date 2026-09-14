@@ -120,24 +120,56 @@ class AlfrescoClient {
     return response?.data?.entry || null;
   }
 
-  async listChildrenByType({ ticket, parentNodeId, nodeType, skipCount = 0, maxItems = 200 }) {
+  // Fetches every matching child, paging through the endpoint. It used to
+  // return only the first page, so a parent with more than `maxItems` children
+  // was silently truncated. `maxNodes` is a hard ceiling: a pathological parent
+  // cannot make the server accumulate an unbounded result set, and hitting it
+  // is logged rather than hidden.
+  async listChildrenByType({
+    ticket,
+    parentNodeId,
+    nodeType,
+    skipCount = 0,
+    maxItems = 200,
+    maxNodes = 2000,
+  }) {
     if (!ticket || !parentNodeId) {
       throw new Error('Alfresco ticket and parentNodeId are required');
     }
 
-    const response = await this.request({
-      method: 'get',
-      url: `${this.baseUrl}/alfresco/api/-default-/public/alfresco/versions/1/nodes/${encodeURIComponent(parentNodeId)}/children`,
-      params: {
-        include: 'properties,path',
-        where: nodeType ? `(nodeType='${nodeType}')` : undefined,
-        skipCount,
-        maxItems,
-        alf_ticket: ticket,
-      },
-    });
+    const ceiling = Math.max(1, Number(maxNodes) || 2000);
+    const pageSize = Math.max(1, Math.min(Number(maxItems) || 200, ceiling));
+    const collected = [];
+    let offset = Math.max(0, Number(skipCount) || 0);
 
-    return response?.data?.list?.entries?.map((entry) => entry.entry) || [];
+    while (collected.length < ceiling) {
+      const response = await this.request({
+        method: 'get',
+        url: `${this.baseUrl}/alfresco/api/-default-/public/alfresco/versions/1/nodes/${encodeURIComponent(parentNodeId)}/children`,
+        params: {
+          include: 'properties,path',
+          where: nodeType ? `(nodeType='${nodeType}')` : undefined,
+          skipCount: offset,
+          maxItems: Math.min(pageSize, ceiling - collected.length),
+          alf_ticket: ticket,
+        },
+      });
+
+      const entries = response?.data?.list?.entries?.map((entry) => entry.entry) || [];
+      collected.push(...entries);
+
+      const hasMore = response?.data?.list?.pagination?.hasMoreItems === true;
+      if (!hasMore || entries.length === 0) {
+        return collected;
+      }
+
+      offset += entries.length;
+    }
+
+    console.warn(
+      `listChildrenByType: stopping at maxNodes=${ceiling} for parent ${parentNodeId} (nodeType=${nodeType || 'any'})`
+    );
+    return collected;
   }
 
   async createChildNode({ ticket, parentNodeId, nodeType, name, properties = {}, aspectNames = [], associationType = 'cm:contains' }) {
