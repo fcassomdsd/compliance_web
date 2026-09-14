@@ -440,7 +440,7 @@ The app supports English and Spanish via `vue-i18n` (Composition API mode). Tran
 
 Keys are namespaced per view, matching the component name: `findingManager.title`, `findingManager.table.findingId`, etc. `BaseButton`/`StatusBadge`/`LoadingSpinner` take text via props/slots and hold no strings of their own — translate at the call site, not inside the base component.
 
-The active locale is resolved once, in `src/router/guards.js`, in this order: the user's persisted session preference (`POST /api/auth/locale`, see `docs/auth/phase-1-contract/AUTH_CHUNK1_API_SPEC.md` §4.4) → browser language → `en` fallback. Server-side strings (notification subject/body in `server/notifications/messages.cjs`) are separate — see `NOTIFICATION_LOCALE` in the root `README.md`, since those go to fixed shared inboxes rather than a browsing session.
+The active locale is resolved once, in `src/router/guards.js`, in this order: the user's persisted session preference (`POST /api/auth/locale`, see `docs/auth/AUTH_CHUNK1_API_SPEC.md` §4.4) → browser language → `en` fallback. Server-side strings (notification subject/body in `server/notifications/messages.cjs`) are separate — see `NOTIFICATION_LOCALE` in the root `README.md`, since those go to fixed shared inboxes rather than a browsing session.
 
 ### Do
 

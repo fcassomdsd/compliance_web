@@ -1,15 +1,6 @@
-# Auth Server Foundation (Chunk 2)
+# Server
 
-This folder contains the backend authentication foundation for:
-
-1. POST /api/auth/login
-2. GET /api/auth/session
-3. POST /api/auth/logout
-4. GET /api/auth/diagnostics
-5. GET /api/findings, GET /api/findings/:id
-6. POST /api/findings/:id/follow-ups, GET /api/findings/follow-ups
-7. GET /api/caps, GET /api/caps/:id, PATCH /api/caps/:id/review
-8. POST /api/findings/:id/caps
+This folder contains the Express backend: the auth/session foundation plus the findings, CAPs, reports, notifications, and USOAP routers. The complete HTTP endpoint surface — derived from the routers and their mounts in `server/app.cjs` — lives in [`docs/endpoints.md`](../docs/endpoints.md), which is machine-checked by `scripts/verify-endpoints.mjs`. Do not add an endpoint list here; it will drift.
 
 It implements server-side session persistence through PostgreSQL, PG-backed login rate limiting, and PG-backed audit event logging. All PG-backed features gracefully fall back to in-memory/console-only when their database tables are not yet present.
 
