@@ -202,6 +202,10 @@ Direct entry points:
 - Authentication contract docs: [docs/auth](docs/auth)
 - Authentication operational readiness docs: [docs/auth](docs/auth)
 - Shared operations docs: [docs/shared/operations](docs/shared/operations)
+- Whole-platform demo quickstart (stack, seeds, demo identities, closure review):
+  §7 of `../atrocore-docker/docs/COMPLIANCE_INTEGRATION_RUNBOOK.md`, executable as
+  `atrocore-docker/scripts/demo-quickstart.sh` — it ends with the closure-review
+  recipe this app drives.
 
 ## Repository Structure
 
