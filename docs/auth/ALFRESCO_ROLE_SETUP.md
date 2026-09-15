@@ -40,6 +40,37 @@ In Alfresco, create groups corresponding to each application role. Recommended g
 > lookup strips a leading `GROUP_` and compares case-insensitively, so either form
 > matches — but match the existing rows when adding a role.
 
+## Step 2: Grant the group repository permissions
+
+**An application role does not grant an Alfresco permission.** The server authorises a
+route by role, but it performs the underlying Alfresco call with the *user's own
+ticket*, so the repository enforces its own ACLs on top. A role whose group has no
+repository permission authenticates, passes the role gate, and then fails the write
+with `403` from Alfresco — which surfaces as `502` from the API.
+
+Every role that writes must therefore have the equivalent repository permission.
+The pattern in use is site membership on `vigilancia-de-la-so`:
+
+```bash
+curl -u "$ALFRESCO_USERNAME:$ALFRESCO_PASSWORD" -X POST \
+  "http://localhost:8080/alfresco/api/-default-/public/alfresco/versions/1/sites/vigilancia-de-la-so/members" \
+  -H 'Content-Type: application/json' \
+  -d '{"id":"<group-or-user>","role":"SiteCollaborator"}'
+```
+
+Known limitation (verified 2026-09-15): the v1 site-members endpoint returns `404`
+for a *group* id in this deployment — both `U-VSO-IN_ClosureReviewer` and
+`GROUP_U-VSO-IN_ClosureReviewer` — while the same endpoint accepts a *person* and
+returns `201`; the legacy `/alfresco/service/api/sites/{site}/memberships` endpoint
+with `groupId` returned `400`. Until that is resolved, a group-level grant has to be
+made in Share (or by another route), and per-user membership is the workaround. This
+is the same shape as the operator-identity grant recorded in
+`TECHNICAL_DEBT_ANALYSIS.md` (`GROUP_U-VSO-IN_Inspector` as SiteCollaborator, needed
+only so the importer can write as the operator).
+
+`closure_reviewer` needs it: the review writes `vso:findingStatus`,
+`vso:closureRejectionReason` and `vso:findingClosureDate` on the finding node.
+
 ### Via Alfresco Share UI
 
 1. Log into Alfresco Share as an administrator

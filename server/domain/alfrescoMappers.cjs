@@ -41,6 +41,11 @@ function mapFindingNode(node) {
     deadlineExtensionRequestedDate: nodeProperty(node, 'vso:deadlineExtensionRequestedDate'),
     deadlineExtensionDecisionDate: nodeProperty(node, 'vso:deadlineExtensionDecisionDate'),
     findingClosureDate: nodeProperty(node, 'vso:findingClosureDate'),
+    // The closure review's own record: who declared the closure (so the UI can
+    // tell that a review cannot be done by them) and, when a reviewer rejected
+    // it, why - the inspector has to be able to read what is missing.
+    closureRequestedBy: nodeProperty(node, 'vso:closureRequestedBy'),
+    closureRejectionReason: nodeProperty(node, 'vso:closureRejectionReason'),
     // vso:openedDate was renamed to vso:dateIssued in the Alfresco model;
     // dateIssued is the canonical field going forward (see CLAUDE.md).
     // openedDate is kept for any callers still reading the legacy property.
