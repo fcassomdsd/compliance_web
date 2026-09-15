@@ -58,7 +58,7 @@ const routes = [
     path: '/findings',
     name: 'findings',
     component: () => import('@/views/FindingManager.vue'),
-    meta: { requiresAuth: true, requiredRoles: ['inspector', 'planner', 'cap_entry', 'admin'] },
+    meta: { requiresAuth: true, requiredRoles: ['inspector', 'planner', 'cap_entry', 'closure_reviewer', 'admin'] },
   },
   {
     path: '/corrective-actions',
