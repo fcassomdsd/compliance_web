@@ -169,6 +169,10 @@
             <option value="reject">{{ t('findingManager.reject') }}</option>
           </select>
         </div>
+        <div v-if="closureForm.decision === 'reject'" class="form-field">
+          <label for="closureReason">{{ t('findingManager.reason') }}</label>
+          <input id="closureReason" v-model="closureForm.reason" type="text" required />
+        </div>
       </div>
       <BaseButton variant="primary" @click="closureReview" :disabled="findingStore.loading">{{ t('findingManager.applyDecision') }}</BaseButton>
     </section>
@@ -243,6 +247,7 @@ const reviewSeverity = ref('A');
 const closureForm = reactive({
   findingId: '',
   decision: 'approve',
+  reason: '',
 });
 
 const extensionRequestForm = reactive({
@@ -305,6 +310,7 @@ async function closureReview() {
     await findingStore.closureReviewFinding({
       findingId: closureForm.findingId,
       decision: closureForm.decision,
+      reason: closureForm.decision === 'reject' ? closureForm.reason : undefined,
       csrfToken: authStore.csrfToken,
     });
     message.value = t('findingManager.toast.closureApplied');

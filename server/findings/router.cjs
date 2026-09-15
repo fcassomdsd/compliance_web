@@ -1067,13 +1067,22 @@ function createFindingsRouter({ auth, alfrescoClient, notificationService, nodeR
   router.patch(
     '/:findingId/closure-review',
     auth.authenticate,
-    auth.authorize(['inspector', 'admin']),
+    // The verifying authority, not the inspector: declaring effectiveness and
+    // verifying it are deliberately different roles. admin stays as break-glass.
+    auth.authorize(['closure_reviewer', 'admin']),
     auth.requireCsrf(),
     async (req, res) => {
       try {
         const decision = req.body?.decision;
         if (decision !== 'approve' && decision !== 'reject') {
           return res.status(400).json(buildError('CLOSURE_REVIEW_BAD_DECISION', 'decision must be "approve" or "reject"'));
+        }
+
+        // A rejection returns the finding to the inspector to complete the
+        // missing detail, so it is useless without saying what is missing.
+        const reason = String(req.body?.reason || '').trim();
+        if (decision === 'reject' && reason.length === 0) {
+          return res.status(400).json(buildError('CLOSURE_REVIEW_REASON_REQUIRED', 'reason is required when rejecting a closure'));
         }
 
         const findingNode = await alfrescoClient.searchFindingByBusinessId({
@@ -1089,12 +1098,35 @@ function createFindingsRouter({ auth, alfrescoClient, notificationService, nodeR
           return res.status(409).json(buildError('FINDING_NOT_REVIEWABLE', 'Only findings in Pending Closure Approval status can be reviewed'));
         }
 
+        // Separation of duties: whoever declared the closure must not verify it.
+        // vso:closureRequestedBy is written by the canonical import from the
+        // follow-up's enteredBy. When it is absent we cannot show that the
+        // reviewer is somebody else, so refuse rather than allow an unattributable
+        // approval.
+        const requestedBy = findingNode?.properties?.['vso:closureRequestedBy'];
+        if (!requestedBy) {
+          return res.status(409).json(buildError(
+            'CLOSURE_DECLARER_UNKNOWN',
+            'The closure declarer is not recorded on this finding, so the review cannot be attributed'
+          ));
+        }
+        if (String(requestedBy) === String(req.auth.username)) {
+          return res.status(403).json(buildError(
+            'CLOSURE_REVIEW_SELF',
+            'A closure cannot be reviewed by the user who declared it'
+          ));
+        }
+
         const statusProperties = {
           'vso:findingStatus': decision === 'approve' ? FINDING_STATUS.CLOSED : FINDING_STATUS.IN_PROGRESS,
           'vso:lastStatusChange': toDateOnly(now()),
         };
         if (decision === 'approve') {
           statusProperties['vso:findingClosureDate'] = toDateOnly(now());
+          // A previous rejection is superseded by this closure.
+          statusProperties['vso:closureRejectionReason'] = null;
+        } else {
+          statusProperties['vso:closureRejectionReason'] = reason;
         }
 
         const updatedFinding = await alfrescoClient.updateNodeProperties({

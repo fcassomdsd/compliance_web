@@ -19,6 +19,7 @@ The application authenticates users through Alfresco and assigns roles based on 
 | `assigner` | Assign inspectors to specialties | `/assign-inspectors` |
 | `cap_entry` | Submit corrective actions | CAP submission to findings |
 | `reporter` | Generate reports | Report viewing and generation |
+| `closure_reviewer` | Verify a declared finding closure (supervising authority) | `PATCH /api/findings/:findingId/closure-review` |
 
 `assigner` was previously scoped to a subset of specialties by AGA/SNA/VA Alfresco-group membership (a separate mechanism from this role mapping). That domain-based scoping was retired along with the domain grouping itself — anyone with the `assigner` role now sees/acts on all 16 specialties, with no further group-based restriction.
 
@@ -32,6 +33,12 @@ In Alfresco, create groups corresponding to each application role. Recommended g
 4. **assigner** → Create group: `app-assigner`
 5. **cap_entry** → Create group: `app-cap-entry`
 6. **reporter** → Create group: `app-reporter`
+7. **closure_reviewer** → Create group: `U-VSO-IN_ClosureReviewer`
+
+> The `app-*` names above are the original proposal. The mappings in use store the
+> `U-VSO-*` authority names (see the table in `alfresco_group_role_map`); the role
+> lookup strips a leading `GROUP_` and compares case-insensitively, so either form
+> matches — but match the existing rows when adding a role.
 
 ### Via Alfresco Share UI
 

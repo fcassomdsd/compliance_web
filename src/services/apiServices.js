@@ -798,7 +798,7 @@ export async function apiReviewFinding(findingId, edits, csrfToken) {
   }
 }
 
-export async function apiClosureReviewFinding(findingId, decision, csrfToken) {
+export async function apiClosureReviewFinding(findingId, decision, csrfToken, reason) {
   try {
     if (!findingId || typeof findingId !== 'string') {
       throw new Error('findingId is required');
@@ -807,7 +807,7 @@ export async function apiClosureReviewFinding(findingId, decision, csrfToken) {
     const result = await axios({
       method: 'patch',
       url: `${complianceApiServer}/findings/${encodeURIComponent(findingId)}/closure-review`,
-      data: { decision },
+      data: reason ? { decision, reason } : { decision },
       headers: buildCsrfHeader(csrfToken),
       withCredentials: true,
     });

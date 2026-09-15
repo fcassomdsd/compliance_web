@@ -1573,7 +1573,7 @@ describe('Findings and CAP API', () => {
   });
 
   it('approves a pending closure and closes the finding', async () => {
-    const { app, fixture } = await buildApp({ roles: ['inspector'] });
+    const { app, fixture } = await buildApp({ roles: ['closure_reviewer'], findingPropertyOverrides: { 'vso:closureRequestedBy': 'declaring.inspector' } });
     fixture.findingNode.properties['vso:findingStatus'] = 'Pending Closure Approval';
 
     const response = await request(app)
@@ -1589,14 +1589,14 @@ describe('Findings and CAP API', () => {
   });
 
   it('rejects a pending closure and reopens the finding for further work', async () => {
-    const { app, fixture } = await buildApp({ roles: ['inspector'] });
+    const { app, fixture } = await buildApp({ roles: ['closure_reviewer'], findingPropertyOverrides: { 'vso:closureRequestedBy': 'declaring.inspector' } });
     fixture.findingNode.properties['vso:findingStatus'] = 'Pending Closure Approval';
 
     const response = await request(app)
       .patch('/api/findings/H-MDPPA0001-AVIS-001/closure-review')
       .set('Cookie', 'compliance_session_id=session-1')
       .set('x-csrf-token', 'csrf-token-1')
-      .send({ decision: 'reject' });
+      .send({ decision: 'reject', reason: 'Evidence does not demonstrate effectiveness' });
 
     expect(response.status).toBe(200);
     expect(response.body.finding.findingStatus).toBe('In Progress');
@@ -1604,7 +1604,7 @@ describe('Findings and CAP API', () => {
   });
 
   it('rejects closure review when the finding is not pending approval', async () => {
-    const { app } = await buildApp({ roles: ['inspector'] });
+    const { app } = await buildApp({ roles: ['closure_reviewer'], findingPropertyOverrides: { 'vso:closureRequestedBy': 'declaring.inspector' } });
 
     const response = await request(app)
       .patch('/api/findings/H-MDPPA0001-AVIS-001/closure-review')
@@ -1615,6 +1615,104 @@ describe('Findings and CAP API', () => {
     expect(response.status).toBe(409);
     expect(response.body.code).toBe('FINDING_NOT_REVIEWABLE');
   });
+
+  it('refuses a closure review from a user without the closure_reviewer role', async () => {
+    const { app, fixture } = await buildApp({ roles: ['inspector'] });
+    fixture.findingNode.properties['vso:findingStatus'] = 'Pending Closure Approval';
+    fixture.findingNode.properties['vso:closureRequestedBy'] = 'declaring.inspector';
+
+    const response = await request(app)
+      .patch('/api/findings/H-MDPPA0001-AVIS-001/closure-review')
+      .set('Cookie', 'compliance_session_id=session-1')
+      .set('x-csrf-token', 'csrf-token-1')
+      .send({ decision: 'approve' });
+
+    expect(response.status).toBe(403);
+    expect(fixture.findingNode.properties['vso:findingStatus']).toBe('Pending Closure Approval');
+  });
+
+  it('refuses a reviewer who declared the closure themselves', async () => {
+    const { app, fixture } = await buildApp({
+      roles: ['closure_reviewer'],
+      findingPropertyOverrides: { 'vso:closureRequestedBy': 'tester' },
+    });
+    fixture.findingNode.properties['vso:findingStatus'] = 'Pending Closure Approval';
+
+    const response = await request(app)
+      .patch('/api/findings/H-MDPPA0001-AVIS-001/closure-review')
+      .set('Cookie', 'compliance_session_id=session-1')
+      .set('x-csrf-token', 'csrf-token-1')
+      .send({ decision: 'approve' });
+
+    expect(response.status).toBe(403);
+    expect(JSON.stringify(response.body)).toContain('CLOSURE_REVIEW_SELF');
+    expect(fixture.findingNode.properties['vso:findingStatus']).toBe('Pending Closure Approval');
+  });
+
+  it('refuses to review a closure whose declarer was not recorded', async () => {
+    const { app, fixture } = await buildApp({ roles: ['closure_reviewer'] });
+    fixture.findingNode.properties['vso:findingStatus'] = 'Pending Closure Approval';
+    delete fixture.findingNode.properties['vso:closureRequestedBy'];
+
+    const response = await request(app)
+      .patch('/api/findings/H-MDPPA0001-AVIS-001/closure-review')
+      .set('Cookie', 'compliance_session_id=session-1')
+      .set('x-csrf-token', 'csrf-token-1')
+      .send({ decision: 'approve' });
+
+    expect(response.status).toBe(409);
+    expect(JSON.stringify(response.body)).toContain('CLOSURE_DECLARER_UNKNOWN');
+  });
+
+  it('requires a reason when rejecting a closure and stores it on the finding', async () => {
+    const { app, fixture } = await buildApp({
+      roles: ['closure_reviewer'],
+      findingPropertyOverrides: { 'vso:closureRequestedBy': 'declaring.inspector' },
+    });
+    fixture.findingNode.properties['vso:findingStatus'] = 'Pending Closure Approval';
+
+    const withoutReason = await request(app)
+      .patch('/api/findings/H-MDPPA0001-AVIS-001/closure-review')
+      .set('Cookie', 'compliance_session_id=session-1')
+      .set('x-csrf-token', 'csrf-token-1')
+      .send({ decision: 'reject' });
+
+    expect(withoutReason.status).toBe(400);
+    expect(JSON.stringify(withoutReason.body)).toContain('CLOSURE_REVIEW_REASON_REQUIRED');
+    expect(fixture.findingNode.properties['vso:findingStatus']).toBe('Pending Closure Approval');
+
+    const withReason = await request(app)
+      .patch('/api/findings/H-MDPPA0001-AVIS-001/closure-review')
+      .set('Cookie', 'compliance_session_id=session-1')
+      .set('x-csrf-token', 'csrf-token-1')
+      .send({ decision: 'reject', reason: 'Closure evidence is undated' });
+
+    expect(withReason.status).toBe(200);
+    expect(fixture.findingNode.properties['vso:findingStatus']).toBe('In Progress');
+    expect(fixture.findingNode.properties['vso:closureRejectionReason']).toBe('Closure evidence is undated');
+  });
+
+  it('clears a previous rejection reason when the closure is approved', async () => {
+    const { app, fixture } = await buildApp({
+      roles: ['closure_reviewer'],
+      findingPropertyOverrides: {
+        'vso:closureRequestedBy': 'declaring.inspector',
+        'vso:closureRejectionReason': 'Closure evidence is undated',
+      },
+    });
+    fixture.findingNode.properties['vso:findingStatus'] = 'Pending Closure Approval';
+
+    const response = await request(app)
+      .patch('/api/findings/H-MDPPA0001-AVIS-001/closure-review')
+      .set('Cookie', 'compliance_session_id=session-1')
+      .set('x-csrf-token', 'csrf-token-1')
+      .send({ decision: 'approve' });
+
+    expect(response.status).toBe(200);
+    expect(fixture.findingNode.properties['vso:findingStatus']).toBe('Closed');
+    expect(fixture.findingNode.properties['vso:closureRejectionReason']).toBeNull();
+  });
+
 
   it('rejects closure review from roles other than inspector/admin', async () => {
     const { app } = await buildApp({ roles: ['cap_entry'] });
@@ -1885,7 +1983,7 @@ describe('Findings and CAP API notifications', () => {
 
   it('notifies cap_entry when a finding closure is approved', async () => {
     const { service, sent } = buildTestNotificationService();
-    const { app, fixture } = await buildApp({ roles: ['inspector'], notificationService: service });
+    const { app, fixture } = await buildApp({ roles: ['closure_reviewer'], notificationService: service, findingPropertyOverrides: { 'vso:closureRequestedBy': 'declaring.inspector' } });
     fixture.findingNode.properties['vso:findingStatus'] = 'Pending Closure Approval';
 
     const response = await request(app)
@@ -1902,14 +2000,14 @@ describe('Findings and CAP API notifications', () => {
 
   it('notifies inspectors when a finding closure is rejected', async () => {
     const { service, sent } = buildTestNotificationService();
-    const { app, fixture } = await buildApp({ roles: ['inspector'], notificationService: service });
+    const { app, fixture } = await buildApp({ roles: ['closure_reviewer'], notificationService: service, findingPropertyOverrides: { 'vso:closureRequestedBy': 'declaring.inspector' } });
     fixture.findingNode.properties['vso:findingStatus'] = 'Pending Closure Approval';
 
     const response = await request(app)
       .patch('/api/findings/H-MDPPA0001-AVIS-001/closure-review')
       .set('Cookie', 'compliance_session_id=session-1')
       .set('x-csrf-token', 'csrf-token-1')
-      .send({ decision: 'reject' });
+      .send({ decision: 'reject', reason: 'Evidence does not demonstrate effectiveness' });
 
     expect(response.status).toBe(200);
     expect(sent).toHaveLength(1);
