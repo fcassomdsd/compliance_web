@@ -75,11 +75,11 @@ export const useFindingStore = defineStore('finding', {
       }
     },
 
-    async closureReviewFinding({ findingId, decision, csrfToken }) {
+    async closureReviewFinding({ findingId, decision, reason, csrfToken }) {
       this.loading = true;
       this.error = null;
       try {
-        const { data } = await apiClosureReviewFinding(findingId, decision, csrfToken);
+        const { data } = await apiClosureReviewFinding(findingId, decision, csrfToken, reason);
         return data;
       } catch (error) {
         this.error = error.message;
