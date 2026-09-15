@@ -63,6 +63,11 @@ curl -u "$ALFRESCO_USERNAME:$ALFRESCO_PASSWORD" -X POST \
   -d '{"id":"<group-or-user>","role":"SiteCollaborator"}'
 ```
 
+**A group can hold this.** `GROUP_U-VSO-IN_Inspector` is a SiteConsumer of the site with
+Contributor on `Datos de campo` and `Hallazgos` — Consumer at the site, Contributor only where
+the role writes. Prefer that shape for a new role: narrower than site-wide Collaborator, and it
+needs no per-user membership.
+
 Known limitation (verified 2026-09-15): the v1 site-members endpoint returns `404`
 for a *group* id in this deployment — both `U-VSO-IN_ClosureReviewer` and
 `GROUP_U-VSO-IN_ClosureReviewer` — while the same endpoint accepts a *person* and
