@@ -19,7 +19,7 @@ The application authenticates users through Alfresco and assigns roles based on 
 | `assigner` | Assign inspectors to specialties | `/assign-inspectors` |
 | `cap_entry` | Submit corrective actions | CAP submission to findings |
 | `reporter` | Generate reports | Report viewing and generation |
-| `closure_reviewer` | Verify a declared finding closure (supervising authority) | `PATCH /api/findings/:findingId/closure-review` |
+| `closure_reviewer` | Verify a declared finding closure (supervising authority) | Read findings (`/api/findings`, `/api/findings/:findingId`, follow-ups and evidence content) + the one write, `PATCH /api/findings/:findingId/closure-review` |
 
 `assigner` was previously scoped to a subset of specialties by AGA/SNA/VA Alfresco-group membership (a separate mechanism from this role mapping). That domain-based scoping was retired along with the domain grouping itself — anyone with the `assigner` role now sees/acts on all 16 specialties, with no further group-based restriction.
 

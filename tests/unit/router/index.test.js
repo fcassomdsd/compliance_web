@@ -24,6 +24,7 @@ describe('router index', () => {
     const inspectionPlan = router.getRoutes().find((route) => route.name === 'inspectionPlan');
     const inspectionReport = router.getRoutes().find((route) => route.name === 'inspectionReport');
     const followUps = router.getRoutes().find((route) => route.name === 'followUps');
+    const findings = router.getRoutes().find((route) => route.name === 'findings');
 
     expect(siteVisit.meta.requiredRoles).toEqual(['planner', 'admin']);
     expect(providerInspection.meta.requiredRoles).toEqual(['planner', 'admin']);
@@ -32,6 +33,8 @@ describe('router index', () => {
     expect(inspectionPlan.meta.requiredRoles).toEqual(['planner', 'inspector', 'admin']);
     expect(inspectionReport.meta.requiredRoles).toEqual(['inspector', 'admin']);
     expect(followUps.meta.requiredRoles).toEqual(['inspector', 'planner', 'cap_entry', 'admin']);
+    // A closure reviewer must be able to open the findings page it reviews from.
+    expect(findings.meta.requiredRoles).toEqual(['inspector', 'planner', 'cap_entry', 'closure_reviewer', 'admin']);
   });
 
   it('executes lazy route component factories', async () => {

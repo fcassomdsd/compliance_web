@@ -24,8 +24,8 @@ Pseudo-rule:
 | /checklist | checklist | true | inspector, planner, admin | Checklist access |
 | /inspection-plan | inspectionPlan | true | planner, admin | Planning route |
 | /inspection-report | inspectionReport | true | reporter, admin | Reporting route |
-| /api/findings | findingsApi | true | inspector, planner, cap_entry, admin | Findings list and filters |
-| /api/findings/:findingId | findingDetailApi | true | inspector, planner, cap_entry, admin | Finding detail |
+| /api/findings | findingsApi | true | inspector, planner, cap_entry, closure_reviewer, admin | Findings list and filters. `closure_reviewer` reads only — the role's sole write is `closure-review`. |
+| /api/findings/:findingId | findingDetailApi | true | inspector, planner, cap_entry, closure_reviewer, admin | Finding detail. A reviewer has to see the finding it is asked to close. |
 | /api/findings/:findingId/caps | capSubmitApi | true | cap_entry, admin | CAP submission |
 | /api/findings/:findingId/review | findingReviewApi | true | inspector, admin | Confirm a finding (optionally correcting description/severity/classification), only from Pending Review; PATCH |
 | /api/findings/:findingId/closure-review | findingClosureReviewApi | true | closure_reviewer, admin | Approve/reject a pending finding closure (only from Pending Closure Approval; PATCH) |

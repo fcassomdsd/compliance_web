@@ -1631,6 +1631,66 @@ describe('Findings and CAP API', () => {
     expect(fixture.findingNode.properties['vso:findingStatus']).toBe('Pending Closure Approval');
   });
 
+  // The reviewer has to be able to SEE the finding before judging its closure;
+  // the role was previously only on the closure-review PATCH, so the web UI
+  // bounced a closure_reviewer off /findings and every findings read route.
+  it('lets a closure reviewer read the findings list and the finding it must review', async () => {
+    const { app } = await buildApp({ roles: ['closure_reviewer'] });
+
+    const list = await request(app)
+      .get('/api/findings')
+      .set('Cookie', 'compliance_session_id=session-1');
+
+    expect(list.status).toBe(200);
+    expect(list.body.list).toHaveLength(1);
+
+    const detail = await request(app)
+      .get('/api/findings/H-MDPPA0001-AVIS-001')
+      .set('Cookie', 'compliance_session_id=session-1');
+
+    expect(detail.status).toBe(200);
+    expect(detail.body.findingId).toBe('H-MDPPA0001-AVIS-001');
+    expect(detail.body.evidence).toHaveLength(1);
+  });
+
+  it('lets a closure reviewer read follow-ups and evidence content', async () => {
+    const { app } = await buildApp({ roles: ['closure_reviewer'] });
+
+    const followUps = await request(app)
+      .get('/api/findings/follow-ups')
+      .set('Cookie', 'compliance_session_id=session-1');
+
+    expect(followUps.status).toBe(200);
+
+    const evidence = await request(app)
+      .get('/api/findings/H-MDPPA0001-AVIS-001/evidence/evidence-node-1/content')
+      .set('Cookie', 'compliance_session_id=session-1');
+
+    expect(evidence.status).toBe(200);
+    expect(Buffer.from(evidence.body).toString()).toBe('fake-image-bytes');
+  });
+
+  it('keeps the closure reviewer read-only on findings', async () => {
+    const { app, fixture } = await buildApp({ roles: ['closure_reviewer'] });
+
+    const review = await request(app)
+      .patch('/api/findings/H-MDPPA0001-AVIS-001/review')
+      .set('Cookie', 'compliance_session_id=session-1')
+      .set('x-csrf-token', 'csrf-token-1')
+      .send({});
+
+    expect(review.status).toBe(403);
+
+    const cap = await request(app)
+      .post('/api/findings/H-MDPPA0001-AVIS-001/caps')
+      .set('Cookie', 'compliance_session_id=session-1')
+      .set('x-csrf-token', 'csrf-token-1')
+      .send({});
+
+    expect(cap.status).toBe(403);
+    expect(fixture.findingNode.properties['vso:findingStatus']).not.toBe('Closed');
+  });
+
   it('refuses a reviewer who declared the closure themselves', async () => {
     const { app, fixture } = await buildApp({
       roles: ['closure_reviewer'],

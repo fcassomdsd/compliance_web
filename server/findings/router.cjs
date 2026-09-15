@@ -329,7 +329,7 @@ function createFindingsRouter({ auth, alfrescoClient, notificationService, nodeR
   router.get(
     '/',
     auth.authenticate,
-    auth.authorize(['inspector', 'planner', 'admin', 'cap_entry']),
+    auth.authorize(['inspector', 'planner', 'cap_entry', 'closure_reviewer', 'admin']),
     async (req, res) => {
       try {
         const query = buildFindingsQuery({
@@ -394,7 +394,7 @@ function createFindingsRouter({ auth, alfrescoClient, notificationService, nodeR
   router.get(
     '/follow-ups',
     auth.authenticate,
-    auth.authorize(['inspector', 'planner', 'admin', 'cap_entry']),
+    auth.authorize(['inspector', 'planner', 'cap_entry', 'closure_reviewer', 'admin']),
     async (req, res) => {
       try {
         const skipCount = parseNonNegativeInt(req.query?.skipCount, 0);
@@ -954,7 +954,7 @@ function createFindingsRouter({ auth, alfrescoClient, notificationService, nodeR
   router.get(
     '/:findingId/follow-ups/:followUpId/evidence/:evidenceNodeId/content',
     auth.authenticate,
-    auth.authorize(['inspector', 'planner', 'admin', 'cap_entry']),
+    auth.authorize(['inspector', 'planner', 'cap_entry', 'closure_reviewer', 'admin']),
     async (req, res) => {
       try {
         const findingNode = await alfrescoClient.searchFindingByBusinessId({
@@ -1287,7 +1287,7 @@ function createFindingsRouter({ auth, alfrescoClient, notificationService, nodeR
   router.get(
     '/:findingId',
     auth.authenticate,
-    auth.authorize(['inspector', 'planner', 'admin', 'cap_entry']),
+    auth.authorize(['inspector', 'planner', 'cap_entry', 'closure_reviewer', 'admin']),
     async (req, res) => {
       try {
         const findingNode = await alfrescoClient.searchFindingByBusinessId({
@@ -1332,7 +1332,7 @@ function createFindingsRouter({ auth, alfrescoClient, notificationService, nodeR
   router.get(
     '/:findingId/evidence/:evidenceNodeId/content',
     auth.authenticate,
-    auth.authorize(['inspector', 'planner', 'admin', 'cap_entry']),
+    auth.authorize(['inspector', 'planner', 'cap_entry', 'closure_reviewer', 'admin']),
     async (req, res) => {
       try {
         const findingNode = await alfrescoClient.searchFindingByBusinessId({
