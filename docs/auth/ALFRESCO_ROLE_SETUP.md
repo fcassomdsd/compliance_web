@@ -40,6 +40,11 @@ In Alfresco, create groups corresponding to each application role. Recommended g
 > lookup strips a leading `GROUP_` and compares case-insensitively, so either form
 > matches — but match the existing rows when adding a role.
 
+> **For a demo deployment this is scripted**: `compliance_cmis/scripts/seed-demo-identities.sh`
+> creates the groups, the demo users, their memberships and the repository access in one
+> idempotent command. The notes below explain what it does and why the permission part is
+> per user rather than per group.
+
 ## Step 2: Grant the group repository permissions
 
 **An application role does not grant an Alfresco permission.** The server authorises a
