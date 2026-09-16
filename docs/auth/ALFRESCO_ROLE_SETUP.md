@@ -78,8 +78,9 @@ is the same shape as the operator-identity grant recorded in
 `TECHNICAL_DEBT_ANALYSIS.md` (`GROUP_U-VSO-IN_Inspector` as SiteCollaborator, needed
 only so the importer can write as the operator).
 
-`closure_reviewer` needs it: the review writes `vso:findingStatus`,
-`vso:closureRejectionReason` and `vso:findingClosureDate` on the finding node.
+`closure_reviewer` needs it: the review writes `vso:findingStatus` and
+`vso:closureRejectionReason`, and sets `vso:findingClosureDate` on approval or clears
+it on rejection (an open finding must never carry a closure date).
 
 ### Via Alfresco Share UI
 

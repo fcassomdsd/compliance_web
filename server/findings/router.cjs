@@ -1126,6 +1126,14 @@ function createFindingsRouter({ auth, alfrescoClient, notificationService, nodeR
           // A previous rejection is superseded by this closure.
           statusProperties['vso:closureRejectionReason'] = null;
         } else {
+          // `vso:findingClosureDate` records the authority's formal closure, so a rejection
+          // has to take it back: the finding returns to In Progress, and a date left behind
+          // would make an open finding read as closed everywhere the property is surfaced
+          // (the finding mapper, the provider-history report, the checklist's prior
+          // findings). Intake can leave one here — a first declaration used to stamp it,
+          // and an earlier approval whose closure a new follow-up supersedes still carries
+          // it — so clear it rather than assuming it is already empty.
+          statusProperties['vso:findingClosureDate'] = null;
           statusProperties['vso:closureRejectionReason'] = reason;
         }
 
