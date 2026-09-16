@@ -1591,6 +1591,10 @@ describe('Findings and CAP API', () => {
   it('rejects a pending closure and reopens the finding for further work', async () => {
     const { app, fixture } = await buildApp({ roles: ['closure_reviewer'], findingPropertyOverrides: { 'vso:closureRequestedBy': 'declaring.inspector' } });
     fixture.findingNode.properties['vso:findingStatus'] = 'Pending Closure Approval';
+    // A finding awaiting review can already carry a closure date (a first declaration used to
+    // stamp one, and an approval whose closure a later follow-up supersedes keeps it), so the
+    // rejection has to clear it rather than rely on it being absent.
+    fixture.findingNode.properties['vso:findingClosureDate'] = '2026-09-15';
 
     const response = await request(app)
       .patch('/api/findings/H-MDPPA0001-AVIS-001/closure-review')
@@ -1601,6 +1605,10 @@ describe('Findings and CAP API', () => {
     expect(response.status).toBe(200);
     expect(response.body.finding.findingStatus).toBe('In Progress');
     expect(fixture.findingNode.properties['vso:findingStatus']).toBe('In Progress');
+    // An open finding must not carry a closure date: it would read as closed everywhere the
+    // property is surfaced even though the status says otherwise.
+    expect(fixture.findingNode.properties['vso:findingClosureDate']).toBeNull();
+    expect(response.body.finding.findingClosureDate).toBeNull();
   });
 
   it('rejects closure review when the finding is not pending approval', async () => {

@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed
+
+- **A rejected closure no longer leaves `vso:findingClosureDate` behind on the reopened finding.** The reject branch of `PATCH /api/findings/:findingId/closure-review` set only `vso:findingStatus: In Progress` and `vso:closureRejectionReason`, so a finding that came back for further work still carried the date on which it had supposedly been formally closed — the property is surfaced by `mapFindingNode`, the provider-history report and the checklist's prior-findings view, so an open finding read as closed. It is cleared now. The date can be present at review time from either side: the standalone `/api/follow-up/import` stamped it at declaration, and an approval whose closure a later follow-up supersedes kept it while `vso:closureRejectionReason` alone was cleared. The reject test now seeds a closure date and asserts the response and the stored node both carry `null`; verified to fail against the previous branch.
+
 ### Changed
 
 
