@@ -74,7 +74,13 @@ services:
     ports:
       - "3000:3000"
     healthcheck:
-      test: ["CMD-SHELL", "wget -q --spider http://localhost:3000 || exit 1"]
+      # 127.0.0.1, not localhost: in this image `localhost` resolves to `::1` first
+      # (busybox wget tries it before IPv4) while Vite binds only 0.0.0.0:3000, so the
+      # check failed with "connection refused" and `docker compose ps` reported the UI
+      # `unhealthy` on a perfectly working demo — which is the first thing a newcomer
+      # looks at. Verified: `wget --spider http://localhost:3000` exits 1 inside the
+      # container, `http://127.0.0.1:3000` exits 0.
+      test: ["CMD-SHELL", "wget -q --spider http://127.0.0.1:3000 || exit 1"]
       interval: 15s
       timeout: 5s
       retries: 10
@@ -101,7 +107,8 @@ services:
     ports:
       - "8080:80"
     healthcheck:
-      test: ["CMD-SHELL", "wget -q --spider http://localhost || exit 1"]
+      # Same IPv6-first `localhost` trap as frontend-dev: probe the IPv4 address nginx binds.
+      test: ["CMD-SHELL", "wget -q --spider http://127.0.0.1/ || exit 1"]
       interval: 15s
       timeout: 5s
       retries: 10
