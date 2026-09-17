@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Changed
+
+- **`.env.docker.example`'s `NODE_RED_API_KEY` now ships a placeholder value instead of empty.** Previously blank, meaning this backend's own calls to Node-RED went out unauthenticated by default even when nothing else in the deployment was misconfigured. The shipped value (`demo-only-CHANGE-BEFORE-ANY-PUBLIC-DEPLOYMENT`) is a public placeholder committed to the repo and must be rotated, in lockstep with `compliance_flow`'s `API_KEY` and `compliance_import`'s `IMPORT_API_KEY`, before any deployment reachable by anyone untrusted. No code changed — `nodeRedClient.cjs` already read this env var.
+
 ### Fixed
 
 - **The web UI no longer reports `unhealthy` on a working demo.** Both frontend healthchecks probed `http://localhost…`, and inside the container `localhost` resolves to `::1` first (busybox `wget` prefers it) while Vite binds only IPv4 — so the dev container failed the probe on every attempt (`FailingStreak` 4110 on the running stack) while the UI answered `200` on its published port, and `docker compose ps` showed `unhealthy` to anyone evaluating the demo. Both now probe `127.0.0.1` (nginx binds the IPv4 address in the prod image too). Verified live: the recreated container reports `Up (healthy)` and the UI still serves `200`; `wget --spider http://localhost:3000` exits 1 inside the container while `http://127.0.0.1:3000` exits 0. Found by the whole-stack demo guard's review of what a newcomer sees first.
