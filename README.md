@@ -205,7 +205,8 @@ Direct entry points:
 - Whole-platform demo quickstart (stack, seeds, demo identities, closure review):
   §7 of `../atrocore-docker/docs/COMPLIANCE_INTEGRATION_RUNBOOK.md`, executable as
   `atrocore-docker/scripts/demo-quickstart.sh` — it ends with the closure-review
-  recipe this app drives.
+  recipe this app drives. First time running this platform? See the root-level
+  [`GETTING_STARTED_FOR_ADOPTERS.md`](../GETTING_STARTED_FOR_ADOPTERS.md) first.
 
 ## Repository Structure
 
