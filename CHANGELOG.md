@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+
+- **`THIRD_PARTY_LICENSES.md`, backed by a `license-checker --production` scan (142 packages) plus the Dockerfile base images.** No copyleft dependencies found — 131 MIT, 7 ISC, 2 BSD-3-Clause, 1 BSD-2-Clause, 1 MIT-0.
+
 ### Changed
 
 - **`.env.docker.example`'s `NODE_RED_API_KEY` now ships a placeholder value instead of empty.** Previously blank, meaning this backend's own calls to Node-RED went out unauthenticated by default even when nothing else in the deployment was misconfigured. The shipped value (`demo-only-CHANGE-BEFORE-ANY-PUBLIC-DEPLOYMENT`) is a public placeholder committed to the repo and must be rotated, in lockstep with `compliance_flow`'s `API_KEY` and `compliance_import`'s `IMPORT_API_KEY`, before any deployment reachable by anyone untrusted. No code changed — `nodeRedClient.cjs` already read this env var.
