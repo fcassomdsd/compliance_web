@@ -74,7 +74,7 @@ These principles apply to every repository in this platform:
 ### Repository-specific tooling
 
 - Read [docs/README.md](docs/README.md) before working in a feature area, and [docs/STYLE_GUIDE.md](docs/STYLE_GUIDE.md) before touching any view. The style guide defines the base components (`BaseButton`, `StatusBadge`, `LoadingSpinner`) and design tokens that must be used instead of raw elements and hardcoded colors, spacing, or radii.
-- Authentication and session changes have their own contract and operational readiness gate. Read [docs/auth/phase-1-contract](docs/auth/phase-1-contract) and [docs/auth/phase-8-operational-readiness](docs/auth/phase-8-operational-readiness) first.
+- Authentication and session changes have their own contract and operational readiness gate. Read [docs/auth/AUTH_CHUNK1_API_SPEC.md](docs/auth/AUTH_CHUNK1_API_SPEC.md) (endpoint contract) and [docs/auth/AUTH_CHUNK8_OPERATIONAL_READINESS.md](docs/auth/AUTH_CHUNK8_OPERATIONAL_READINESS.md) (the pre-merge gate) first.
 - Lint and auto-fix:
 
 ```bash
