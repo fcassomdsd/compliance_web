@@ -1,0 +1,56 @@
+name: CI
+
+# Mirror of this repository's GitLab CI validation jobs, published on GitHub purely for public
+# visibility (GitLab remains the source of truth for development — see CONTRIBUTING.md). Only
+# the correctness-signal jobs are mirrored here; build/publish/release automation stays
+# GitLab-only.
+
+on:
+  push:
+    branches: [develop, main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - run: npm ci
+      - run: npm run lint:report
+
+  test-unit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - run: npm ci
+      - run: npm run test -- --run --coverage
+
+  test-auth:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - run: npm ci
+      - run: npm run test:auth:all
+
+  verify-endpoints:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - run: npm ci
+      # The server endpoint manifest (docs/endpoints.md) is derived from the routers and their
+      # mounts; this job fails when the two drift so the documented API surface can never
+      # silently go stale.
+      - run: node scripts/verify-endpoints.mjs
