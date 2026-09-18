@@ -105,7 +105,8 @@ WHERE revoked_at IS NULL
   AND expires_at_idle > NOW()
   AND expires_at_absolute > NOW();
 
--- Cleanup statement for the scheduler:
+-- Expired/revoked rows are swept by server/jobs/sessionCleanupJob.cjs, which runs this
+-- delete on an interval (SESSION_CLEANUP_INTERVAL_MS, default hourly):
 -- DELETE FROM auth_session
 -- WHERE revoked_at IS NOT NULL
 --    OR expires_at_idle <= NOW()

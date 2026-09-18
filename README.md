@@ -92,7 +92,7 @@ npm run server
 4. Open the app.
 
 ```text
-http://localhost:5173
+http://localhost:3000
 ```
 
 ### Docker Option

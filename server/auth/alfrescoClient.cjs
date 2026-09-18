@@ -1,5 +1,7 @@
 const axios = require('axios');
 
+const { escapeAftsValue } = require('../domain/aftsEscape.cjs');
+
 class AlfrescoClient {
   constructor({ baseUrl }) {
     this.baseUrl = baseUrl;
@@ -355,7 +357,7 @@ class AlfrescoClient {
       return null;
     }
 
-    const escapedFindingId = String(findingId).replace(/"/g, '\\"');
+    const escapedFindingId = escapeAftsValue(findingId);
     const query = `TYPE:'vso:finding' AND =vso:findingId:"${escapedFindingId}"`;
     const entries = await this.searchNodes({ ticket, query, maxItems: 2 });
     return entries[0] || null;
@@ -366,7 +368,7 @@ class AlfrescoClient {
       return null;
     }
 
-    const escapedCapId = String(capId).replace(/"/g, '\\"');
+    const escapedCapId = escapeAftsValue(capId);
     const query = `TYPE:'vso:correctiveAction' AND =vso:capId:"${escapedCapId}"`;
     const entries = await this.searchNodes({ ticket, query, maxItems: 2 });
     return entries[0] || null;

@@ -247,6 +247,22 @@ class PgSessionRepository {
       [sessionId, revokedAt]
     );
   }
+
+  // Removes rows the auth_session_active view already ignores: revoked sessions and sessions
+  // past either timeout. Without this the table grows monotonically (no row was ever deleted).
+  // Runs from the session-cleanup job; see server/jobs/sessionCleanupJob.cjs.
+  async deleteExpiredSessions(now = new Date()) {
+    const result = await this.pool.query(
+      `
+      DELETE FROM auth_session
+      WHERE revoked_at IS NOT NULL
+         OR expires_at_idle <= $1
+         OR expires_at_absolute <= $1
+      `,
+      [now]
+    );
+    return result.rowCount || 0;
+  }
 }
 
 module.exports = {

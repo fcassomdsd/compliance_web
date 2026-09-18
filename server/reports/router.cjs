@@ -1,6 +1,7 @@
 const express = require('express');
 
 const { buildError } = require('../auth/sessionAuth.cjs');
+const { escapeAftsValue } = require('../domain/aftsEscape.cjs');
 const { mapFindingNode, mapCorrectiveActionNode } = require('../domain/alfrescoMappers.cjs');
 const {
   computeStatusCounts,
@@ -11,10 +12,6 @@ const {
   computeProviderRanking,
   computeFilterOptions,
 } = require('./postureAggregator.cjs');
-
-function escapeAftsValue(value) {
-  return String(value || '').replace(/"/g, '\\"');
-}
 
 function escapeAftsDate(value) {
   // Only ISO-ish date strings are ever interpolated unescaped into a

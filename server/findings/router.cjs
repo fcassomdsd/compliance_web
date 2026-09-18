@@ -3,6 +3,7 @@ const multer = require('multer');
 const crypto = require('crypto');
 
 const { buildError } = require('../auth/sessionAuth.cjs');
+const { escapeAftsValue } = require('../domain/aftsEscape.cjs');
 const {
   mapFindingNode,
   mapFollowUpReportNode,
@@ -112,10 +113,6 @@ async function resolveEvidenceContainerNodeId({ alfrescoClient, ticket, startNod
   }
 
   return null;
-}
-
-function escapeAftsValue(value) {
-  return String(value || '').replace(/"/g, '\\"');
 }
 
 function extractUpstreamErrorDetail(error) {

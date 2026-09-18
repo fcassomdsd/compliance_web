@@ -4,6 +4,19 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed
+
+- **`auth_session` rows are now deleted once they are dead.** The table grew monotonically: the migration that creates it shipped the cleanup `DELETE` only as a comment and nothing implemented a sweep, so every login added a row forever (the `auth_session_active` view hid them but the table and its indexes kept growing). `PgSessionRepository.deleteExpiredSessions` now performs that delete — revoked, idle-expired or absolute-expired rows — and a new `sessionCleanupJob` runs it on an interval (`SESSION_CLEANUP_INTERVAL_MS`, default hourly), mirroring the existing notification-send job. 3 new unit tests cover the sweep.
+- **AFTS/Lucene value escaping is centralized and now escapes backslashes.** The one-liner `replace(/"/g, '\\"')` was copied into the findings, caps and reports routers and twice into the Alfresco client, and escaped only the double quote — a value ending in `\` could escape the closing quote and malform the predicate. It now lives in `server/domain/aftsEscape.cjs`, escapes backslash before quote, and is imported by all four call sites. 4 new unit tests pin the behaviour.
+
+### Documentation
+
+- **README's development URL corrected to `http://localhost:3000`** (`vite.config.js` serves 3000, not 5173).
+- **`CONTRIBUTING.md` and `.gitlab-ci.yml` no longer link to the removed `docs/auth/phase-1-contract` / `phase-8-operational-readiness` directories**; they point at `docs/auth/AUTH_CHUNK1_API_SPEC.md` and `docs/auth/AUTH_CHUNK8_OPERATIONAL_READINESS.md`.
+- The `auth_session` cleanup statement in `migrations/0001_initial_schema.sql` is now documented as implemented by the session-cleanup job rather than as a scheduler TODO.
+
+## [2026-09-18]
+
 ### Added
 
 - **`THIRD_PARTY_LICENSES.md`, backed by a `license-checker --production` scan (142 packages) plus the Dockerfile base images.** No copyleft dependencies found — 131 MIT, 7 ISC, 2 BSD-3-Clause, 1 BSD-2-Clause, 1 MIT-0.

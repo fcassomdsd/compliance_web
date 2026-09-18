@@ -11,6 +11,7 @@ const { PgNotificationRepository } = require('./notifications/pgNotificationRepo
 const { createEmailTransport } = require('./notifications/emailTransport.cjs');
 const { createNotificationService } = require('./notifications/notificationService.cjs');
 const { startNotificationSendJob } = require('./jobs/notificationSendJob.cjs');
+const { startSessionCleanupJob } = require('./jobs/sessionCleanupJob.cjs');
 const { NodeRedClient } = require('./atrocore/nodeRedClient.cjs');
 const { startSiteVisitSchedulingJob } = require('./jobs/siteVisitSchedulingJob.cjs');
 
@@ -104,6 +105,12 @@ async function start() {
     notificationService,
     logger: auditLogger,
     runHourLocal: Number(process.env.SITE_VISIT_SCHEDULING_JOB_HOUR || 2),
+  });
+
+  startSessionCleanupJob({
+    repository: sessionRepository,
+    logger: auditLogger,
+    intervalMs: Number(process.env.SESSION_CLEANUP_INTERVAL_MS || 60 * 60 * 1000),
   });
 }
 
