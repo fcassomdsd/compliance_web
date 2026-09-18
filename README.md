@@ -1,5 +1,6 @@
 # Compliance Web
 
+[![CI](https://github.com/fcassomdsd/compliance_web/actions/workflows/ci.yml/badge.svg)](https://github.com/fcassomdsd/compliance_web/actions/workflows/ci.yml)
 ![Status](https://img.shields.io/badge/status-active%20development-brightgreen)
 ![Stack](https://img.shields.io/badge/stack-vue%20%7C%20express%20%7C%20postgresql-blue)
 ![Tests](https://img.shields.io/badge/tests-vitest-informational)
