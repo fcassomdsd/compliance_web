@@ -56,6 +56,44 @@ function computeNextActivityCode({ locationIcaoCode, activityTypeCode, existingI
   return buildActivityCode({ icaoCode: locationIcaoCode, activityTypeCode, sequence: maxSequence + 1 });
 }
 
+// Resolves a cadence's LocationService, memoised for the duration of one sync
+// run. A cadence hangs off the LocationService -- the authority-side registry of
+// which provider offers which specialties at which location -- so this one lookup
+// yields both the location the visit happens at and the provider being inspected.
+// The cadence carries no location of its own; it is derived here.
+function buildLocationServiceResolver({ nodeRedClient, ticket }) {
+  const cache = new Map();
+
+  return async function resolveLocationService(cadence) {
+    const locationServiceId = cadence?.locationServiceId;
+    if (!locationServiceId) return null;
+    if (cache.has(locationServiceId)) return cache.get(locationServiceId);
+
+    let resolved = null;
+    try {
+      const result = await nodeRedClient.queryEntity({
+        ticket,
+        entity: 'LocationService',
+        data: { id: locationServiceId },
+      });
+      const locationService = (result.list || [])[0];
+      if (locationService?.locationId && locationService?.serviceProviderId) {
+        resolved = {
+          locationId: locationService.locationId,
+          serviceProviderId: locationService.serviceProviderId,
+          serviceProviderName: locationService.serviceProviderName,
+        };
+      }
+    } catch {
+      // Leave it unresolved; the caller skips this cadence with a warning rather
+      // than aborting the whole sweep.
+    }
+
+    cache.set(locationServiceId, resolved);
+    return resolved;
+  };
+}
+
 // Resolves a cadence's activity type letter, memoised for the duration of one
 // sync run. Falls back to "I" (Inspeccion) when the cadence names no type.
 function buildActivityTypeResolver({ nodeRedClient, ticket }) {
@@ -117,14 +155,24 @@ async function runSiteVisitSchedulingSync({
     );
 
     const createdSummaries = [];
+    const resolveLocationService = buildLocationServiceResolver({ nodeRedClient, ticket });
     const resolveActivityTypeCode = buildActivityTypeResolver({ nodeRedClient, ticket });
     const codeYear = Number.parseInt(today.slice(0, 4), 10);
 
     for (const cadence of dueCadences) {
+      const locationService = await resolveLocationService(cadence);
+      if (!locationService) {
+        logger.warn('Skipping due cadence: location service missing, or has no location/provider', {
+          cadenceId: cadence.id,
+          locationServiceId: cadence.locationServiceId,
+        });
+        continue;
+      }
+
       const locationResult = await nodeRedClient.queryEntity({
         ticket,
         entity: 'Location',
-        data: { id: cadence.locationId },
+        data: { id: locationService.locationId },
       });
       const location = (locationResult.list || [])[0];
       const locationIcaoCode = location?.icaoCode?.trim().toUpperCase();
@@ -136,7 +184,7 @@ async function runSiteVisitSchedulingSync({
       const existingSiteVisitsResult = await nodeRedClient.queryEntity({
         ticket,
         entity: 'SiteVisit',
-        data: { deleted: false, locationId: cadence.locationId },
+        data: { deleted: false, locationId: locationService.locationId },
       });
       const code = computeNextSiteVisitCode({
         locationIcaoCode,
@@ -148,10 +196,32 @@ async function runSiteVisitSchedulingSync({
         ticket,
         entity: 'SiteVisit',
         data: {
-          locationId: cadence.locationId,
+          locationId: locationService.locationId,
           startDate: today,
           code,
           status: 'Created',
+        },
+      });
+
+      // The provider's participation in *this* visit. InspectedProvider is the
+      // (SiteVisit x ServiceProvider) junction, and it is the only path an
+      // Inspection has to its SiteVisit — Inspection declares no siteVisit field
+      // at all, so the visit is reached via Inspection -> inspectedProvider ->
+      // siteVisit. A fresh row per visit is therefore mandatory: reusing one from
+      // an earlier visit would file this Inspection against that older visit and
+      // leave the visit just created with nothing attached to it.
+      //
+      // `name` is required on InspectedProvider; the fallback mirrors
+      // src/stores/inspectedProviderStore.js so manually-added and
+      // auto-scheduled providers are named identically.
+      const inspectedProvider = await nodeRedClient.addEntity({
+        ticket,
+        entity: 'InspectedProvider',
+        data: {
+          siteVisitId: siteVisit.id,
+          serviceProviderId: locationService.serviceProviderId,
+          serviceProviderName: locationService.serviceProviderName,
+          name: locationService.serviceProviderName || locationService.serviceProviderId,
         },
       });
 
@@ -170,12 +240,13 @@ async function runSiteVisitSchedulingSync({
         existingInspections: existingInspectionsResult.list || [],
       });
 
+      // No siteVisitId here: Inspection has no such field, so passing one was
+      // silently discarded. The link runs through inspectedProvider above.
       await nodeRedClient.addEntity({
         ticket,
         entity: 'Inspection',
         data: {
-          siteVisitId: siteVisit.id,
-          inspectedProviderId: cadence.inspectedProviderId,
+          inspectedProviderId: inspectedProvider.id,
           code: activityCode,
           status: 'Created',
           activityTypeId: cadence.activityTypeId || null,
@@ -194,9 +265,9 @@ async function runSiteVisitSchedulingSync({
 
       createdSummaries.push({
         code,
-        provider: cadence.inspectedProviderName || cadence.inspectedProviderId,
+        provider: locationService.serviceProviderName || locationService.serviceProviderId,
         specialty: cadence.specialtyName || cadence.specialtyId,
-        location: cadence.locationName || cadence.locationId,
+        location: location.name || locationIcaoCode,
       });
     }
 

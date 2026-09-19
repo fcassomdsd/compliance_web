@@ -465,6 +465,9 @@
     "selectSpecialty": "Seleccione una especialidad",
     "location": "Ubicación",
     "selectLocation": "Seleccione una ubicación",
+    "locationService": "Servicio (proveedor en ubicación)",
+    "selectLocationService": "Seleccione un servicio",
+    "noSpecialtiesForService": "Este servicio aún no cubre especialidades. Agréguelas primero al servicio de la ubicación.",
     "intervalMonths": "Intervalo (meses)",
     "activityType": "Tipo de Actividad",
     "selectActivityType": "Seleccione un tipo de actividad",
@@ -476,7 +479,8 @@
       "created": "Cadencia creada.",
       "deleted": "Cadencia eliminada.",
       "saveError": "No se pudo guardar la cadencia. Intente nuevamente.",
-      "deleteError": "No se pudo eliminar la cadencia. Intente nuevamente."
+      "deleteError": "No se pudo eliminar la cadencia. Intente nuevamente.",
+      "duplicate": "Ya existe una cadencia para este servicio, especialidad y tipo de actividad (\"{name}\")."
     }
   },
   "inspectionReport": {
