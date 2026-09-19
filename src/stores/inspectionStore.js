@@ -28,6 +28,22 @@ async function resolveActivityTypeCode(data) {
   return DEFAULT_ACTIVITY_TYPE_CODE;
 }
 
+// Inspection has no siteVisit link, so an existing inspection's visit is only
+// reachable through its InspectedProvider. Reading `inspection.siteVisitId`
+// directly always yielded undefined, which made re-minting the code on an
+// activity-type change fail with "Could not find site visit".
+async function resolveSiteVisitId(inspectedProviderId) {
+  if (!inspectedProviderId) {
+    throw new Error('Could not find site visit for activity code generation');
+  }
+  const { data } = await apiEntityCRUD('query', 'InspectedProvider', null, { id: inspectedProviderId });
+  const siteVisitId = data?.list?.[0]?.siteVisitId;
+  if (!siteVisitId) {
+    throw new Error('Could not find site visit for activity code generation');
+  }
+  return siteVisitId;
+}
+
 // The Activity code is independent of its parent SiteVisit's code: it is
 // scoped by the visit location's ICAO code and the activity type letter, with
 // a continuous 4-digit sequence that does not reset per year.
@@ -75,7 +91,8 @@ export const useInspectionStore = defineStore('inspection', {
       try {
         const activityTypeCode = await resolveActivityTypeCode(data);
         const addData = {
-          siteVisitId,
+          // No siteVisitId: Inspection declares no such field, so AtroCore discards
+          // it. The visit is reached through inspectedProvider.siteVisit.
           inspectedProviderId,
           code: await generateActivityCode(siteVisitId, activityTypeCode),
           status: INSPECTION_STATUS.CREATED,
@@ -137,7 +154,8 @@ export const useInspectionStore = defineStore('inspection', {
 
           if (typeChanged && current.status === INSPECTION_STATUS.CREATED) {
             const activityTypeCode = await resolveActivityTypeCode(updateData);
-            updateData.code = await generateActivityCode(current.siteVisitId, activityTypeCode, updateId);
+            const siteVisitId = await resolveSiteVisitId(current.inspectedProviderId);
+            updateData.code = await generateActivityCode(siteVisitId, activityTypeCode, updateId);
           }
         }
 
@@ -173,7 +191,6 @@ export const useInspectionStore = defineStore('inspection', {
         const list = Array.isArray(queryResults.list) ? queryResults.list : [];
         this.inspections[inspectedProviderId] = list.map((entity) => ({
           id: entity.id,
-          siteVisitId: entity.siteVisitId,
           inspectedProviderId: entity.inspectedProviderId,
           status: entity.status || INSPECTION_STATUS.CREATED,
           activityTypeId: entity.activityTypeId || '',

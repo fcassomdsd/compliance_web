@@ -18,8 +18,13 @@ describe('Inspection Store (per-provider)', () => {
 
   const mockActivityType = { id: 'AT1', code: 'A', name: 'Auditoria' };
 
+  const mockInspectedProvider = { id: 'IP1', siteVisitId: 'SV1', serviceProviderId: 'SP1', name: 'Provider 1' };
+
+  // Deliberately no siteVisitId: Inspection declares no such field, and a mock that
+  // supplied one is what let the broken `current.siteVisitId` lookup pass in tests
+  // while always being undefined against the real API.
   const mockInspection = {
-    id: 'INSP1', siteVisitId: 'SV1', inspectedProviderId: 'P1', code: 'AV-MDSD-A-0003',
+    id: 'INSP1', inspectedProviderId: 'IP1', code: 'AV-MDSD-A-0003',
     status: 'Created',
     activityTypeId: 'AT1', activityTypeCode: 'A', activityTypeName: 'Auditoria',
     objective: 'Test objective', scope: 'Test scope',
@@ -37,6 +42,9 @@ describe('Inspection Store (per-provider)', () => {
       }
       if (method === 'query' && entity === 'SiteVisit') {
         return Promise.resolve({ data: { list: [mockSiteVisit] }, status: 200 });
+      }
+      if (method === 'query' && entity === 'InspectedProvider') {
+        return Promise.resolve({ data: { list: [mockInspectedProvider] }, status: 200 });
       }
       if (method === 'query' && entity === 'Location') {
         return Promise.resolve({ data: { list: [mockLocation] }, status: 200 });
@@ -71,8 +79,13 @@ describe('Inspection Store (per-provider)', () => {
       });
       expect(result.id).toBe('INSP1');
       expect(apiEntityCRUD).toHaveBeenCalledWith('add', 'Inspection', null, expect.objectContaining({
-        siteVisitId: 'SV1', inspectedProviderId: 'P1', activityTypeId: 'AT1',
+        inspectedProviderId: 'P1', activityTypeId: 'AT1',
       }));
+      // siteVisitId must not be sent: Inspection has no such field and AtroCore
+      // discards it silently, so sending it only looks like a linkage.
+      const addCall = vi.mocked(apiEntityCRUD).mock.calls
+        .find(([method, entity]) => method === 'add' && entity === 'Inspection');
+      expect(addCall[3]).not.toHaveProperty('siteVisitId');
     });
 
     it('generates an Activity code independent of the parent site visit code', async () => {
@@ -136,10 +149,29 @@ describe('Inspection Store (per-provider)', () => {
       expect(updateCall[3].code).toBe('AV-MDSD-A-0001');
     });
 
+    // Regression: the store read `current.siteVisitId` off the Inspection, a field
+    // the entity does not declare, so this threw "Could not find site visit for
+    // activity code generation" for every real activity-type change.
+    it('resolves the site visit through the junction row, not a siteVisitId on the Inspection', async () => {
+      await store.updateInspection({ id: 'INSP1', activityTypeId: 'AT-OTHER' }, 'IP1');
+
+      const queried = vi.mocked(apiEntityCRUD).mock.calls
+        .filter(([method]) => method === 'query')
+        .map(([, entity]) => entity);
+      expect(queried).toContain('InspectedProvider');
+
+      const updateCall = vi.mocked(apiEntityCRUD).mock.calls
+        .find(([method, entity]) => method === 'update' && entity === 'Inspection');
+      expect(updateCall[3].code).toBe('AV-MDSD-A-0001');
+    });
+
     it('never re-mints the Activity code once the inspection has left Created', async () => {
       vi.mocked(apiEntityCRUD).mockImplementation((method, entity) => {
         if (method === 'query' && entity === 'Inspection') {
           return Promise.resolve({ data: { list: [{ ...mockInspection, status: 'Planned' }] }, status: 200 });
+        }
+        if (method === 'query' && entity === 'InspectedProvider') {
+          return Promise.resolve({ data: { list: [mockInspectedProvider] }, status: 200 });
         }
         if (method === 'query' && entity === 'SiteVisit') {
           return Promise.resolve({ data: { list: [mockSiteVisit] }, status: 200 });
