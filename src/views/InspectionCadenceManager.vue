@@ -20,25 +20,21 @@
         </div>
 
         <div class="form-field">
-          <label for="cadenceProvider">{{ t('inspectionCadence.provider') }}</label>
-          <select id="cadenceProvider" v-model="form.inspectedProviderId">
-            <option value="">{{ t('inspectionPlan.selectProvider') }}</option>
-            <option v-for="provider in cadenceStore.providerOptions" :key="provider.id" :value="provider.id">{{ provider.name }}</option>
+          <label for="cadenceLocationService">{{ t('inspectionCadence.locationService') }}</label>
+          <select id="cadenceLocationService" v-model="form.locationServiceId" @change="onLocationServiceChange">
+            <option value="">{{ t('inspectionCadence.selectLocationService') }}</option>
+            <option v-for="service in cadenceStore.locationServiceOptions" :key="service.id" :value="service.id">{{ locationServiceLabel(service) }}</option>
           </select>
         </div>
         <div class="form-field">
           <label for="cadenceSpecialty">{{ t('assignInspectors.specialty') }}</label>
-          <select id="cadenceSpecialty" v-model="form.specialtyId">
+          <select id="cadenceSpecialty" v-model="form.specialtyId" :disabled="!form.locationServiceId">
             <option value="">{{ t('inspectionCadence.selectSpecialty') }}</option>
-            <option v-for="specialty in cadenceStore.specialtyOptions" :key="specialty.id" :value="specialty.id">{{ specialty.name }}</option>
+            <option v-for="specialty in availableSpecialties" :key="specialty.id" :value="specialty.id">{{ specialty.name }}</option>
           </select>
-        </div>
-        <div class="form-field">
-          <label for="cadenceLocation">{{ t('inspectionCadence.location') }}</label>
-          <select id="cadenceLocation" v-model="form.locationId">
-            <option value="">{{ t('inspectionCadence.selectLocation') }}</option>
-            <option v-for="location in locationStore.locations" :key="location.id" :value="location.id">{{ location.name }}</option>
-          </select>
+          <small v-if="form.locationServiceId && availableSpecialties.length === 0">
+            {{ t('inspectionCadence.noSpecialtiesForService') }}
+          </small>
         </div>
 
         <div class="form-field">
@@ -76,9 +72,8 @@
       <thead>
         <tr>
           <th>{{ t('common.name') }}</th>
-          <th>{{ t('inspectionCadence.provider') }}</th>
+          <th>{{ t('inspectionCadence.locationService') }}</th>
           <th>{{ t('assignInspectors.specialty') }}</th>
-          <th>{{ t('inspectionCadence.location') }}</th>
           <th>{{ t('inspectionCadence.activityType') }}</th>
           <th>{{ t('inspectionCadence.intervalMonths') }}</th>
           <th>{{ t('inspectionCadence.nextDueDate') }}</th>
@@ -89,9 +84,8 @@
       <tbody>
         <tr v-for="cadence in cadenceStore.cadences" :key="cadence.id">
           <td>{{ cadence.name }}</td>
-          <td>{{ cadence.inspectedProviderName || cadence.inspectedProviderId }}</td>
+          <td>{{ cadence.locationServiceName || cadence.locationServiceId }}</td>
           <td>{{ cadence.specialtyName || cadence.specialtyId }}</td>
-          <td>{{ cadence.locationName || cadence.locationId }}</td>
           <td>{{ activityTypeLabel(cadence) }}</td>
           <td>{{ cadence.intervalMonths }}</td>
           <td>{{ formatDate(cadence.nextDueDate) || '-' }}</td>
@@ -128,6 +122,27 @@ const message = ref('');
 const errorMessage = ref('');
 const appState = ref('viewing');
 
+// The specialties the chosen location service actually covers. A cadence naming a
+// specialty the service does not provide would describe an inspection that cannot
+// happen, so the picker is narrowed rather than validated after the fact.
+const availableSpecialties = computed(() =>
+  cadenceStore.specialtiesForLocationService(form.locationServiceId),
+);
+
+function locationServiceLabel(service) {
+  const location = locationStore.locations.find((l) => l.id === service.locationId);
+  const parts = [service.serviceProviderName, service.name].filter(Boolean);
+  const label = parts.join(' — ') || service.id;
+  return location?.name ? `${label} (${location.name})` : label;
+}
+
+// Changing the service can orphan the selected specialty.
+function onLocationServiceChange() {
+  if (form.specialtyId && !availableSpecialties.value.some((s) => s.id === form.specialtyId)) {
+    form.specialtyId = '';
+  }
+}
+
 function activityTypeLabel(cadence) {
   if (cadence.activityTypeName) return cadence.activityTypeName;
   const activityType = activityTypeStore.getActivityTypeById(cadence.activityTypeId);
@@ -139,9 +154,8 @@ function emptyForm() {
     id: null,
     name: '',
     description: '',
-    inspectedProviderId: '',
+    locationServiceId: '',
     specialtyId: '',
-    locationId: '',
     intervalMonths: 12,
     activityTypeId: '',
     lastScheduledDate: '',
@@ -155,9 +169,8 @@ const form = reactive(emptyForm());
 const isFormValid = computed(() => {
   return Boolean(
     form.name &&
-    form.inspectedProviderId &&
+    form.locationServiceId &&
     form.specialtyId &&
-    form.locationId &&
     form.activityTypeId &&
     form.intervalMonths &&
     form.nextDueDate
@@ -174,9 +187,8 @@ function editCadence(cadence) {
     id: cadence.id,
     name: cadence.name || '',
     description: cadence.description || '',
-    inspectedProviderId: cadence.inspectedProviderId || '',
+    locationServiceId: cadence.locationServiceId || '',
     specialtyId: cadence.specialtyId || '',
-    locationId: cadence.locationId || '',
     intervalMonths: cadence.intervalMonths || 12,
     activityTypeId: cadence.activityTypeId || '',
     lastScheduledDate: cadence.lastScheduledDate || '',
@@ -195,9 +207,8 @@ function buildPayload() {
   return {
     name: form.name,
     description: form.description || null,
-    inspectedProviderId: form.inspectedProviderId,
+    locationServiceId: form.locationServiceId,
     specialtyId: form.specialtyId,
-    locationId: form.locationId,
     intervalMonths: form.intervalMonths,
     activityTypeId: form.activityTypeId,
     lastScheduledDate: form.lastScheduledDate || null,
@@ -209,6 +220,15 @@ function buildPayload() {
 async function saveCadence() {
   message.value = '';
   errorMessage.value = '';
+
+  // A unique index on (locationService, specialty, activityType) backs this; the
+  // check just makes the collision readable instead of surfacing as a 500.
+  const duplicate = cadenceStore.findDuplicate(form, form.id);
+  if (duplicate) {
+    errorMessage.value = t('inspectionCadence.toast.duplicate', { name: duplicate.name });
+    return;
+  }
+
   try {
     if (form.id) {
       await cadenceStore.updateCadence(form.id, buildPayload());

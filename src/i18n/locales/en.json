@@ -465,6 +465,9 @@
     "selectSpecialty": "Select a specialty",
     "location": "Location",
     "selectLocation": "Select a location",
+    "locationService": "Service (provider at location)",
+    "selectLocationService": "Select a service",
+    "noSpecialtiesForService": "This service covers no specialties yet. Add them to the location service first.",
     "intervalMonths": "Interval (months)",
     "activityType": "Activity Type",
     "selectActivityType": "Select an activity type",
@@ -476,7 +479,8 @@
       "created": "Cadence created.",
       "deleted": "Cadence deleted.",
       "saveError": "Could not save cadence. Please try again.",
-      "deleteError": "Could not delete cadence. Please try again."
+      "deleteError": "Could not delete cadence. Please try again.",
+      "duplicate": "A cadence for this service, specialty and activity type already exists (\"{name}\")."
     }
   },
   "inspectionReport": {
