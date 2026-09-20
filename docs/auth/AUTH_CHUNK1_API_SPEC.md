@@ -53,6 +53,7 @@ Success: 200
     "email": "string (optional)"
   },
   "roles": ["inspector", "planner"],
+  "specialtyScope": ["ATS", "NAV"],
   "locale": "en",
   "session": {
     "issuedAt": "2026-03-31T12:00:00Z",
@@ -87,6 +88,7 @@ Success: 200
     "email": "string (optional)"
   },
   "roles": ["inspector"],
+  "specialtyScope": ["ATS", "NAV"],
   "locale": "en",
   "session": {
     "issuedAt": "2026-03-31T12:00:00Z",
@@ -105,6 +107,10 @@ Behavior notes:
 
 1. If role refresh interval has elapsed, backend re-fetches groups and remaps roles.
 2. If role refresh fails due to provider outage, backend may use cached roles for a short grace period (default 5 minutes) before forcing re-auth.
+3. `specialtyScope` is the set of specialty codes the session may see and act on, taken from the signed-in user's `Inspector` record (`externalUserID` = the Alfresco username) through Node-RED's `GET /inspector/:externalId`, which returns `specialties: [{ id, code, name }]`. The Inspector record is the single source of truth; nothing is duplicated onto the assignment groups, which would need keeping in sync.
+   - `null` means **unscoped** (full access): an `admin`, a user with no `Inspector` record, or an inspector with no specialties linked. Unmatched users must never be locked out by this feature.
+   - It is resolved at login and refreshed with the role cache; on a refresh failure the previously cached scope is kept rather than widened. On a login-time failure the session starts unscoped.
+   - It is stored in `auth_session.metadata_json` alongside `groups`, so no schema change was needed.
 
 ### 4.3 POST /api/auth/logout
 

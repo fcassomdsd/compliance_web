@@ -45,6 +45,19 @@ class NodeRedClient {
     });
     return response.data;
   }
+
+  // The auth flow's /inspector/:externalId endpoint resolves an Inspector by
+  // `externalUserID` (the Alfresco username) and returns
+  // { id, name, specialties: [{ id, code, name }] } — the specialty scope the
+  // session uses. The Inspector record is the single source of truth for it;
+  // see compliance_web/docs/auth/AUTH_CHUNK1_API_SPEC.md.
+  async getInspectorByExternalId({ ticket, externalId }) {
+    const response = await axios.get(
+      `${this.baseUrl}/inspector/${encodeURIComponent(externalId)}`,
+      { headers: this._headers(ticket) },
+    );
+    return response.data;
+  }
 }
 
 module.exports = {

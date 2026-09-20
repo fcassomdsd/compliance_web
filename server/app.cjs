@@ -34,6 +34,7 @@ function createApp({ config, sessionRepository, alfrescoClient, loginRateLimiter
       sessionRepository,
       alfrescoClient,
       loginRateLimiter,
+      nodeRedClient,
       logger,
       now,
     })
