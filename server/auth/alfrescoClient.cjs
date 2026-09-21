@@ -419,7 +419,7 @@ class AlfrescoClient {
     return response?.data || null;
   }
 
-  async generateCeEvidenceReport({ ticket, ce, year, populationQueries }) {
+  async generateCeEvidenceReport({ ticket, ce, year, populationQueries, specialtyCodes }) {
     if (!ticket || !ce) {
       throw new Error('ticket and ce are required');
     }
@@ -429,6 +429,11 @@ class AlfrescoClient {
       url: `${this.baseUrl}/alfresco/s/api/usoap/ce-evidence-report`,
       params: {
         alf_ticket: ticket,
+        // The webscript reads this from the query string and splits on commas,
+        // so a scoped session only ever samples evidence it may see.
+        ...(Array.isArray(specialtyCodes) && specialtyCodes.length
+          ? { specialtyCode: specialtyCodes.join(',') }
+          : {}),
       },
       data: {
         ce,

@@ -3,6 +3,14 @@ const multer = require('multer');
 const crypto = require('crypto');
 
 const { buildError } = require('../auth/sessionAuth.cjs');
+const {
+  filterRowsInScope,
+  requestedCodeAllowed,
+  requireDocumentScope,
+  scopeFrom,
+  documentSpecialtyCode,
+  forbidden,
+} = require('../auth/scopeEnforcement.cjs');
 const { escapeAftsValue } = require('../domain/aftsEscape.cjs');
 const {
   mapCorrectiveActionNode,
@@ -647,6 +655,7 @@ function createCapsRouter({ auth, alfrescoClient, capDraftRepository, notificati
     '/findings/:findingId/caps',
     auth.authenticate,
     auth.authorize(['cap_entry', 'admin']),
+    requireDocumentScope('findingId'),
     auth.requireCsrf(),
     async (req, res) => {
       try {
@@ -752,6 +761,10 @@ function createCapsRouter({ auth, alfrescoClient, capDraftRepository, notificati
           return res.status(400).json(buildError('CAP_DRAFT_BAD_REQUEST', 'findingId is required'));
         }
 
+        if (!requestedCodeAllowed(scopeFrom(req), documentSpecialtyCode(findingId))) {
+          return forbidden(res, `${findingId} is outside this session's scope`);
+        }
+
         const shapeError = validateCapDraftPayloadShape(payload);
         if (shapeError) {
           return res.status(400).json(buildError('CAP_DRAFT_BAD_REQUEST', shapeError));
@@ -777,7 +790,9 @@ function createCapsRouter({ auth, alfrescoClient, capDraftRepository, notificati
     async (req, res) => {
       try {
         const drafts = await capDraftRepository.listForUser(req.auth.username);
-        return res.status(200).json({ list: drafts });
+        return res.status(200).json({
+          list: filterRowsInScope(scopeFrom(req), drafts, (draft) => documentSpecialtyCode(draft.findingId)),
+        });
       } catch (error) {
         return res.status(502).json(buildError('CAP_DRAFT_QUERY_FAILED', error.message));
       }
@@ -794,6 +809,10 @@ function createCapsRouter({ auth, alfrescoClient, capDraftRepository, notificati
         if (!draft) {
           return res.status(404).json(buildError('CAP_DRAFT_NOT_FOUND', 'Draft not found'));
         }
+        if (!requestedCodeAllowed(scopeFrom(req), documentSpecialtyCode(draft.findingId))) {
+          return forbidden(res, `${draft.findingId} is outside this session's scope`);
+        }
+
         return res.status(200).json({ draft });
       } catch (error) {
         return res.status(502).json(buildError('CAP_DRAFT_DETAIL_FAILED', error.message));
@@ -814,6 +833,14 @@ function createCapsRouter({ auth, alfrescoClient, capDraftRepository, notificati
         const shapeError = validateCapDraftPayloadShape(payload);
         if (shapeError) {
           return res.status(400).json(buildError('CAP_DRAFT_BAD_REQUEST', shapeError));
+        }
+
+        const existing = await capDraftRepository.getById(req.params.draftId, { ownerUsername: req.auth.username });
+        if (!existing) {
+          return res.status(404).json(buildError('CAP_DRAFT_NOT_FOUND', 'Draft not found'));
+        }
+        if (!requestedCodeAllowed(scopeFrom(req), documentSpecialtyCode(existing.findingId))) {
+          return forbidden(res, `${existing.findingId} is outside this session's scope`);
         }
 
         const draft = await capDraftRepository.update(req.params.draftId, {
@@ -838,10 +865,19 @@ function createCapsRouter({ auth, alfrescoClient, capDraftRepository, notificati
     auth.requireCsrf(),
     async (req, res) => {
       try {
+        const existing = await capDraftRepository.getById(req.params.draftId, { ownerUsername: req.auth.username });
+        if (!existing) {
+          return res.status(404).json(buildError('CAP_DRAFT_NOT_FOUND', 'Draft not found'));
+        }
+        if (!requestedCodeAllowed(scopeFrom(req), documentSpecialtyCode(existing.findingId))) {
+          return forbidden(res, `${existing.findingId} is outside this session's scope`);
+        }
+
         const deleted = await capDraftRepository.delete(req.params.draftId, { ownerUsername: req.auth.username });
         if (!deleted) {
           return res.status(404).json(buildError('CAP_DRAFT_NOT_FOUND', 'Draft not found'));
         }
+
         return res.status(204).send();
       } catch (error) {
         return res.status(502).json(buildError('CAP_DRAFT_DELETE_FAILED', error.message));
@@ -859,6 +895,10 @@ function createCapsRouter({ auth, alfrescoClient, capDraftRepository, notificati
         const draft = await capDraftRepository.getById(req.params.draftId, { ownerUsername: req.auth.username });
         if (!draft) {
           return res.status(404).json(buildError('CAP_DRAFT_NOT_FOUND', 'Draft not found'));
+        }
+
+        if (!requestedCodeAllowed(scopeFrom(req), documentSpecialtyCode(draft.findingId))) {
+          return forbidden(res, `${draft.findingId} is outside this session's scope`);
         }
 
         const {
@@ -957,6 +997,10 @@ function createCapsRouter({ auth, alfrescoClient, capDraftRepository, notificati
     auth.authorize(['inspector', 'planner', 'admin', 'cap_entry']),
     async (req, res) => {
       try {
+        if (!requestedCodeAllowed(scopeFrom(req), req.query?.specialtyCode)) {
+          return forbidden(res, `specialtyCode=${req.query?.specialtyCode} is outside this session's scope`);
+        }
+
         const capNodes = await alfrescoClient.searchNodes({
           ticket: req.auth.ticket,
           query: buildCapQuery({
@@ -971,7 +1015,7 @@ function createCapsRouter({ auth, alfrescoClient, capDraftRepository, notificati
         });
 
         return res.status(200).json({
-          list: capNodes.map(mapCorrectiveActionNode),
+          list: filterRowsInScope(scopeFrom(req), capNodes.map(mapCorrectiveActionNode)),
         });
       } catch (error) {
         return res.status(502).json(buildError('CAP_QUERY_FAILED', error.message));
@@ -983,6 +1027,7 @@ function createCapsRouter({ auth, alfrescoClient, capDraftRepository, notificati
     '/caps/:capId',
     auth.authenticate,
     auth.authorize(['inspector', 'planner', 'admin', 'cap_entry']),
+    requireDocumentScope('capId'),
     async (req, res) => {
       try {
         const capNode = await alfrescoClient.searchCapByBusinessId({
@@ -1033,6 +1078,7 @@ function createCapsRouter({ auth, alfrescoClient, capDraftRepository, notificati
     '/caps/:capId',
     auth.authenticate,
     auth.authorize(['cap_entry', 'admin']),
+    requireDocumentScope('capId'),
     auth.requireCsrf(),
     async (req, res) => {
       try {
@@ -1286,6 +1332,7 @@ function createCapsRouter({ auth, alfrescoClient, capDraftRepository, notificati
     '/caps/:capId/evaluation',
     auth.authenticate,
     auth.authorize(['inspector', 'admin']),
+    requireDocumentScope('capId'),
     auth.requireCsrf(),
     async (req, res) => {
       try {
@@ -1414,6 +1461,7 @@ function createCapsRouter({ auth, alfrescoClient, capDraftRepository, notificati
     '/caps/:capId/review',
     auth.authenticate,
     auth.authorize(['inspector', 'admin']),
+    requireDocumentScope('capId'),
     auth.requireCsrf(),
     async (req, res) => {
       try {
@@ -1533,6 +1581,7 @@ function createCapsRouter({ auth, alfrescoClient, capDraftRepository, notificati
     '/caps/:capId/actions/:sequenceNumber',
     auth.authenticate,
     auth.authorize(['cap_entry', 'admin']),
+    requireDocumentScope('capId'),
     auth.requireCsrf(),
     async (req, res) => {
       try {
@@ -1601,6 +1650,7 @@ function createCapsRouter({ auth, alfrescoClient, capDraftRepository, notificati
     '/caps/:capId/rca/evidence',
     auth.authenticate,
     auth.authorize(['cap_entry', 'admin']),
+    requireDocumentScope('capId'),
     auth.requireCsrf(),
     singleEvidenceUpload('file'),
     async (req, res) => {
@@ -1630,6 +1680,7 @@ function createCapsRouter({ auth, alfrescoClient, capDraftRepository, notificati
     '/caps/:capId/risk-assessment/evidence',
     auth.authenticate,
     auth.authorize(['cap_entry', 'admin']),
+    requireDocumentScope('capId'),
     auth.requireCsrf(),
     singleEvidenceUpload('file'),
     async (req, res) => {
@@ -1659,6 +1710,7 @@ function createCapsRouter({ auth, alfrescoClient, capDraftRepository, notificati
     '/caps/:capId/containment/evidence',
     auth.authenticate,
     auth.authorize(['cap_entry', 'admin']),
+    requireDocumentScope('capId'),
     auth.requireCsrf(),
     singleEvidenceUpload('file'),
     async (req, res) => {
@@ -1688,6 +1740,7 @@ function createCapsRouter({ auth, alfrescoClient, capDraftRepository, notificati
     '/caps/:capId/evidence/:evidenceNodeId/content',
     auth.authenticate,
     auth.authorize(['inspector', 'planner', 'admin', 'cap_entry']),
+    requireDocumentScope('capId'),
     async (req, res) => {
       try {
         const capNode = await alfrescoClient.searchCapByBusinessId({
@@ -1727,6 +1780,7 @@ function createCapsRouter({ auth, alfrescoClient, capDraftRepository, notificati
     '/caps/:capId/evidence/:evidenceNodeId',
     auth.authenticate,
     auth.authorize(['cap_entry', 'admin']),
+    requireDocumentScope('capId'),
     auth.requireCsrf(),
     async (req, res) => {
       try {

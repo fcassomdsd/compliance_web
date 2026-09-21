@@ -1,6 +1,7 @@
 const express = require('express');
 
 const { buildError } = require('../auth/sessionAuth.cjs');
+const { filterRowsInScope, requestedCodeAllowed, scopeFrom, forbidden } = require('../auth/scopeEnforcement.cjs');
 const { escapeAftsValue } = require('../domain/aftsEscape.cjs');
 const { mapFindingNode, mapCorrectiveActionNode } = require('../domain/alfrescoMappers.cjs');
 const {
@@ -82,7 +83,10 @@ function createReportsRouter({ auth, alfrescoClient, now = () => new Date() }) {
           maxItems: 1000,
         });
 
-        const findings = findingNodes.map(mapFindingNode);
+        // A scoped session sees only its own specialties, here and in the
+        // report itself: the options a user may pick from must not include a
+        // specialty they cannot then read.
+        const findings = filterRowsInScope(scopeFrom(req), findingNodes.map(mapFindingNode));
 
         return res.status(200).json({
           success: true,
@@ -126,8 +130,8 @@ function createReportsRouter({ auth, alfrescoClient, now = () => new Date() }) {
           maxItems: 1000,
         });
 
-        const findings = findingNodes.map(mapFindingNode);
-        const correctiveActions = capNodes.map(mapCorrectiveActionNode);
+        const findings = filterRowsInScope(scopeFrom(req), findingNodes.map(mapFindingNode));
+        const correctiveActions = filterRowsInScope(scopeFrom(req), capNodes.map(mapCorrectiveActionNode));
         const nowValue = now();
 
         return res.status(200).json({
@@ -149,6 +153,13 @@ function createReportsRouter({ auth, alfrescoClient, now = () => new Date() }) {
     }
   );
 
+  // NOTE (specialty scope): /provider-history is the one report not narrowed for
+  // scoped sessions. Its summary and byInspection aggregates are computed inside
+  // the CMIS webscript from every finding the provider has, and the webscript
+  // takes no specialty filter yet — filtering the artifact list here would leave
+  // counts that disagree with the list. The fix belongs in the webscript: the
+  // same comma-separated `specialtyCode` query parameter the CE-evidence
+  // webscript already accepts, passed from here.
   router.get(
     '/provider-history',
     auth.authenticate,
@@ -204,11 +215,27 @@ function createReportsRouter({ auth, alfrescoClient, now = () => new Date() }) {
           }
         }
 
+        // The report webscript already accepts a comma-separated
+        // `specialtyCode` filter, so the session's scope is pushed upstream
+        // rather than filtered after the fact — the sampled-population counts
+        // stay correct for what the caller is allowed to see.
+        const scope = scopeFrom(req);
+        if (!requestedCodeAllowed(scope, req.query?.specialtyCode)) {
+          return forbidden(res, `specialtyCode=${req.query?.specialtyCode} is outside this session's scope`);
+        }
+        const specialtyCodes = scope.scoped
+          ? String(req.query?.specialtyCode || '')
+              .split(',')
+              .map((code) => code.trim().toUpperCase())
+              .filter((code) => code && scope.codes.includes(code))
+          : [];
+
         const report = await alfrescoClient.generateCeEvidenceReport({
           ticket: req.auth.ticket,
           ce,
           year,
           populationQueries,
+          specialtyCodes: specialtyCodes.length > 0 ? specialtyCodes : scope.scoped ? scope.codes : [],
         });
 
         return res.status(200).json(report);
