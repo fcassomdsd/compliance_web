@@ -63,13 +63,16 @@ http.createServer((req, res) => {
     if (url.pathname.includes('/authentication/versions/1/tickets')) return send(res, 201, { entry: { id: 'E2E-TICKET' } });
     // Every user has the same Inspector record; only their groups differ, which
     // is the whole point — the scope must follow the role, not the record.
+    // Alfresco returns authorities as GROUP_<name>; the role lookup strips that
+    // prefix. These are the real group names migration 0003 seeds, so the roles
+    // below come from the migration alone — nothing is inserted by this script.
     const GROUPS = {
-      'pablo.planner': ['GROUP_INSPECTOR', 'GROUP_PLANNER'],
-      'paula.planneronly': ['GROUP_PLANNER'],
+      'pablo.planner': ['GROUP_U-VSO-IN_Inspector', 'GROUP_U-VSO-PI_PlanInspeccion'],
+      'paula.planneronly': ['GROUP_U-VSO-PI_PlanInspeccion'],
     };
     if (url.pathname.endsWith('/groups')) {
       const user = Object.keys(GROUPS).find((name) => url.pathname.includes(name));
-      const names = user ? GROUPS[user] : ['GROUP_INSPECTOR'];
+      const names = user ? GROUPS[user] : ['GROUP_U-VSO-IN_Inspector'];
       return send(res, 200, { list: { entries: names.map((id) => ({ entry: { id } })) } });
     }
     if (url.pathname.startsWith('/inspector/')) {
@@ -102,11 +105,12 @@ DATABASE_URL="postgres://compliance:e2e@127.0.0.1:5544/${DB}"
 
 (cd "$REPO_DIR" && DATABASE_URL="$DATABASE_URL" npm run db:migrate >"$WORK_DIR/migrate.log" 2>&1) \
   || { echo "FAIL: migration"; tail -5 "$WORK_DIR/migrate.log"; exit 1; }
-# The role mapping lives in the database, not in code. Two groups: one user works
-# as an inspector, the other holds the planner role as well and must be unscoped.
-docker exec "$PG_CONTAINER" psql -U compliance -d "$DB" -c \
-  "INSERT INTO alfresco_group_role_map (alfresco_group, role_id) SELECT 'GROUP_INSPECTOR', id FROM app_role WHERE role_key='inspector' ON CONFLICT DO NOTHING;
-   INSERT INTO alfresco_group_role_map (alfresco_group, role_id) SELECT 'GROUP_PLANNER', id FROM app_role WHERE role_key='planner' ON CONFLICT DO NOTHING;" >/dev/null
+# No mapping is inserted here on purpose: migration 0003 seeds the group -> role
+# rows, so a clean install must already resolve roles for the demo's groups.
+mapped=$(docker exec "$PG_CONTAINER" psql -U compliance -d "$DB" -tAc \
+  "SELECT count(*) FROM alfresco_group_role_map m JOIN app_role r ON r.id=m.role_id
+   WHERE m.is_active AND r.role_key IN ('admin','inspector','planner','assigner','cap_entry','reporter','closure_reviewer');")
+echo "  seeded group->role mappings: ${mapped}"
 
 echo "== stub upstreams + real server"
 STUB_PORT=$STUB_PORT node "$WORK_DIR/stub-upstreams.cjs" >"$WORK_DIR/stub.log" 2>&1 &
@@ -136,6 +140,8 @@ JAR="$WORK_DIR/cookies.txt"
 pass=0; fail=0
 check() { if [ "$2" = "$3" ]; then echo "  ok   $1"; pass=$((pass+1)); else echo "  FAIL $1 (expected $2, got $3)"; fail=$((fail+1)); fi; }
 
+check "migration seeds all seven role mappings" 7 "$mapped"
+
 code=$(curl -s -o /dev/null -w '%{http_code}' -X POST "http://127.0.0.1:${APP_PORT}/nodered/queryEntity?entity=ChecklistQuestion" -H 'Content-Type: application/json' -d '{}')
 check "no session -> 401" 401 "$code"
 
@@ -143,9 +149,9 @@ curl -s -c "$JAR" -X POST "http://127.0.0.1:${APP_PORT}/api/auth/login" -H 'Cont
   -d '{"username":"ana.inspector","password":"secret"}' | python3 -c "
 import json, sys
 data = json.load(sys.stdin)
-print('  login scope:', data.get('specialtyScope'), '| ids:', data.get('specialtyScopeIds'))
-sys.exit(0 if data.get('specialtyScope') == ['ATS'] else 1)
-" || { echo "FAIL: login did not resolve the scope"; fail=$((fail+1)); }
+print('  login roles:', data.get('roles'), '| scope:', data.get('specialtyScope'), '| ids:', data.get('specialtyScopeIds'))
+sys.exit(0 if data.get('roles') == ['inspector'] and data.get('specialtyScope') == ['ATS'] else 1)
+" && { echo "  ok   GROUP_U-VSO-IN_Inspector resolves to the inspector role and its scope"; pass=$((pass+1)); } || { echo "  FAIL login roles/scope"; fail=$((fail+1)); }
 
 curl -s -b "$JAR" -X POST "http://127.0.0.1:${APP_PORT}/nodered/queryEntity?entity=ChecklistQuestion" \
   -H 'Content-Type: application/json' -d '{"deleted":false}' | python3 -c "

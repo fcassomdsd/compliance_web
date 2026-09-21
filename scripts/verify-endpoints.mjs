@@ -30,9 +30,11 @@ const ROUTER_FILE = {
   NodeRedProxy: 'nodered/router.cjs',
 };
 
-// Routers that forward a whole prefix instead of declaring routes of their own.
-// The Node-RED proxy answers every method under /nodered and passes the path
-// through to the gateway, so there is no per-route list to derive.
+// Routers that own a whole prefix instead of declaring routes of their own.
+// The Node-RED proxy is mounted with router.use, so there is no per-route list
+// to derive here. It is not a pass-through: which operations it forwards, and
+// to which roles, is the allow-list in server/nodered/gatewayPolicy.cjs —
+// documented in docs/auth/AUTH_CHUNK1_ROUTE_AUTH_MATRIX.md §5.
 const PASSTHROUGH_ROUTERS = new Set(['NodeRedProxy']);
 
 const VERBS = ['get', 'post', 'put', 'patch', 'delete'];
@@ -88,6 +90,11 @@ function render(endpoints) {
     'mounts in `server/app.cjs`. Do not edit by hand — run',
     '`node scripts/verify-endpoints.mjs --write` after changing a route and commit',
     'the result.',
+    '',
+    '`ALL /nodered/*` is the gateway proxy\'s mount, not a licence to call anything',
+    'under it: which operations it forwards, and the roles each one needs, is the',
+    'allow-list in `server/nodered/gatewayPolicy.cjs` — tabulated in',
+    '[`auth/AUTH_CHUNK1_ROUTE_AUTH_MATRIX.md`](auth/AUTH_CHUNK1_ROUTE_AUTH_MATRIX.md) §5.',
     '',
     '| Method | Path |',
     '|---|---|',
