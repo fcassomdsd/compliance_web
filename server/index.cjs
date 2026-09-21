@@ -64,9 +64,16 @@ async function start() {
     logger: auditLogger,
   });
   const nodeRedClient = new NodeRedClient({ baseUrl: process.env.NODE_RED_BASE_URL });
+  const runtimeConfigWithGateway = {
+    ...runtimeConfig,
+    nodeRed: {
+      baseUrl: process.env.NODE_RED_BASE_URL || 'http://localhost:1880',
+      apiKey: process.env.NODE_RED_API_KEY || '',
+    },
+  };
 
   const app = createApp({
-    config: runtimeConfig,
+    config: runtimeConfigWithGateway,
     sessionRepository,
     alfrescoClient,
     loginRateLimiter,

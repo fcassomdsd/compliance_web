@@ -8,6 +8,7 @@ const { createCapsRouter } = require('./caps/router.cjs');
 const { createReportsRouter } = require('./reports/router.cjs');
 const { createNotificationsRouter } = require('./notifications/router.cjs');
 const { createUsoapRouter } = require('./usoap/router.cjs');
+const { createNodeRedProxyRouter } = require('./nodered/router.cjs');
 
 function createApp({ config, sessionRepository, alfrescoClient, loginRateLimiter, logger, capDraftRepository, notificationRepository, notificationService, nodeRedClient, now }) {
   const app = express();
@@ -85,6 +86,22 @@ function createApp({ config, sessionRepository, alfrescoClient, loginRateLimiter
       createNotificationsRouter({
         auth,
         repository: notificationRepository,
+      })
+    );
+  }
+
+  // Same-origin Node-RED gateway. Mounted whenever a base URL is configured;
+  // nginx (production) and the Vite dev server both send `/nodered/*` here
+  // rather than straight to Node-RED, so every gateway call carries the app
+  // session, the gateway API key and a specialty-scope check.
+  if (config?.nodeRed?.baseUrl && nodeRedClient) {
+    app.use(
+      '/nodered',
+      createNodeRedProxyRouter({
+        auth,
+        config: config.nodeRed,
+        logger,
+        nodeRedClient,
       })
     );
   }

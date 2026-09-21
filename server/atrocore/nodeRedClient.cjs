@@ -25,8 +25,16 @@ class NodeRedClient {
     return headers;
   }
 
-  async queryEntity({ ticket, entity, data = {} }) {
-    const response = await axios.post(`${this.baseUrl}/queryEntity?entity=${entity}`, data, {
+  // `select` is Node-RED's field list for the upstream read. Its flow builds the
+  // AtroCore URL by concatenation (`?{{select}}maxSize=200`), so the value has to
+  // carry its own trailing separator — pass 'id,inspectedSpecialties&'.
+  async queryEntity({ ticket, entity, data = {}, select }) {
+    const url = new URL(`${this.baseUrl}/queryEntity`);
+    url.searchParams.set('entity', entity);
+    if (select) {
+      url.searchParams.set('select', select);
+    }
+    const response = await axios.post(url.toString(), data, {
       headers: this._headers(ticket),
     });
     return response.data;
@@ -44,6 +52,26 @@ class NodeRedClient {
       headers: this._headers(ticket),
     });
     return response.data;
+  }
+
+  // Raw pass-through used by the same-origin proxy (server/nodered/router.cjs):
+  // it forwards whatever the browser sent, so the status and body are returned
+  // as-is instead of throwing on 4xx/5xx.
+  async request({ method, url, headers, data }) {
+    const response = await axios({
+      method,
+      url,
+      headers,
+      data,
+      responseType: 'text',
+      transformResponse: [(value) => value],
+      validateStatus: () => true,
+    });
+    return {
+      status: response.status,
+      data: response.data,
+      contentType: response.headers?.['content-type'],
+    };
   }
 
   // The auth flow's /inspector/:externalId endpoint resolves an Inspector by
