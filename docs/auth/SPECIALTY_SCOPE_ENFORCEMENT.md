@@ -109,3 +109,12 @@ it over HTTP: an unauthenticated gateway call is refused, login resolves the sco
 session's ticket and never the session cookie, and an out-of-scope write is refused. The unit tests
 call `createApp` directly, so this is what covers the wiring in `server/index.cjs` and the real
 session store. It needs Docker.
+
+Against a **live stack** the same path is: run the app server (`npm run server`) and the Vite dev
+server with `VITE_API_PROXY_TARGET` pointed at it, log in with a real Alfresco account, and call
+`/nodered/queryEntity` through the dev server. A session scoped to one specialty (set
+`specialtyScope`/`specialtyScopeIds` in the session's `metadata_json`, which is what login writes for
+a scoped user) then sees only its own rows, and an out-of-scope write is refused with
+`AUTH_SCOPE_FORBIDDEN` before anything reaches AtroCore. Verified on 2026-09-21 against the reference
+instance: 9 `ChecklistQuestion` rows unscoped, 3 (ATS) scoped, `total` recomputed, and
+`/inspector/inspector.ejemplo` → `['ATS']` through the proxy.
