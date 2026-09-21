@@ -62,6 +62,20 @@ function buildSessionResponse(session, config) {
     },
     roles: Array.isArray(session.roles) ? session.roles : [],
     groups,
+    // Specialty codes this user may see and act on. null means unscoped: an
+    // admin, or a user whose Inspector record has no specialties linked (or who
+    // has no Inspector record at all). See docs/auth/AUTH_CHUNK1_API_SPEC.md.
+    specialtyScope:
+      Array.isArray(session.metadata?.specialtyScope) && session.metadata.specialtyScope.length > 0
+        ? session.metadata.specialtyScope
+        : null,
+    // The same set as AtroCore link ids (`spec_ats`). The UI needs both: the
+    // views key inspected specialties by id, while findings, CAPs and document
+    // ids carry codes.
+    specialtyScopeIds:
+      Array.isArray(session.metadata?.specialtyScopeIds) && session.metadata.specialtyScopeIds.length > 0
+        ? session.metadata.specialtyScopeIds
+        : null,
     locale: session.metadata?.locale || null,
     session: {
       issuedAt: toIso(session.createdAt),

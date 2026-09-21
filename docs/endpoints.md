@@ -7,6 +7,7 @@ the result.
 
 | Method | Path |
 |---|---|
+| ALL | `/nodered/*` |
 | DELETE | `/api/caps/:capId/evidence/:evidenceNodeId` |
 | DELETE | `/api/caps/drafts/:draftId` |
 | GET | `/api/auth/diagnostics` |

@@ -27,7 +27,13 @@ const ROUTER_FILE = {
   Reports: 'reports/router.cjs',
   Notifications: 'notifications/router.cjs',
   Usoap: 'usoap/router.cjs',
+  NodeRedProxy: 'nodered/router.cjs',
 };
+
+// Routers that forward a whole prefix instead of declaring routes of their own.
+// The Node-RED proxy answers every method under /nodered and passes the path
+// through to the gateway, so there is no per-route list to derive.
+const PASSTHROUGH_ROUTERS = new Set(['NodeRedProxy']);
 
 const VERBS = ['get', 'post', 'put', 'patch', 'delete'];
 
@@ -53,6 +59,10 @@ function extractEndpoints() {
     if (!file) {
       console.error(`FAIL: unknown router creator create${mount[2]}Router in app.cjs`);
       process.exit(1);
+    }
+    if (PASSTHROUGH_ROUTERS.has(mount[2])) {
+      endpoints.push(`ALL ${prefix}/*`);
+      continue;
     }
     const routerSource = read(file);
     const routePattern = new RegExp(

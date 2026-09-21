@@ -28,11 +28,13 @@ export default defineConfig({
         changeOrigin: true,
       },
       // Same-origin Node-RED access in development, mirroring the nginx route
-      // used in production so the frontend never hardcodes a host.
+      // used in production. It targets the app server (not Node-RED itself) for
+      // the same reason production does: a gateway call has to carry the app
+      // session, the API key and the specialty-scope check. No rewrite — the app
+      // server owns the /nodered prefix and strips it before forwarding.
       '/nodered': {
-        target: process.env.VITE_NODE_RED_PROXY_TARGET || 'http://localhost:1880',
+        target: process.env.VITE_API_PROXY_TARGET || process.env.VITE_AUTH_PROXY_TARGET || 'http://localhost:4000',
         changeOrigin: true,
-        rewrite: (requestPath) => requestPath.replace(/^\/nodered/, ''),
       },
     },
   },

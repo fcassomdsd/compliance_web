@@ -15,6 +15,12 @@ export const useAuthStore = defineStore('auth', {
     user: null,
     roles: [],
     groups: [],
+    // Specialty codes this session may see and act on; null means unscoped
+    // (admin, no inspector record, no specialties linked) — full access. The
+    // server enforces this on every write and on the API responses; these
+    // getters keep the UI from offering what the server would refuse.
+    specialtyScope: null,
+    specialtyScopeIds: null,
     inspectorProfile: null,
     session: null,
     csrfToken: null,
@@ -33,6 +39,20 @@ export const useAuthStore = defineStore('auth', {
       const roleSet = new Set((state.roles || []).map((role) => String(role).trim().toLowerCase()));
       return required.some((role) => roleSet.has(String(role).trim().toLowerCase()));
     },
+    // null scope = unscoped, so every specialty is in scope.
+    specialtyInScope: (state) => (code) => {
+      if (!Array.isArray(state.specialtyScope) || state.specialtyScope.length === 0) return true;
+      const wanted = String(code ?? '').trim().toUpperCase();
+      if (!wanted) return true;
+      return state.specialtyScope.includes(wanted);
+    },
+    // The same check for the id-keyed views (an inspected specialty is stored
+    // as `spec_ats`, not as the code the document ids use).
+    specialtyIdInScope: (state) => (specialtyId) => {
+      if (!Array.isArray(state.specialtyScopeIds) || state.specialtyScopeIds.length === 0) return true;
+      if (!specialtyId) return true;
+      return state.specialtyScopeIds.includes(String(specialtyId).toLowerCase());
+    },
     canManageServiceArea: (state) => (serviceAreaId) => {
       if (!state.hasRole('planner')) return false;
       const plannerArea = state.inspectorProfile?.serviceAreaId;
@@ -47,6 +67,14 @@ export const useAuthStore = defineStore('auth', {
       this.user = payload?.user || null;
       this.roles = Array.isArray(payload?.roles) ? payload.roles : [];
       this.groups = Array.isArray(payload?.groups) ? payload.groups : [];
+      this.specialtyScope =
+        Array.isArray(payload?.specialtyScope) && payload.specialtyScope.length > 0
+          ? payload.specialtyScope
+          : null;
+      this.specialtyScopeIds =
+        Array.isArray(payload?.specialtyScopeIds) && payload.specialtyScopeIds.length > 0
+          ? payload.specialtyScopeIds
+          : null;
       this.session = payload?.session || null;
       this.csrfToken = payload?.csrfToken || null;
       this.locale = payload?.locale || null;
@@ -58,6 +86,8 @@ export const useAuthStore = defineStore('auth', {
       this.user = null;
       this.roles = [];
       this.groups = [];
+      this.specialtyScope = null;
+      this.specialtyScopeIds = null;
       this.inspectorProfile = null;
       this.session = null;
       this.csrfToken = null;

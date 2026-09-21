@@ -111,12 +111,14 @@ import LoadingSpinner from '@/components/base/LoadingSpinner.vue';
 import { useInspectionCadenceStore } from '@/stores/inspectionCadenceStore';
 import { useLocationStore } from '@/stores/locationStore';
 import { useActivityTypeStore } from '@/stores/activityTypeStore';
+import { useAuthStore } from '@/stores/authStore';
 import { formatDate } from '@/utils/formatDate';
 
 const { t } = useI18n();
 const cadenceStore = useInspectionCadenceStore();
 const locationStore = useLocationStore();
 const activityTypeStore = useActivityTypeStore();
+const authStore = useAuthStore();
 
 const message = ref('');
 const errorMessage = ref('');
@@ -125,8 +127,13 @@ const appState = ref('viewing');
 // The specialties the chosen location service actually covers. A cadence naming a
 // specialty the service does not provide would describe an inspection that cannot
 // happen, so the picker is narrowed rather than validated after the fact.
+//
+// It is narrowed again to the session's specialty scope, so the UI never offers
+// a cadence the server would refuse to create.
 const availableSpecialties = computed(() =>
-  cadenceStore.specialtiesForLocationService(form.locationServiceId),
+  cadenceStore
+    .specialtiesForLocationService(form.locationServiceId)
+    .filter((specialty) => authStore.specialtyIdInScope(specialty.id)),
 );
 
 function locationServiceLabel(service) {

@@ -3,6 +3,14 @@ const multer = require('multer');
 const crypto = require('crypto');
 
 const { buildError } = require('../auth/sessionAuth.cjs');
+const {
+  filterRowsInScope,
+  requestedCodeAllowed,
+  requireDocumentScope,
+  scopeFrom,
+  documentSpecialtyCode,
+  forbidden,
+} = require('../auth/scopeEnforcement.cjs');
 const { escapeAftsValue } = require('../domain/aftsEscape.cjs');
 const {
   mapFindingNode,
@@ -329,6 +337,10 @@ function createFindingsRouter({ auth, alfrescoClient, notificationService, nodeR
     auth.authorize(['inspector', 'planner', 'cap_entry', 'closure_reviewer', 'admin']),
     async (req, res) => {
       try {
+        if (!requestedCodeAllowed(scopeFrom(req), req.query?.specialtyCode)) {
+          return forbidden(res, `specialtyCode=${req.query?.specialtyCode} is outside this session's scope`);
+        }
+
         const query = buildFindingsQuery({
           findingId: req.query?.findingId,
           inspectionId: req.query?.inspectionId,
@@ -379,7 +391,7 @@ function createFindingsRouter({ auth, alfrescoClient, notificationService, nodeR
         });
 
         return res.status(200).json({
-          list: filtered,
+          list: filterRowsInScope(scopeFrom(req), filtered),
           path: FINDINGS_LIBRARY_PATH,
         });
       } catch (error) {
@@ -421,6 +433,16 @@ function createFindingsRouter({ auth, alfrescoClient, notificationService, nodeR
             maxItems: findingMaxItems,
           });
         }
+
+        if (explicitFindingId && !requestedCodeAllowed(scopeFrom(req), documentSpecialtyCode(explicitFindingId))) {
+          return forbidden(res, `${explicitFindingId} is outside this session's scope`);
+        }
+
+        findingNodes = filterRowsInScope(
+          scopeFrom(req),
+          findingNodes,
+          (node) => node?.properties?.['vso:specialtyCode'],
+        );
 
         const findingRows = await mapWithConcurrency(findingNodes, findingFetchConcurrency, async (node) => {
           const finding = mapFindingNode(node);
@@ -540,6 +562,7 @@ function createFindingsRouter({ auth, alfrescoClient, notificationService, nodeR
     '/:findingId/follow-ups',
     auth.authenticate,
     auth.authorize(['inspector', 'admin']),
+    requireDocumentScope('findingId'),
     auth.requireCsrf(),
     async (req, res) => {
       try {
@@ -734,6 +757,7 @@ function createFindingsRouter({ auth, alfrescoClient, notificationService, nodeR
     '/:findingId/follow-ups/:followUpId/evidence-review',
     auth.authenticate,
     auth.authorize(['inspector', 'admin']),
+    requireDocumentScope('findingId'),
     auth.requireCsrf(),
     async (req, res) => {
       try {
@@ -833,6 +857,7 @@ function createFindingsRouter({ auth, alfrescoClient, notificationService, nodeR
     '/:findingId/follow-ups/:followUpId/evidence',
     auth.authenticate,
     auth.authorize(['inspector', 'admin']),
+    requireDocumentScope('findingId'),
     auth.requireCsrf(),
     singleEvidenceUpload('file'),
     async (req, res) => {
@@ -952,6 +977,7 @@ function createFindingsRouter({ auth, alfrescoClient, notificationService, nodeR
     '/:findingId/follow-ups/:followUpId/evidence/:evidenceNodeId/content',
     auth.authenticate,
     auth.authorize(['inspector', 'planner', 'cap_entry', 'closure_reviewer', 'admin']),
+    requireDocumentScope('findingId'),
     async (req, res) => {
       try {
         const findingNode = await alfrescoClient.searchFindingByBusinessId({
@@ -1002,6 +1028,7 @@ function createFindingsRouter({ auth, alfrescoClient, notificationService, nodeR
     '/:findingId/review',
     auth.authenticate,
     auth.authorize(['inspector', 'admin']),
+    requireDocumentScope('findingId'),
     auth.requireCsrf(),
     async (req, res) => {
       try {
@@ -1064,6 +1091,7 @@ function createFindingsRouter({ auth, alfrescoClient, notificationService, nodeR
   router.patch(
     '/:findingId/closure-review',
     auth.authenticate,
+    requireDocumentScope('findingId'),
     // The verifying authority, not the inspector: declaring effectiveness and
     // verifying it are deliberately different roles. admin stays as break-glass.
     auth.authorize(['closure_reviewer', 'admin']),
@@ -1171,6 +1199,7 @@ function createFindingsRouter({ auth, alfrescoClient, notificationService, nodeR
     '/:findingId/deadline-extension-requests',
     auth.authenticate,
     auth.authorize(['cap_entry', 'admin']),
+    requireDocumentScope('findingId'),
     auth.requireCsrf(),
     async (req, res) => {
       try {
@@ -1234,6 +1263,7 @@ function createFindingsRouter({ auth, alfrescoClient, notificationService, nodeR
     '/:findingId/deadline-extension-review',
     auth.authenticate,
     auth.authorize(['inspector', 'admin']),
+    requireDocumentScope('findingId'),
     auth.requireCsrf(),
     async (req, res) => {
       try {
@@ -1293,6 +1323,7 @@ function createFindingsRouter({ auth, alfrescoClient, notificationService, nodeR
     '/:findingId',
     auth.authenticate,
     auth.authorize(['inspector', 'planner', 'cap_entry', 'closure_reviewer', 'admin']),
+    requireDocumentScope('findingId'),
     async (req, res) => {
       try {
         const findingNode = await alfrescoClient.searchFindingByBusinessId({
@@ -1338,6 +1369,7 @@ function createFindingsRouter({ auth, alfrescoClient, notificationService, nodeR
     '/:findingId/evidence/:evidenceNodeId/content',
     auth.authenticate,
     auth.authorize(['inspector', 'planner', 'cap_entry', 'closure_reviewer', 'admin']),
+    requireDocumentScope('findingId'),
     async (req, res) => {
       try {
         const findingNode = await alfrescoClient.searchFindingByBusinessId({
