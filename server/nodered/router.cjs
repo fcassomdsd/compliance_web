@@ -25,13 +25,21 @@ const {
 } = require('../auth/specialtyScope.cjs');
 const { createScopeGuard, SCOPE_FORBIDDEN, SCOPE_UNVERIFIED } = require('./scopeGuard.cjs');
 
-// `${method}Entity` routes from src/services/apiServices.js. `query` and the
-// link reads are reads; the rest mutate. The guard only needs to see the writes.
+// `${method}Entity` routes from src/services/apiServices.js. `query`, the link
+// reads and the `*:…` gateway actions are reads; the rest mutate. The guard only
+// needs to see the writes. Link writes are attributed to the record they hang
+// off — the parent is what carries the specialty.
 const WRITE_METHODS = {
   add: { needsId: false, hasPayload: true },
   update: { needsId: true, hasPayload: true },
   delete: { needsId: true, hasPayload: false },
+  addLinks: { needsId: true, hasPayload: false },
+  deleteLinks: { needsId: true, hasPayload: false },
 };
+
+// State-changing gateway actions that are reached by GET. They carry the
+// specialty of the inspection they act on (see scopeGuard.checkInspectionAction).
+const SCOPE_CHECKED_ACTIONS = new Set(['/inspectionPlan', '/inspectionReport']);
 
 function parseRoute(path) {
   const match = /^\/([A-Za-z]+)Entity(?:\?|$)/.exec(path);
@@ -126,6 +134,26 @@ function createNodeRedProxyRouter({ auth, config, logger, nodeRedClient }) {
           entity,
           id: id || undefined,
           method,
+          scope: refusal.code,
+        });
+        return res.status(refusal.status).json(buildError(refusal.code, refusal.message));
+      }
+    }
+
+    // `/inspectionPlan` and `/inspectionReport` mutate state through a GET, so
+    // they get the write guard's treatment — attributed to the inspection(s)
+    // they act on rather than to an entity in the query string.
+    if (SCOPE_CHECKED_ACTIONS.has(req.path)) {
+      const refusal = await scopeGuard.checkInspectionAction({
+        session: req.auth?.session,
+        ticket: req.auth?.ticket,
+        siteVisitCode: String(req.query?.siteVisit || ''),
+        providerId: req.query?.provider ? String(req.query.provider) : null,
+      });
+      if (refusal) {
+        logger?.warn?.('Refused a gateway action outside the session specialty scope', {
+          path: req.path,
+          siteVisit: req.query?.siteVisit,
           scope: refusal.code,
         });
         return res.status(refusal.status).json(buildError(refusal.code, refusal.message));

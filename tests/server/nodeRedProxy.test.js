@@ -359,4 +359,87 @@ describe('Node-RED proxy', () => {
     expect(res.body.list).toHaveLength(2);
     expect(res.body.total).toBe(2);
   });
+
+  it('guards a link write by the specialty of the record it hangs off', async () => {
+    gateway = await startStubGateway((entry, res) => {
+      if (entry.url.startsWith('/inspector/')) return json(res, 200, INSPECTOR);
+      if (entry.url.includes('entity=InspectedSpecialty')) {
+        return json(res, 200, { total: 1, list: [{ id: 'ispec-1', specialtyId: 'spec_met' }] });
+      }
+      return json(res, 200, { ok: true });
+    });
+    const { app } = buildTestApp({ gatewayUrl: gateway.url });
+    const cookie = await loginCookie(app);
+
+    const res = await request(app)
+      .post('/nodered/addLinksEntity?entity=InspectedSpecialty&id=ispec-1&link=actingInspectors')
+      .set('Cookie', cookie)
+      .send({ ids: ['insp-9'] });
+
+    expect(res.status).toBe(403);
+    expect(res.body.code).toBe('AUTH_SCOPE_FORBIDDEN');
+    expect(gateway.requests.filter((entry) => entry.url.startsWith('/addLinksEntity'))).toHaveLength(0);
+  });
+
+  it('refuses to plan an inspection of another specialty', async () => {
+    gateway = await startStubGateway((entry, res) => {
+      if (entry.url.startsWith('/inspector/')) return json(res, 200, INSPECTOR);
+      if (entry.url.includes('entity=Inspection')) {
+        return json(res, 200, { total: 1, list: [{ id: 'insp-met', inspectedSpecialties: [{ specialtyId: 'spec_met' }] }] });
+      }
+      return json(res, 200, { ok: true });
+    });
+    const { app } = buildTestApp({ gatewayUrl: gateway.url });
+    const cookie = await loginCookie(app);
+
+    const res = await request(app)
+      .get('/nodered/inspectionPlan?siteVisit=V-ZZZZ-2026-01&provider=iprov-met')
+      .set('Cookie', cookie);
+
+    expect(res.status).toBe(403);
+    expect(res.body.code).toBe('AUTH_SCOPE_FORBIDDEN');
+    expect(gateway.requests.filter((entry) => entry.url.startsWith('/inspectionPlan'))).toHaveLength(0);
+  });
+
+  it('allows planning an inspection inside the scope', async () => {
+    gateway = await startStubGateway((entry, res) => {
+      if (entry.url.startsWith('/inspector/')) return json(res, 200, INSPECTOR);
+      if (entry.url.includes('entity=Inspection')) {
+        return json(res, 200, { total: 1, list: [{ id: 'insp-ats', inspectedSpecialties: [{ specialtyId: 'spec_ats' }] }] });
+      }
+      return json(res, 200, { ok: true });
+    });
+    const { app } = buildTestApp({ gatewayUrl: gateway.url });
+    const cookie = await loginCookie(app);
+
+    const res = await request(app)
+      .get('/nodered/inspectionPlan?siteVisit=V-ZZZZ-2026-01&provider=iprov-ats')
+      .set('Cookie', cookie);
+
+    expect(res.status).toBe(200);
+    expect(gateway.requests.at(-1).url).toContain('/inspectionPlan');
+  });
+
+  it('resolves the visit when the plan call names no provider', async () => {
+    gateway = await startStubGateway((entry, res) => {
+      if (entry.url.startsWith('/inspector/')) return json(res, 200, INSPECTOR);
+      if (entry.url.includes('entity=SiteVisit')) {
+        return json(res, 200, { total: 1, list: [{ id: 'sv-1', inspectedProviders: [{ id: 'iprov-met' }] }] });
+      }
+      if (entry.url.includes('entity=Inspection')) {
+        return json(res, 200, { total: 1, list: [{ id: 'insp-met', inspectedSpecialties: [{ specialtyId: 'spec_met' }] }] });
+      }
+      return json(res, 200, { ok: true });
+    });
+    const { app } = buildTestApp({ gatewayUrl: gateway.url });
+    const cookie = await loginCookie(app);
+
+    const res = await request(app)
+      .get('/nodered/inspectionReport?siteVisit=V-ZZZZ-2026-01&reportDate=2026-05-01')
+      .set('Cookie', cookie);
+
+    expect(res.status).toBe(403);
+    expect(res.body.code).toBe('AUTH_SCOPE_FORBIDDEN');
+    expect(gateway.requests.filter((entry) => entry.url.startsWith('/inspectionReport'))).toHaveLength(0);
+  });
 });

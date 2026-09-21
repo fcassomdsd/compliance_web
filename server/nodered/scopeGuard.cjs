@@ -146,8 +146,64 @@ function createScopeGuard({ nodeRedClient, logger } = {}) {
     return null;
   }
 
+  // `/inspectionPlan` and `/inspectionReport` are state-changing gateway GETs
+  // (they transition an inspection to Planned and generate its report). They are
+  // attributed to the inspections they act on: the provider's inspection at that
+  // site visit when `provider` is given, otherwise every inspection of the visit.
+  // An action that resolves to no inspection at all is left to the flow — there
+  // is nothing to act on, and the flow answers its own error.
+  async function checkInspectionAction({ session, ticket, siteVisitCode, providerId }) {
+    const scope = sessionScope(session);
+    if (!scope.scoped) return null;
+    if (!siteVisitCode) return null;
+
+    let providerIds = providerId ? [String(providerId)] : null;
+    if (!providerIds) {
+      let visit;
+      try {
+        visit = await readRecord({
+          ticket,
+          entity: 'SiteVisit',
+          where: { code: siteVisitCode },
+          select: 'id,inspectedProviders',
+        });
+      } catch (error) {
+        return unverified('SiteVisit', siteVisitCode, error.message);
+      }
+      providerIds = recordIds(visit?.inspectedProviders);
+    }
+    if (providerIds.length === 0) return null;
+
+    let body;
+    try {
+      body = await nodeRedClient.queryEntity({
+        ticket,
+        entity: 'Inspection',
+        data: { inspectedProviderId: providerIds },
+        select: 'id,inspectedSpecialties',
+      });
+    } catch (error) {
+      return unverified('Inspection', siteVisitCode, error.message);
+    }
+
+    const rows = Array.isArray(body?.list) ? body.list : Array.isArray(body) ? body : [];
+    for (const row of rows) {
+      let refs;
+      try {
+        refs = await storedRefs({ ticket, entity: 'Inspection', record: row });
+      } catch (error) {
+        return unverified('Inspection', row?.id || siteVisitCode, error.message);
+      }
+      if (hasRefs(refs) && !scopeAllowsRefs(scope, refs)) {
+        return forbidden(refs, `Inspection ${row?.id || ''}`.trim());
+      }
+    }
+    return null;
+  }
+
   return {
     checkEntityWrite,
+    checkInspectionAction,
     SCOPE_FORBIDDEN,
     SCOPE_UNVERIFIED,
   };

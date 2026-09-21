@@ -34,11 +34,18 @@ than widening it.
 The browser reaches the gateway through the app server (`/nodered/*`), never directly. Every call
 already requires a session; with a scope it is also checked:
 
-- **Writes** (`addEntity`, `updateEntity`, `deleteEntity`): `server/nodered/scopeGuard.cjs` reads
-  the specialty from the payload, and for a delete or a status-only update from the stored record —
-  following `Inspection.inspectedSpecialties → InspectedSpecialty.specialtyId` when the entity only
-  holds link ids. Outside the scope → 403 `AUTH_SCOPE_FORBIDDEN`; record unreadable → 403
+- **Writes** (`addEntity`, `updateEntity`, `deleteEntity`, `addLinksEntity`, `deleteLinksEntity`):
+  `server/nodered/scopeGuard.cjs` reads the specialty from the payload, and for a delete, a
+  status-only update or a link write from the stored record — following
+  `Inspection.inspectedSpecialties → InspectedSpecialty.specialtyId` when the entity only holds link
+  ids. A link write is attributed to the record it hangs off, which is the record that carries the
+  specialty. Outside the scope → 403 `AUTH_SCOPE_FORBIDDEN`; record unreadable → 403
   `AUTH_SCOPE_UNVERIFIED` (a write that cannot be attributed is not assumed in scope).
+- **State-changing GETs** (`/inspectionPlan`, `/inspectionReport`): attributed to the inspections
+  they act on — the provider's inspection at that site visit, or every inspection of the visit when
+  the call names no provider (read through
+  `SiteVisit.inspectedProviders → Inspection.inspectedSpecialties`). Any inspection outside the
+  scope refuses the action.
 - **Reads** (`queryEntity`): the fields that identify a record's specialty are forced into the
   upstream `select` (a caller asking for `select=id` cannot hide them), rows outside the scope are
   dropped, and `total` is recomputed so it matches the list returned.
@@ -75,15 +82,12 @@ rule.
 
 ## What is deliberately not covered
 
+- **`getLinksEntity`** (a read of one record's relations) is not filtered; the record it hangs off
+  is checked on the write path, and the relations themselves are what the caller already may read
+  through `queryEntity`.
 - **`/api/auth/ticket`** still returns the Alfresco ticket to the browser, although the proxy no
   longer needs it (it uses the session's own). Removing it is a contract change for other clients
   and is tracked separately.
-- **Link mutations** (`addLinksEntity`, `deleteLinksEntity`, `getLinksEntity`) are forwarded without
-  a scope check. The app's only link writes are `InspectedSpecialty/actingInspectors`, whose parent
-  record the `InspectedSpecialty` guard already covers.
-- **`inspectionPlan` / `inspectionReport`** (state-changing gateway GETs) are not yet attributed to
-  a specialty; doing so needs a two-hop read (site visit → inspected providers → inspections) and is
-  tracked as the next enforcement step.
 
 ## Testing
 
@@ -92,7 +96,7 @@ Unit and route tests live next to the code they cover:
 | Area | Test |
 |---|---|
 | scope resolution, refresh, unscoped cases | `tests/server/authSpecialtyScope.test.js` |
-| gateway proxy: auth, key/ticket injection, write guard, read filter | `tests/server/nodeRedProxy.test.js` |
+| gateway proxy: auth, key/ticket injection, write guard, link writes, plan/report actions, read filter | `tests/server/nodeRedProxy.test.js` |
 | API narrowing: lists, id-addressed refusals, CAP drafts | `tests/server/scopeEnforcement.test.js` |
 | store and picker gating | `tests/unit/...`, `tests/server/...` (see `npm run test:auth:all`) |
 
