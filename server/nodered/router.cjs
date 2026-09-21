@@ -11,10 +11,14 @@
 //
 // The prefix is stripped: Node-RED sees the same paths it always did
 // (`/queryEntity?entity=Location`), so nothing about the flows changes.
+//
+// What may be asked for at all — and by which roles — is ./gatewayPolicy.cjs.
+// Anything it does not classify is refused, so the proxy is an allow-list rather
+// than the pass-through it used to be.
 
 const express = require('express');
 
-const { buildError } = require('../auth/sessionAuth.cjs');
+const { buildError, requireRoles } = require('../auth/sessionAuth.cjs');
 const {
   isScopeControlled,
   sessionScope,
@@ -24,28 +28,9 @@ const {
   hasRefs,
 } = require('../auth/specialtyScope.cjs');
 const { createScopeGuard, SCOPE_FORBIDDEN, SCOPE_UNVERIFIED } = require('./scopeGuard.cjs');
+const { classifyGatewayRequest } = require('./gatewayPolicy.cjs');
 
-// `${method}Entity` routes from src/services/apiServices.js. `query`, the link
-// reads and the `*:…` gateway actions are reads; the rest mutate. The guard only
-// needs to see the writes. Link writes are attributed to the record they hang
-// off — the parent is what carries the specialty.
-const WRITE_METHODS = {
-  add: { needsId: false, hasPayload: true },
-  update: { needsId: true, hasPayload: true },
-  delete: { needsId: true, hasPayload: false },
-  addLinks: { needsId: true, hasPayload: false },
-  deleteLinks: { needsId: true, hasPayload: false },
-};
-
-// State-changing gateway actions that are reached by GET. They carry the
-// specialty of the inspection they act on (see scopeGuard.checkInspectionAction).
-const SCOPE_CHECKED_ACTIONS = new Set(['/inspectionPlan', '/inspectionReport']);
-
-function parseRoute(path) {
-  const match = /^\/([A-Za-z]+)Entity(?:\?|$)/.exec(path);
-  if (!match) return null;
-  return match[1];
-}
+const GATEWAY_FORBIDDEN = 'AUTH_GATEWAY_FORBIDDEN';
 
 function forwardableBody(req) {
   if (req.method === 'GET' || req.method === 'HEAD') return undefined;
@@ -112,28 +97,54 @@ function createNodeRedProxyRouter({ auth, config, logger, nodeRedClient }) {
   router.use(auth.authenticate);
 
   router.use(async (req, res) => {
-    const method = parseRoute(req.path);
-    const rule = method ? WRITE_METHODS[method] : null;
+    // 1. Is this something the app is allowed to ask for at all, and by whom?
+    const decision = classifyGatewayRequest({
+      method: req.method,
+      path: req.path,
+      query: req.query || {},
+    });
 
-    if (rule) {
-      const entity = req.query?.entity;
-      const id = rule.needsId ? String(req.query?.id || '') : '';
-      if (!entity || (rule.needsId && !id)) {
-        return res.status(400).json(buildError('AUTH_BAD_REQUEST', 'entity (and id) are required'));
-      }
+    if (!decision) {
+      logger?.warn?.('Refused a gateway request outside the allow-list', {
+        method: req.method,
+        path: req.path,
+        entity: req.query?.entity,
+      });
+      return res
+        .status(403)
+        .json(buildError(GATEWAY_FORBIDDEN, 'This gateway operation is not available to the web application.'));
+    }
 
+    if (decision.badRequest) {
+      return res.status(400).json(buildError('AUTH_BAD_REQUEST', 'entity (and id/link) are required'));
+    }
+
+    if (decision.roles && !requireRoles(req.auth?.session, decision.roles)) {
+      logger?.warn?.('Refused a gateway request the session has no role for', {
+        method: req.method,
+        path: req.path,
+        entity: decision.entity || undefined,
+        required: decision.roles,
+      });
+      return res.status(403).json(buildError('AUTH_FORBIDDEN', 'Role not authorized for this operation'));
+    }
+
+    // 2. Is it inside the session's specialty scope? Entity writes and link
+    // writes are both attributed to a record — for a link write, to the record
+    // the relation hangs off, which is what carries the specialty.
+    if (decision.kind === 'write' || decision.kind === 'linkWrite') {
       const refusal = await scopeGuard.checkEntityWrite({
         session: req.auth?.session,
         ticket: req.auth?.ticket,
-        entity,
-        id: id || undefined,
-        payload: rule.hasPayload ? forwardableBody(req) : null,
+        entity: decision.entity,
+        id: decision.id || undefined,
+        payload: decision.hasPayload ? forwardableBody(req) : null,
       });
       if (refusal) {
         logger?.warn?.('Refused a Node-RED write outside the session specialty scope', {
-          entity,
-          id: id || undefined,
-          method,
+          entity: decision.entity,
+          id: decision.id || undefined,
+          operation: decision.operation,
           scope: refusal.code,
         });
         return res.status(refusal.status).json(buildError(refusal.code, refusal.message));
@@ -143,7 +154,7 @@ function createNodeRedProxyRouter({ auth, config, logger, nodeRedClient }) {
     // `/inspectionPlan` and `/inspectionReport` mutate state through a GET, so
     // they get the write guard's treatment — attributed to the inspection(s)
     // they act on rather than to an entity in the query string.
-    if (SCOPE_CHECKED_ACTIONS.has(req.path)) {
+    if (decision.kind === 'action') {
       const refusal = await scopeGuard.checkInspectionAction({
         session: req.auth?.session,
         ticket: req.auth?.ticket,
@@ -165,7 +176,7 @@ function createNodeRedProxyRouter({ auth, config, logger, nodeRedClient }) {
     // record's specialty are forced into the upstream read — a caller asking for
     // `select=id` must not be able to hide them — and the rows that come back
     // outside the scope are dropped (`total` is recomputed so it matches).
-    const readScope = method === 'query' && isScopeControlled(String(req.query?.entity || ''))
+    const readScope = decision.kind === 'read' && isScopeControlled(String(req.query?.entity || ''))
       ? sessionScope(req.auth?.session)
       : { scoped: false };
 

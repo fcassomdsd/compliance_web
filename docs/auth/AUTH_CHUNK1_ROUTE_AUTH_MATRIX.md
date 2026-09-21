@@ -131,26 +131,81 @@ does not offer what the guard would refuse.
 No role gate on any route: `POST /login`, `GET /session`, `POST /locale`, `POST /logout`,
 `GET /ticket` (own session + CSRF), `GET /diagnostics` (unauthenticated).
 
-## 5. Where there is no server-side role gate
+## 5. The Node-RED gateway (`/nodered/*`)
 
-Stated plainly because it changes how the tables above should be read.
+`server/nodered/router.cjs` is an **allow-list**, not a pass-through: a request that
+`server/nodered/gatewayPolicy.cjs` does not classify is refused with 403 `AUTH_GATEWAY_FORBIDDEN`
+and never reaches the gateway. That matters because the same gateway also serves the Electron app
+and the import service — `/importCanonical`, `/importFollowUps`, `/checklist`, `/findings/open` and
+the rest are not reachable from a browser session.
 
-**`/nodered/*` (`server/nodered/router.cjs`) has no role check at all.** It requires a session and
-then forwards any method and any path to the gateway — it is a pass-through, not an allow-list. The
-only enumerated sets in it decide whether to apply the *specialty* scope, not whether to allow the
-call. Any authenticated session, of any role or of none, can reach `addEntity`, `updateEntity`,
-`deleteEntity`, `addLinks`, `deleteLinks`, `queryEntity`, `inspectionPlan`, `inspectionReport`,
-`serviceAreas`, `assignmentGroup` and the rest, limited only by the Alfresco ACLs its ticket carries.
+Order of checks: session → classification → role → specialty scope → forward.
 
-Consequently these frontend routes have **no server counterpart** — their data path is entirely
-Node-RED, so their role restriction is enforced by the Vue router alone:
+### Reads — a session is enough
 
-`/site-visit`, `/assign-inspectors`, `/checklist`, `/inspection-plan`, `/inspection-report`,
-`/inspection-cadences`.
+`POST /queryEntity`, `GET /getLinks`, `GET /serviceAreas`, `GET /inspector/:externalId`,
+`GET /siteVisit/:ref`, `GET /assignmentGroup/:group`.
 
-That also makes `assigner` a frontend-only role: no server route requires it.
+Every role legitimately reads reference data, and `/inspector/:externalId` is called for *every*
+user at login. What a scoped session may **see** is decided by the specialty read filter, not by a
+role. A prefixed read takes exactly one further path segment.
 
-Closing this is tracked separately; it is the largest open gap in the role model.
+### Writes — per entity
+
+| Entity | add | update | delete |
+|---|---|---|---|
+| `SiteVisit` | planner, admin | planner, admin | planner, admin |
+| `InspectedProvider` | planner, admin | planner, admin | planner, admin |
+| `Inspection` | planner, admin | planner, **inspector**, **assigner**, admin | planner, admin |
+| `InspectionSchedule` | planner, admin | planner, admin | planner, admin |
+| `InspectedService` | planner, admin | planner, admin | planner, admin |
+| `InspectedSpecialty` | planner, admin | planner, admin | planner, admin |
+| `InspectionQuestion` | inspector, admin | inspector, admin | inspector, admin |
+| `InspectionCadence` | planner, admin | planner, admin | planner, admin |
+
+Any other entity cannot be written through the proxy at all: locations, providers, inspectors,
+specialties, checklist questions and the rest of the reference data are maintained in AtroCore
+itself.
+
+`Inspection.update` carries three roles because three screens perform it — InspectionManager as a
+planner, InspectionReport as an inspector, AssignInspectors as an assigner. This is **entity-level**
+authorization: it cannot express "an assigner may set `status=Assigned` and nothing else". That
+distinction belongs in the flows or a domain layer.
+
+### Link writes — per entity + relation
+
+| Relation | Roles |
+|---|---|
+| `InspectedSpecialty.actingInspectors` | assigner, admin |
+
+The paths are `/addLinks` and `/deleteLinks` — **no `Entity` suffix**, which is what the flows
+expose and what the client calls. The proxy previously looked for `/addLinksEntity`, so link writes
+matched no rule and were forwarded without a specialty check.
+
+### Actions — the two state-changing GETs
+
+| Action | Roles |
+|---|---|
+| `GET /inspectionPlan` | planner, inspector, admin |
+| `GET /inspectionReport` | inspector, admin |
+
+Matching `/inspection-plan` and `/inspection-report` in the frontend table.
+
+### What this means for `assigner`
+
+`assigner` is now enforced server-side: it is the only role besides `admin` that may write
+`InspectedSpecialty.actingInspectors`, and one of three that may update an `Inspection`. It is no
+longer a frontend-only role.
+
+### Interaction with the specialty scope
+
+The scope applies only to a session working as an inspector, and the only gateway writes an
+inspector may perform are `InspectionQuestion.*` and `Inspection.update` — so those are where the
+write-side specialty guard actually bites. Every other gateway write belongs to a planner or an
+assigner, and those sessions are unscoped by definition. The guard still runs on link writes and on
+the other entities; it is simply unreachable for them under the current role matrix, and stays in
+place so that it holds if the matrix changes. The **read** filter is unaffected and still applies to
+every scope-controlled read a scoped session makes.
 
 ## 6. Test cases for this matrix
 
@@ -164,6 +219,15 @@ Closing this is tracked separately; it is the largest open gap in the role model
 7. A session whose groups map to no role → authenticates, 403 on every gated route, lands on
    `/notifications`.
 8. Unknown route → `notFound`.
+9. Gateway: `reporter` → `POST /nodered/addEntity?entity=SiteVisit` → 403; `planner` → 200.
+10. Gateway: `planner` → `POST /nodered/addEntity?entity=InspectionQuestion` → 403;
+    `inspector` → 200.
+11. Gateway: any role → `POST /nodered/importCanonical` → 403 `AUTH_GATEWAY_FORBIDDEN`;
+    `DELETE /nodered/deleteEntity?entity=Location` → 403.
+12. Gateway: `inspector` → `POST /nodered/addLinks?entity=InspectedSpecialty&link=actingInspectors`
+    → 403; `assigner` → forwarded.
 
 Covered by `tests/unit/router/guards.test.js`, `tests/unit/router/navigation.test.js`,
-`tests/unit/App.test.js` and the server router tests; `npm run test:auth:all` runs the gate.
+`tests/unit/App.test.js`, `tests/server/nodeRedProxy.test.js` and the server router tests;
+`npm run test:auth:all` runs the gate. `scripts/verify-specialty-scope-e2e.sh` drives the gateway
+rules over HTTP against the real server process.

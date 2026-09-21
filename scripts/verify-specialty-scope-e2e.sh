@@ -61,13 +61,16 @@ http.createServer((req, res) => {
     lastRequest = { method: req.method, path: url.pathname, headers: req.headers, body: raw || null };
 
     if (url.pathname.includes('/authentication/versions/1/tickets')) return send(res, 201, { entry: { id: 'E2E-TICKET' } });
-    // Both users have the same Inspector record; only their groups differ, which
+    // Every user has the same Inspector record; only their groups differ, which
     // is the whole point — the scope must follow the role, not the record.
+    const GROUPS = {
+      'pablo.planner': ['GROUP_INSPECTOR', 'GROUP_PLANNER'],
+      'paula.planneronly': ['GROUP_PLANNER'],
+    };
     if (url.pathname.endsWith('/groups')) {
-      const groups = url.pathname.includes('pablo.planner')
-        ? [{ entry: { id: 'GROUP_INSPECTOR' } }, { entry: { id: 'GROUP_PLANNER' } }]
-        : [{ entry: { id: 'GROUP_INSPECTOR' } }];
-      return send(res, 200, { list: { entries: groups } });
+      const user = Object.keys(GROUPS).find((name) => url.pathname.includes(name));
+      const names = user ? GROUPS[user] : ['GROUP_INSPECTOR'];
+      return send(res, 200, { list: { entries: names.map((id) => ({ entry: { id } })) } });
     }
     if (url.pathname.startsWith('/inspector/')) {
       return send(res, 200, { id: 'insp-ana', name: 'Ana', specialties: [{ id: 'spec_ats', code: 'ATS', name: 'ATS' }] });
@@ -160,11 +163,25 @@ print('  gateway saw x-api-key:', headers.get('x-api-key'), '| ticket:', headers
 sys.exit(0 if headers.get('x-api-key') == 'e2e-key' and headers.get('x-alfresco-ticket') == 'E2E-TICKET' and 'cookie' not in headers else 1)
 " && { echo "  ok   api key + session ticket injected, cookie withheld"; pass=$((pass+1)); } || { echo "  FAIL header injection"; fail=$((fail+1)); }
 
-code=$(curl -s -o /dev/null -w '%{http_code}' -b "$JAR" -X POST "http://127.0.0.1:${APP_PORT}/nodered/addEntity?entity=InspectedSpecialty" -H 'Content-Type: application/json' -d '{"specialtyId":"spec_met"}')
+# InspectionQuestion is the checklist write an inspector performs, so it is the
+# write where the specialty scope actually bites (every other gateway write
+# belongs to a planner or an assigner, and those sessions are unscoped).
+code=$(curl -s -o /dev/null -w '%{http_code}' -b "$JAR" -X POST "http://127.0.0.1:${APP_PORT}/nodered/addEntity?entity=InspectionQuestion" -H 'Content-Type: application/json' -d '{"inspectedSpecialty":"spec_met"}')
 check "out-of-scope addEntity -> 403" 403 "$code"
 
-code=$(curl -s -o /dev/null -w '%{http_code}' -b "$JAR" -X POST "http://127.0.0.1:${APP_PORT}/nodered/addEntity?entity=InspectedSpecialty" -H 'Content-Type: application/json' -d '{"specialtyId":"spec_ats"}')
+code=$(curl -s -o /dev/null -w '%{http_code}' -b "$JAR" -X POST "http://127.0.0.1:${APP_PORT}/nodered/addEntity?entity=InspectionQuestion" -H 'Content-Type: application/json' -d '{"inspectedSpecialty":"spec_ats"}')
 check "in-scope addEntity -> 200" 200 "$code"
+
+# The gateway proxy is an allow-list, not a pass-through: a role gate per
+# operation, and nothing outside the list forwarded at all.
+code=$(curl -s -o /dev/null -w '%{http_code}' -b "$JAR" -X POST "http://127.0.0.1:${APP_PORT}/nodered/addEntity?entity=SiteVisit" -H 'Content-Type: application/json' -d '{"locationId":"loc-1"}')
+check "inspector writing a planner's entity -> 403" 403 "$code"
+
+code=$(curl -s -o /dev/null -w '%{http_code}' -b "$JAR" -X POST "http://127.0.0.1:${APP_PORT}/nodered/importCanonical" -H 'Content-Type: application/json' -d '{}')
+check "ingestion route the app never calls -> 403" 403 "$code"
+
+code=$(curl -s -o /dev/null -w '%{http_code}' -b "$JAR" -X DELETE "http://127.0.0.1:${APP_PORT}/nodered/deleteEntity?entity=Location&id=loc-1")
+check "deleting reference data -> 403" 403 "$code"
 
 # Same Inspector record, same specialties — but this user also holds the planner
 # role, so the session works as a planner and is not narrowed at all.
@@ -189,6 +206,21 @@ sys.exit(0 if ids == ['q-ats', 'q-met'] and data.get('total') == 2 else 1)
 
 code=$(curl -s -o /dev/null -w '%{http_code}' -b "$PLANNER_JAR" -X POST "http://127.0.0.1:${APP_PORT}/nodered/addEntity?entity=InspectedSpecialty" -H 'Content-Type: application/json' -d '{"specialtyId":"spec_met"}')
 check "planner writes outside the Inspector record's specialties -> 200" 200 "$code"
+
+# This user holds both roles, so the union of both role sets is what they get.
+code=$(curl -s -o /dev/null -w '%{http_code}' -b "$PLANNER_JAR" -X POST "http://127.0.0.1:${APP_PORT}/nodered/addEntity?entity=InspectionQuestion" -H 'Content-Type: application/json' -d '{"questionId":"q-1"}')
+check "inspector+planner writes either role's entity -> 200" 200 "$code"
+
+# A planner with no inspector role is refused the checklist write.
+ONLY_JAR="$WORK_DIR/cookies-planner-only.txt"
+curl -s -c "$ONLY_JAR" -X POST "http://127.0.0.1:${APP_PORT}/api/auth/login" -H 'Content-Type: application/json' \
+  -d '{"username":"paula.planneronly","password":"secret"}' >/dev/null
+
+code=$(curl -s -o /dev/null -w '%{http_code}' -b "$ONLY_JAR" -X POST "http://127.0.0.1:${APP_PORT}/nodered/addEntity?entity=InspectionQuestion" -H 'Content-Type: application/json' -d '{"questionId":"q-1"}')
+check "planner-only writing an inspector's entity -> 403" 403 "$code"
+
+code=$(curl -s -o /dev/null -w '%{http_code}' -b "$ONLY_JAR" -X POST "http://127.0.0.1:${APP_PORT}/nodered/addEntity?entity=SiteVisit" -H 'Content-Type: application/json' -d '{"locationId":"loc-1"}')
+check "planner-only writing its own entity -> 200" 200 "$code"
 
 echo
 echo "sandbox e2e: ${pass} passed, ${fail} failed"

@@ -69,13 +69,24 @@ than widening it.
 The browser reaches the gateway through the app server (`/nodered/*`), never directly. Every call
 already requires a session; with a scope it is also checked:
 
-- **Writes** (`addEntity`, `updateEntity`, `deleteEntity`, `addLinksEntity`, `deleteLinksEntity`):
+The proxy checks the session, then the **role** (`server/nodered/gatewayPolicy.cjs` — an allow-list
+of gateway operations with a role set each; see
+[`AUTH_CHUNK1_ROUTE_AUTH_MATRIX.md`](AUTH_CHUNK1_ROUTE_AUTH_MATRIX.md) §5), then the scope:
+
+- **Writes** (`addEntity`, `updateEntity`, `deleteEntity`, `addLinks`, `deleteLinks`):
   `server/nodered/scopeGuard.cjs` reads the specialty from the payload, and for a delete, a
   status-only update or a link write from the stored record — following
   `Inspection.inspectedSpecialties → InspectedSpecialty.specialtyId` when the entity only holds link
   ids. A link write is attributed to the record it hangs off, which is the record that carries the
   specialty. Outside the scope → 403 `AUTH_SCOPE_FORBIDDEN`; record unreadable → 403
   `AUTH_SCOPE_UNVERIFIED` (a write that cannot be attributed is not assumed in scope).
+
+  **Which writes this actually reaches.** A scoped session works as an inspector, and the only
+  gateway writes an inspector may perform are `InspectionQuestion.*` and `Inspection.update` — so
+  those are where the write guard bites. Every other gateway write belongs to a planner or an
+  assigner, and those sessions are unscoped by definition. The guard still runs for them; it is
+  simply unreachable under the current role matrix, and stays so that it holds if the matrix
+  changes.
 - **State-changing GETs** (`/inspectionPlan`, `/inspectionReport`): attributed to the inspections
   they act on — the provider's inspection at that site visit, or every inspection of the visit when
   the call names no provider (read through
@@ -107,6 +118,10 @@ The `/api` surface (findings, CAPs, drafts, reports) is filtered server-side:
   `specialtyCode` filter their web scripts accept, so their counts describe the same population as
   the lists they return.
 
+Note the link paths are `/addLinks` and `/deleteLinks`, with no `Entity` suffix — what the flows
+expose and what the client calls. The proxy used to match `/addLinksEntity`, so link writes fell
+through the guard entirely until the gateway allow-list replaced that matching.
+
 ### 3. UI — `useAuthStore`
 
 The UI is the *offer* side, not the boundary: it must not propose an action the server will refuse.
@@ -122,7 +137,7 @@ kept in step with the server's.
 
 ## What is deliberately not covered
 
-- **`getLinksEntity`** (a read of one record's relations) is not filtered; the record it hangs off
+- **`getLinks`** (a read of one record's relations) is not filtered; the record it hangs off
   is checked on the write path, and the relations themselves are what the caller already may read
   through `queryEntity`.
 - **`/api/auth/ticket`** still returns the Alfresco ticket to the browser, although the proxy no
@@ -136,7 +151,7 @@ Unit and route tests live next to the code they cover:
 | Area | Test |
 |---|---|
 | scope resolution, the role rule, refresh, unscoped cases | `tests/server/authSpecialtyScope.test.js` |
-| gateway proxy: auth, key/ticket injection, write guard, link writes, plan/report actions, read filter | `tests/server/nodeRedProxy.test.js` |
+| gateway proxy: auth, allow-list, role gate, key/ticket injection, write guard, link writes, plan/report actions, read filter | `tests/server/nodeRedProxy.test.js` |
 | API narrowing: lists, id-addressed refusals, CAP drafts | `tests/server/scopeEnforcement.test.js` |
 | store and picker gating | `tests/unit/...`, `tests/server/...` (see `npm run test:auth:all`) |
 

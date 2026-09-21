@@ -50,8 +50,17 @@ function json(res, status, payload) {
 
 const INSPECTOR = { id: 'insp-ana', name: 'Ana', specialties: [{ id: 'spec_ats', code: 'ATS', name: 'ATS' }] };
 
-function buildTestApp({ gatewayUrl, config: configOverrides = {}, groups = ['GROUP_INSPECTOR'] } = {}) {
-  const repo = new InMemorySessionRepository();
+// Roles beyond the mock's default inspector/planner/admin.
+const ROLE_MAP = new Map([
+  ['group_inspector', ['inspector']],
+  ['group_planner', ['planner']],
+  ['group_admin', ['admin']],
+  ['group_assigner', ['assigner']],
+  ['group_reporter', ['reporter']],
+]);
+
+function buildTestApp({ gatewayUrl, config: configOverrides = {}, groups = ['GROUP_INSPECTOR'], groupRoleMap = ROLE_MAP } = {}) {
+  const repo = new InMemorySessionRepository(groupRoleMap);
   const alfrescoClient = {
     createTicket: vi.fn(async (username) => ({
       ticket: `ticket-${username}`,
@@ -160,18 +169,167 @@ describe('Node-RED proxy', () => {
     expect(res.body).toEqual({ success: false, error: 'upstream down' });
   });
 
+  // The proxy is an allow-list, not a pass-through. The gateway also serves the
+  // Electron app and the import service; those routes must not be reachable from
+  // a browser session just because the prefix is proxied.
+  it.each([
+    ['POST', '/nodered/importCanonical'],
+    ['POST', '/nodered/importFollowUps'],
+    ['GET', '/nodered/checklist'],
+    ['GET', '/nodered/findings/open'],
+    ['GET', '/nodered/content/lastSeq'],
+    ['GET', '/nodered/inspectors'],
+  ])('refuses %s %s, which this app never calls', async (method, path) => {
+    gateway = await startStubGateway(defaultHandler);
+    const { app } = buildTestApp({ gatewayUrl: gateway.url, groups: ['GROUP_ADMIN'] });
+    const cookie = await loginCookie(app, 'root.admin');
+
+    const res = await request(app)[method.toLowerCase()](path).set('Cookie', cookie).send();
+
+    expect(res.status).toBe(403);
+    expect(res.body.code).toBe('AUTH_GATEWAY_FORBIDDEN');
+    expect(gateway.requests.filter((entry) => !entry.url.startsWith('/inspector/'))).toHaveLength(0);
+  });
+
+  it.each([
+    ['/nodered/inspector/ana/extra', 'a prefixed read takes one segment'],
+    ['/nodered/inspector/../importCanonical', 'a path that climbs out of the prefix'],
+  ])('refuses %s (%s)', async (path) => {
+    gateway = await startStubGateway(defaultHandler);
+    const { app } = buildTestApp({ gatewayUrl: gateway.url, groups: ['GROUP_ADMIN'] });
+    const cookie = await loginCookie(app, 'root.admin');
+
+    const res = await request(app).get(path).set('Cookie', cookie);
+
+    expect(res.status).toBe(403);
+    expect(res.body.code).toBe('AUTH_GATEWAY_FORBIDDEN');
+  });
+
+  it('refuses a write to an entity this app never writes', async () => {
+    gateway = await startStubGateway(defaultHandler);
+    const { app } = buildTestApp({ gatewayUrl: gateway.url, groups: ['GROUP_ADMIN'] });
+    const cookie = await loginCookie(app, 'root.admin');
+
+    const res = await request(app)
+      .delete('/nodered/deleteEntity?entity=Location&id=loc-1')
+      .set('Cookie', cookie);
+
+    expect(res.status).toBe(403);
+    expect(res.body.code).toBe('AUTH_GATEWAY_FORBIDDEN');
+  });
+
+  // Each write is allowed for the roles of the screens that perform it.
+  it.each([
+    ['reporter', 'GROUP_REPORTER', 403],
+    ['inspector', 'GROUP_INSPECTOR', 403],
+    ['planner', 'GROUP_PLANNER', 200],
+    ['admin', 'GROUP_ADMIN', 200],
+  ])('lets %s POST addEntity?entity=SiteVisit -> %i', async (role, group, expected) => {
+    gateway = await startStubGateway(defaultHandler);
+    const { app } = buildTestApp({ gatewayUrl: gateway.url, groups: [group] });
+    const cookie = await loginCookie(app, `user.${role}`);
+
+    const res = await request(app)
+      .post('/nodered/addEntity?entity=SiteVisit')
+      .set('Cookie', cookie)
+      .send({ locationId: 'loc-1' });
+
+    expect(res.status).toBe(expected);
+  });
+
+  it.each([
+    ['reporter', 'GROUP_REPORTER', 403],
+    ['planner', 'GROUP_PLANNER', 403],
+    ['inspector', 'GROUP_INSPECTOR', 200],
+  ])('lets %s POST addEntity?entity=InspectionQuestion -> %i', async (role, group, expected) => {
+    gateway = await startStubGateway(defaultHandler);
+    const { app } = buildTestApp({ gatewayUrl: gateway.url, groups: [group] });
+    const cookie = await loginCookie(app, `user.${role}`);
+
+    const res = await request(app)
+      .post('/nodered/addEntity?entity=InspectionQuestion')
+      .set('Cookie', cookie)
+      .send({ questionId: 'q-1' });
+
+    expect(res.status).toBe(expected);
+  });
+
+  // An Inspection is updated from three screens under three different roles.
+  it.each([
+    ['planner', 'GROUP_PLANNER', 200],
+    ['inspector', 'GROUP_INSPECTOR', 200],
+    ['assigner', 'GROUP_ASSIGNER', 200],
+    ['reporter', 'GROUP_REPORTER', 403],
+  ])('lets %s PUT updateEntity?entity=Inspection -> %i', async (role, group, expected) => {
+    gateway = await startStubGateway((entry, res) => {
+      if (entry.url.startsWith('/inspector/')) return json(res, 200, INSPECTOR);
+      if (entry.url.startsWith('/queryEntity')) {
+        return json(res, 200, { total: 1, list: [{ id: 'insp-1', inspectedSpecialties: [] }] });
+      }
+      return json(res, 200, { ok: true });
+    });
+    const { app } = buildTestApp({ gatewayUrl: gateway.url, groups: [group] });
+    const cookie = await loginCookie(app, `user.${role}`);
+
+    const res = await request(app)
+      .put('/nodered/updateEntity?entity=Inspection&id=insp-1')
+      .set('Cookie', cookie)
+      .send({ status: 'Assigned' });
+
+    expect(res.status).toBe(expected);
+  });
+
+  it.each([
+    ['/nodered/inspectionPlan?siteVisit=V-1', 'GROUP_REPORTER', 403],
+    ['/nodered/inspectionPlan?siteVisit=V-1', 'GROUP_PLANNER', 200],
+    ['/nodered/inspectionReport?siteVisit=V-1&reportDate=2026-09-21&provider=p1', 'GROUP_PLANNER', 403],
+    ['/nodered/inspectionReport?siteVisit=V-1&reportDate=2026-09-21&provider=p1', 'GROUP_INSPECTOR', 200],
+  ])('gates %s for %s -> %i', async (path, group, expected) => {
+    gateway = await startStubGateway((entry, res) => {
+      if (entry.url.startsWith('/inspector/')) return json(res, 200, INSPECTOR);
+      if (entry.url.startsWith('/queryEntity')) {
+        return json(res, 200, { total: 1, list: [{ id: 'insp-1', inspectedSpecialties: [{ specialtyId: 'spec_ats' }] }] });
+      }
+      return json(res, 200, { ok: true });
+    });
+    const { app } = buildTestApp({ gatewayUrl: gateway.url, groups: [group] });
+    const cookie = await loginCookie(app, 'user.x');
+
+    const res = await request(app).get(path).set('Cookie', cookie);
+
+    expect(res.status).toBe(expected);
+  });
+
+  // Reads stay open to any session: every role reads reference data, and
+  // /inspector/:externalId is called for every user at login.
+  it.each([
+    ['GROUP_REPORTER'],
+    ['GROUP_ASSIGNER'],
+  ])('lets %s read through the gateway', async (group) => {
+    gateway = await startStubGateway(defaultHandler);
+    const { app } = buildTestApp({ gatewayUrl: gateway.url, groups: [group] });
+    const cookie = await loginCookie(app, 'user.x');
+
+    const res = await request(app)
+      .post('/nodered/queryEntity?entity=Location')
+      .set('Cookie', cookie)
+      .send({ deleted: false });
+
+    expect(res.status).toBe(200);
+  });
+
   it('allows a scoped session to write a record in its own specialty', async () => {
     gateway = await startStubGateway(defaultHandler);
     const { app } = buildTestApp({ gatewayUrl: gateway.url });
     const cookie = await loginCookie(app);
 
     const res = await request(app)
-      .post('/nodered/addEntity?entity=InspectedSpecialty')
+      .post('/nodered/addEntity?entity=InspectionQuestion')
       .set('Cookie', cookie)
-      .send({ name: 'ATS', specialtyId: 'spec_ats', inspectionId: 'insp-1' });
+      .send({ inspectedSpecialty: 'spec_ats', questionId: 'q-1' });
 
     expect(res.status).toBe(200);
-    expect(gateway.requests.at(-1).url).toBe('/addEntity?entity=InspectedSpecialty');
+    expect(gateway.requests.at(-1).url).toBe('/addEntity?entity=InspectionQuestion');
   });
 
   it('refuses a write that names a specialty outside the session scope', async () => {
@@ -180,9 +338,9 @@ describe('Node-RED proxy', () => {
     const cookie = await loginCookie(app);
 
     const res = await request(app)
-      .post('/nodered/addEntity?entity=InspectedSpecialty')
+      .post('/nodered/addEntity?entity=InspectionQuestion')
       .set('Cookie', cookie)
-      .send({ name: 'MET', specialtyId: 'spec_met', inspectionId: 'insp-1' });
+      .send({ inspectedSpecialty: 'spec_met', questionId: 'q-1' });
 
     expect(res.status).toBe(403);
     expect(res.body.code).toBe('AUTH_SCOPE_FORBIDDEN');
@@ -196,7 +354,7 @@ describe('Node-RED proxy', () => {
       if (entry.url.startsWith('/queryEntity')) {
         return json(res, 200, {
           total: 1,
-          list: [{ id: 'q-met', specialty: { id: 'spec_met', code: 'MET' } }],
+          list: [{ id: 'q-met', inspectedSpecialty: 'spec_met' }],
         });
       }
       return json(res, 200, { ok: true });
@@ -205,9 +363,9 @@ describe('Node-RED proxy', () => {
     const cookie = await loginCookie(app);
 
     const res = await request(app)
-      .put('/nodered/updateEntity?entity=ChecklistQuestion&id=q-met')
+      .put('/nodered/updateEntity?entity=InspectionQuestion&id=q-met')
       .set('Cookie', cookie)
-      .send({ name: 'Renamed' });
+      .send({ comment: 'Renamed' });
 
     expect(res.status).toBe(403);
     expect(res.body.code).toBe('AUTH_SCOPE_FORBIDDEN');
@@ -218,7 +376,7 @@ describe('Node-RED proxy', () => {
     gateway = await startStubGateway((entry, res) => {
       if (entry.url.startsWith('/inspector/')) return json(res, 200, INSPECTOR);
       if (entry.url.startsWith('/queryEntity')) {
-        return json(res, 200, { total: 1, list: [{ id: 'q-ats', specialty: { id: 'spec_ats', code: 'ATS' } }] });
+        return json(res, 200, { total: 1, list: [{ id: 'q-ats', inspectedSpecialty: 'spec_ats' }] });
       }
       return json(res, 200, { ok: true });
     });
@@ -226,12 +384,12 @@ describe('Node-RED proxy', () => {
     const cookie = await loginCookie(app);
 
     const res = await request(app)
-      .put('/nodered/updateEntity?entity=ChecklistQuestion&id=q-ats')
+      .put('/nodered/updateEntity?entity=InspectionQuestion&id=q-ats')
       .set('Cookie', cookie)
-      .send({ name: 'Renamed' });
+      .send({ comment: 'Renamed' });
 
     expect(res.status).toBe(200);
-    expect(gateway.requests.at(-1).url).toBe('/updateEntity?entity=ChecklistQuestion&id=q-ats');
+    expect(gateway.requests.at(-1).url).toBe('/updateEntity?entity=InspectionQuestion&id=q-ats');
   });
 
   it('follows the inspected-specialty relation when the entity only holds link ids', async () => {
@@ -252,8 +410,9 @@ describe('Node-RED proxy', () => {
     const cookie = await loginCookie(app);
 
     const res = await request(app)
-      .delete('/nodered/deleteEntity?entity=Inspection&id=insp-met')
-      .set('Cookie', cookie);
+      .put('/nodered/updateEntity?entity=Inspection&id=insp-met')
+      .set('Cookie', cookie)
+      .send({ status: 'Reported' });
 
     expect(res.status).toBe(403);
     expect(res.body.code).toBe('AUTH_SCOPE_FORBIDDEN');
@@ -282,8 +441,9 @@ describe('Node-RED proxy', () => {
     const cookie = await loginCookie(app);
 
     const res = await request(app)
-      .delete('/nodered/deleteEntity?entity=Inspection&id=insp-1')
-      .set('Cookie', cookie);
+      .put('/nodered/updateEntity?entity=Inspection&id=insp-1')
+      .set('Cookie', cookie)
+      .send({ status: 'Reported' });
 
     expect(res.status).toBe(403);
     expect(res.body.code).toBe('AUTH_SCOPE_UNVERIFIED');
@@ -360,25 +520,51 @@ describe('Node-RED proxy', () => {
     expect(res.body.total).toBe(2);
   });
 
-  it('guards a link write by the specialty of the record it hangs off', async () => {
-    gateway = await startStubGateway((entry, res) => {
-      if (entry.url.startsWith('/inspector/')) return json(res, 200, INSPECTOR);
-      if (entry.url.includes('entity=InspectedSpecialty')) {
-        return json(res, 200, { total: 1, list: [{ id: 'ispec-1', specialtyId: 'spec_met' }] });
-      }
-      return json(res, 200, { ok: true });
-    });
+  // The link routes are `/addLinks` and `/deleteLinks` — no `Entity` suffix, which
+  // is what the flows expose and what the client calls. The proxy used to look for
+  // `/addLinksEntity`, so link writes matched no rule and were forwarded unguarded.
+  it('forwards a link write for the role whose job it is', async () => {
+    gateway = await startStubGateway(defaultHandler);
+    const { app } = buildTestApp({ gatewayUrl: gateway.url, groups: ['GROUP_ASSIGNER'] });
+    const cookie = await loginCookie(app, 'alba.assigner');
+
+    const res = await request(app)
+      .post('/nodered/addLinks?entity=InspectedSpecialty&id=ispec-1&link=actingInspectors')
+      .set('Cookie', cookie)
+      .send({ ids: ['insp-9'] });
+
+    expect(res.status).toBe(200);
+    expect(gateway.requests.at(-1).url).toBe('/addLinks?entity=InspectedSpecialty&id=ispec-1&link=actingInspectors');
+  });
+
+  it('refuses a link write from a session that is not an assigner', async () => {
+    gateway = await startStubGateway(defaultHandler);
     const { app } = buildTestApp({ gatewayUrl: gateway.url });
     const cookie = await loginCookie(app);
 
     const res = await request(app)
-      .post('/nodered/addLinksEntity?entity=InspectedSpecialty&id=ispec-1&link=actingInspectors')
+      .post('/nodered/addLinks?entity=InspectedSpecialty&id=ispec-1&link=actingInspectors')
       .set('Cookie', cookie)
       .send({ ids: ['insp-9'] });
 
     expect(res.status).toBe(403);
-    expect(res.body.code).toBe('AUTH_SCOPE_FORBIDDEN');
-    expect(gateway.requests.filter((entry) => entry.url.startsWith('/addLinksEntity'))).toHaveLength(0);
+    expect(res.body.code).toBe('AUTH_FORBIDDEN');
+    expect(gateway.requests.filter((entry) => entry.url.startsWith('/addLinks'))).toHaveLength(0);
+  });
+
+  it('refuses a relation that is not written by this app', async () => {
+    gateway = await startStubGateway(defaultHandler);
+    const { app } = buildTestApp({ gatewayUrl: gateway.url, groups: ['GROUP_ADMIN'] });
+    const cookie = await loginCookie(app, 'root.admin');
+
+    const res = await request(app)
+      .post('/nodered/addLinks?entity=Inspector&id=insp-1&link=specialty')
+      .set('Cookie', cookie)
+      .send({ ids: ['spec_met'] });
+
+    expect(res.status).toBe(403);
+    expect(res.body.code).toBe('AUTH_GATEWAY_FORBIDDEN');
+    expect(gateway.requests.filter((entry) => entry.url.startsWith('/addLinks'))).toHaveLength(0);
   });
 
   it('refuses to plan an inspection of another specialty', async () => {
