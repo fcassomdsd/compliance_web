@@ -139,7 +139,8 @@ and never reaches the gateway. That matters because the same gateway also serves
 and the import service — `/importCanonical`, `/importFollowUps`, `/checklist`, `/findings/open` and
 the rest are not reachable from a browser session.
 
-Order of checks: session → classification → role → **field rules** → specialty scope → forward.
+Order of checks: session → classification → role → **field rules → record ownership** → specialty
+scope → forward.
 
 ### Reads — a session is enough
 
@@ -170,24 +171,52 @@ itself.
 #### Field rules on `Inspection.update`
 
 `Inspection.update` is the only gateway write more than one non-admin role performs, and the three
-roles do three different jobs on it — so its rule names the fields, and where a screen only ever
-writes one value, the values:
+roles do three different jobs on it — so its rule names the fields, and where a screen writes one
+value or one person's data, the values and the owner too:
 
 | Role | May write | Why |
 |---|---|---|
-| `planner` | *anything* | It owns the record. InspectionManager loads the inspection with `{ ...list[0] }` and saves it back whole, so its payload carries every column AtroCore returns — a field list for the owner would be a list of the table's columns and would break the moment one was added. |
-| `inspector` | `activityTypeId`, `objective`, `scope`, `description`, `conclusion`, `code` | InspectionReport stamps the report outcome before generating it. **Not `status`**: the `Reported` transition belongs to the `/inspectionReport` action. `code` is there because `updateInspection` re-mints the activity code when the activity type changes while the inspection is still at `Created`. |
+| `planner` | `activityTypeId`, `objective`, `scope`, `status`, `code` | InspectionManager defines the inspection and moves it to `Defined`. `code` is there because `updateInspection` re-mints the activity code when the activity type changes while the inspection is still at `Created`. |
+| `inspector` | `description`, `conclusion` — **and only if the session is the site visit's main inspector** | InspectionReport stamps the report outcome. The objective, scope and activity type are the planner's and are shown read-only there; `status` is not a field write either, since the `Reported` transition belongs to the `/inspectionReport` action. |
 | `assigner` | `status`, and only the value `Assigned` | AssignInspectors moves the inspection to `Assigned` on both its paths (first assignment and reassignment) and does nothing else to it. |
 | `admin` | *anything* | Break-glass. |
 
+The two screens are separated in the UI to match: InspectionManager shows `description`/`conclusion`
+read-only ("set during report"), and InspectionReport shows `objective`/`scope`/activity type
+read-only. Neither submits the fields it only displays.
+
 A session holding two roles gets the **union** of their field sets, the same way authorization is an
-any-role match — so an assigner who is also a planner is unrestricted. A payload is refused whole,
-with 403 `AUTH_GATEWAY_FIELD_FORBIDDEN`, as soon as one field is out of bounds; nothing reaches the
-gateway.
+any-role match. Ownership, though, is tracked **per field**: a second role lifts the requirement only
+on the fields it grants in its own right, so an inspector who is also a planner may write the
+planner's fields freely and still only sets the report outcome on a visit they lead.
+
+A payload is refused whole, with 403 `AUTH_GATEWAY_FIELD_FORBIDDEN`, as soon as one field is out of
+bounds; nothing reaches the gateway.
+
+#### Record ownership
+
+`description` and `conclusion` are the **report outcome**, and they belong to the main inspector of
+the site visit — the person designated to lead it, not to whoever holds the inspector role. Being
+main inspector is a per-site-visit attribution (`SiteVisit.mainInspectorId`): anyone can lead one
+visit and not the next, so no group membership and no role can express it.
+
+`server/nodered/ownershipGuard.cjs` resolves it the same way the specialty guard reads records back:
+
+```
+Inspection.inspectedProviderId -> InspectedProvider.siteVisitId -> SiteVisit.mainInspectorId
+```
+
+compared against the session's own `Inspector` id, resolved at login and carried in
+`metadata.inspectorId`. Note this is resolved for **any** session holding the `inspector` role, not
+only a specialty-scoped one — an inspector who is also a planner can still lead a visit.
+
+It fails closed, as the specialty guard does: 403 `AUTH_NOT_RECORD_OWNER` when the session is not
+the main inspector, and 403 `AUTH_OWNERSHIP_UNVERIFIED` when the chain cannot be followed or the
+visit names no main inspector. A write that cannot be attributed is not assumed to be the owner's.
 
 Every other write keeps a plain role list, because a single role owns the entity outright. Field
-rules are for the case this table shows: a role reaching an entity it does not own, for one narrow
-purpose.
+rules are for a role reaching an entity for one narrow purpose; ownership rules are for a field that
+belongs to a person.
 
 ### Link writes — per entity + relation
 
@@ -245,8 +274,10 @@ every scope-controlled read a scoped session makes.
     → 403; `assigner` → forwarded.
 13. Gateway fields: `assigner` → `PUT …updateEntity?entity=Inspection` with `{"status":"Assigned"}`
     → 200; with `{"status":"Complete"}` or `{"objective":"…"}` → 403
-    `AUTH_GATEWAY_FIELD_FORBIDDEN`. `inspector` → `{"conclusion":"…"}` → 200; `{"status":"Reported"}`
-    → 403. `planner` → the whole round-tripped record → 200.
+    `AUTH_GATEWAY_FIELD_FORBIDDEN`. `planner` → its own form fields → 200; `{"conclusion":"…"}` → 403.
+14. Gateway ownership: the visit's main inspector → `{"conclusion":"…"}` → 200; another inspector of
+    the same specialty → 403 `AUTH_NOT_RECORD_OWNER`; a visit with no main inspector → 403
+    `AUTH_OWNERSHIP_UNVERIFIED`. An `inspector` setting `{"status":"Reported"}` → 403 (field).
 
 Covered by `tests/unit/router/guards.test.js`, `tests/unit/router/navigation.test.js`,
 `tests/unit/App.test.js`, `tests/server/nodeRedProxy.test.js` and the server router tests;

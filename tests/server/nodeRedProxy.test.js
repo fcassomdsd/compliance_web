@@ -258,11 +258,13 @@ describe('Node-RED proxy', () => {
   });
 
   // An Inspection is updated from three screens under three different roles.
+  // `objective` is the planner's field, so the inspector's 403 here is a field
+  // refusal rather than an entity one — the codes distinguish them.
   it.each([
-    ['planner', 'GROUP_PLANNER', 200],
-    ['inspector', 'GROUP_INSPECTOR', 200],
-    ['reporter', 'GROUP_REPORTER', 403],
-  ])('lets %s PUT updateEntity?entity=Inspection -> %i', async (role, group, expected) => {
+    ['planner', 'GROUP_PLANNER', 200, null],
+    ['inspector', 'GROUP_INSPECTOR', 403, 'AUTH_GATEWAY_FIELD_FORBIDDEN'],
+    ['reporter', 'GROUP_REPORTER', 403, 'AUTH_FORBIDDEN'],
+  ])('lets %s PUT updateEntity?entity=Inspection -> %i', async (role, group, expected, code) => {
     gateway = await startStubGateway((entry, res) => {
       if (entry.url.startsWith('/inspector/')) return json(res, 200, INSPECTOR);
       if (entry.url.startsWith('/queryEntity')) {
@@ -279,16 +281,23 @@ describe('Node-RED proxy', () => {
       .send({ objective: 'Revised objective' });
 
     expect(res.status).toBe(expected);
+    if (code) expect(res.body.code).toBe(code);
   });
 
   // Inspection.update is the only write three roles perform, and they do three
   // different jobs on it — so the rule names the fields each may set.
   describe('field-level rules on Inspection.update', () => {
-    async function update(group, payload) {
+    async function update(group, payload, { mainInspectorId = INSPECTOR.id } = {}) {
       gateway = await startStubGateway((entry, res) => {
         if (entry.url.startsWith('/inspector/')) return json(res, 200, INSPECTOR);
-        if (entry.url.startsWith('/queryEntity')) {
-          return json(res, 200, { total: 1, list: [{ id: 'insp-1', inspectedSpecialties: [] }] });
+        if (entry.url.includes('entity=InspectedProvider')) {
+          return json(res, 200, { total: 1, list: [{ id: 'ip-1', siteVisitId: 'sv-1' }] });
+        }
+        if (entry.url.includes('entity=SiteVisit')) {
+          return json(res, 200, { total: 1, list: [{ id: 'sv-1', mainInspectorId }] });
+        }
+        if (entry.url.includes('entity=Inspection')) {
+          return json(res, 200, { total: 1, list: [{ id: 'insp-1', inspectedProviderId: 'ip-1', inspectedSpecialties: [] }] });
         }
         return json(res, 200, { ok: true });
       });
@@ -326,15 +335,20 @@ describe('Node-RED proxy', () => {
     });
 
     it('lets an inspector stamp the report outcome', async () => {
-      const res = await update('GROUP_INSPECTOR', {
-        description: 'd',
-        conclusion: 'c',
-        objective: 'o',
-        scope: 's',
-        activityTypeId: 'at-1',
-      });
+      const res = await update('GROUP_INSPECTOR', { description: 'd', conclusion: 'c' });
       expect(res.status).toBe(200);
     });
+
+    // InspectionReport shows these read-only; they are the planner's, set in
+    // InspectionManager. The view no longer sends them either.
+    it.each([['objective'], ['scope'], ['activityTypeId']])(
+      'stops an inspector writing the planner\'s %s',
+      async (field) => {
+        const res = await update('GROUP_INSPECTOR', { description: 'd', [field]: 'x' });
+        expect(res.status).toBe(403);
+        expect(res.body.code).toBe('AUTH_GATEWAY_FIELD_FORBIDDEN');
+      }
+    );
 
     it('stops an inspector setting the status directly', async () => {
       // The Reported transition is /inspectionReport's job, not a field write.
@@ -343,16 +357,38 @@ describe('Node-RED proxy', () => {
       expect(res.body.code).toBe('AUTH_GATEWAY_FIELD_FORBIDDEN');
     });
 
-    // The planner owns the record: InspectionManager loads it whole and saves it
-    // back whole, so its payload carries every column AtroCore returns.
-    it('leaves the owning role unrestricted', async () => {
-      const res = await update('GROUP_PLANNER', {
-        status: 'Defined',
-        objective: 'o',
-        inspectedProviderName: 'Round-tripped from the fetched record',
-        someColumnAddedLater: true,
-      });
+    it('lets a planner write the fields its form owns', async () => {
+      const res = await update('GROUP_PLANNER', { activityTypeId: 'at-1', objective: 'o', scope: 's' });
       expect(res.status).toBe(200);
+    });
+
+    it('stops a planner overwriting the report outcome', async () => {
+      // InspectionManager shows description/conclusion read-only and no longer
+      // submits the record it loaded, so these are never the planner's to write.
+      const res = await update('GROUP_PLANNER', { objective: 'o', conclusion: 'rewritten' });
+      expect(res.status).toBe(403);
+      expect(res.body.code).toBe('AUTH_GATEWAY_FIELD_FORBIDDEN');
+    });
+
+    // The report outcome belongs to the main inspector of the site visit, which
+    // is a fact about the record rather than about the session's roles.
+    it('stops an inspector who does not lead the visit', async () => {
+      const res = await update('GROUP_INSPECTOR', { conclusion: 'c' }, { mainInspectorId: 'insp-someone-else' });
+      expect(res.status).toBe(403);
+      expect(res.body.code).toBe('AUTH_NOT_RECORD_OWNER');
+      expect(gateway.requests.filter((e) => e.url.startsWith('/updateEntity'))).toHaveLength(0);
+    });
+
+    it('refuses the write when the visit names no main inspector', async () => {
+      const res = await update('GROUP_INSPECTOR', { conclusion: 'c' }, { mainInspectorId: null });
+      expect(res.status).toBe(403);
+      expect(res.body.code).toBe('AUTH_OWNERSHIP_UNVERIFIED');
+    });
+
+    it('does not ask about ownership for a field that does not need it', async () => {
+      const res = await update('GROUP_ASSIGNER', { status: 'Assigned' });
+      expect(res.status).toBe(200);
+      expect(gateway.requests.filter((e) => e.url.includes('entity=SiteVisit'))).toHaveLength(0);
     });
 
     it('grants the union of both role sets to a user holding two roles', async () => {
@@ -509,14 +545,22 @@ describe('Node-RED proxy', () => {
   it('follows the inspected-specialty relation when the entity only holds link ids', async () => {
     gateway = await startStubGateway((entry, res) => {
       if (entry.url.startsWith('/inspector/')) return json(res, 200, INSPECTOR);
-      if (entry.url.includes('entity=Inspection')) {
-        return json(res, 200, {
-          total: 1,
-          list: [{ id: 'insp-met', inspectedSpecialties: [{ id: 'ispec-1' }] }],
-        });
+      if (entry.url.includes('entity=InspectedProvider')) {
+        return json(res, 200, { total: 1, list: [{ id: 'ip-1', siteVisitId: 'sv-1' }] });
+      }
+      // Ana leads this visit, so the ownership check passes and the specialty
+      // guard is what this test exercises.
+      if (entry.url.includes('entity=SiteVisit')) {
+        return json(res, 200, { total: 1, list: [{ id: 'sv-1', mainInspectorId: INSPECTOR.id }] });
       }
       if (entry.url.includes('entity=InspectedSpecialty')) {
         return json(res, 200, { total: 1, list: [{ id: 'ispec-1', specialtyId: 'spec_met' }] });
+      }
+      if (entry.url.includes('entity=Inspection')) {
+        return json(res, 200, {
+          total: 1,
+          list: [{ id: 'insp-met', inspectedProviderId: 'ip-1', inspectedSpecialties: [{ id: 'ispec-1' }] }],
+        });
       }
       return json(res, 200, { ok: true });
     });
@@ -554,10 +598,12 @@ describe('Node-RED proxy', () => {
     const { app } = buildTestApp({ gatewayUrl: gateway.url });
     const cookie = await loginCookie(app);
 
+    // InspectionQuestion carries no ownership rule, so the specialty guard is
+    // the first thing that cannot be satisfied here.
     const res = await request(app)
-      .put('/nodered/updateEntity?entity=Inspection&id=insp-1')
+      .put('/nodered/updateEntity?entity=InspectionQuestion&id=q-1')
       .set('Cookie', cookie)
-      .send({ conclusion: 'Report text' });
+      .send({ comment: 'Revised' });
 
     expect(res.status).toBe(403);
     expect(res.body.code).toBe('AUTH_SCOPE_UNVERIFIED');

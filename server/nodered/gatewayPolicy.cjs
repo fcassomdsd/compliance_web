@@ -30,6 +30,8 @@
 // do three different jobs on it. A role that owns an entity outright is given a
 // plain role list and may write the whole record.
 
+const { SITE_VISIT_MAIN_INSPECTOR } = require('./ownershipGuard.cjs');
+
 const ADMIN = 'admin';
 
 // Same roles for every operation on an entity.
@@ -55,30 +57,36 @@ const ENTITY_WRITE_ROLES = {
   //   inspector  InspectionReport stamps the report outcome before generating it
   //   assigner   AssignInspectors moves it to Assigned, and nothing else
   //
-  // The planner is unrestricted because it owns the record — and because
-  // InspectionManager loads the inspection with `{ ...list[0] }` and saves it
-  // back whole, so its payload carries every column AtroCore returns. Listing
-  // fields for the owner would be a list of the table's columns, and would
-  // break the moment one was added.
+  // Each role writes only what its screen owns. InspectionManager submits the
+  // form's own fields rather than the record it loaded, so the planner can be
+  // named as precisely as the others:
   //
-  // The other two reach an Inspection for one narrow purpose each, and both send
-  // an explicit payload rather than a round-tripped record:
+  //   planner    InspectionManager defines the inspection (activity type,
+  //              objective, scope) and moves it to Defined. `code` is there
+  //              because updateInspection re-mints the activity code when the
+  //              activity type changes while the inspection is still at Created
+  //              — the store adds that field, not the view.
   //
-  //   inspector  InspectionReport stamps the report outcome before generating it.
-  //              It does not set `status`: the Reported transition belongs to the
-  //              /inspectionReport action. `code` is included because
-  //              updateInspection re-mints the activity code when the activity
-  //              type changes while the inspection is still at Created — the
-  //              store adds that field, not the view.
+  //   inspector  InspectionReport stamps the report outcome — `description` and
+  //              `conclusion`, and nothing else. The objective, scope and
+  //              activity type are the planner's and are shown read-only there;
+  //              `status` is not a field write either, since the Reported
+  //              transition belongs to the /inspectionReport action. The outcome
+  //              belongs to the **main inspector of the site visit** rather than
+  //              to the role, which no role can express — hence `owner`, checked
+  //              against the record (see ./ownershipGuard.cjs).
   //   assigner   AssignInspectors moves the inspection to Assigned, on both of
   //              its paths (first assignment, and reassignment), and does
   //              nothing else to it.
   Inspection: {
     add: ['planner', ADMIN],
     update: {
-      planner: {},
+      planner: {
+        fields: ['activityTypeId', 'objective', 'scope', 'status', 'code'],
+      },
       inspector: {
-        fields: ['activityTypeId', 'objective', 'scope', 'description', 'conclusion', 'code'],
+        fields: ['description', 'conclusion'],
+        owner: SITE_VISIT_MAIN_INSPECTOR,
       },
       assigner: {
         fields: ['status'],
@@ -158,14 +166,22 @@ function normalizeWriteRule(rule) {
 // two roles grants the union of their fields, the same way authorization is an
 // any-role match. `null` means unrestricted.
 //
-// Returns { fields: Set<string>, values: Map<string, Set<string>|null> } where a
-// null value-set means "any value for that field".
+// Returns { fields, values, owners } where
+//   fields  Set<string>
+//   values  Map<field, Set<string>|null>   null = any value
+//   owners  Map<field, string|null>        null = no ownership requirement
+//
+// Ownership is tracked **per field**, not per session: a second role lifts the
+// requirement only on the fields it grants in its own right. An inspector who is
+// also a planner may write the planner's fields freely, and still only sets the
+// report outcome on a visit they lead.
 function writeAllowanceFor(byRole, sessionRoles) {
   if (!byRole) return null;
 
   const held = new Set((Array.isArray(sessionRoles) ? sessionRoles : []).map((r) => String(r ?? '').trim().toLowerCase()));
   const fields = new Set();
   const values = new Map();
+  const owners = new Map();
   let matched = false;
 
   for (const [role, constraint] of Object.entries(byRole)) {
@@ -176,20 +192,41 @@ function writeAllowanceFor(byRole, sessionRoles) {
 
     for (const field of constraint.fields) {
       fields.add(field);
-      const allowed = constraint.values?.[field];
-      if (Array.isArray(allowed)) {
+
+      const allowedValues = constraint.values?.[field];
+      if (Array.isArray(allowedValues)) {
         const current = values.get(field);
-        if (current === null) continue; // already unrestricted through another role
-        const merged = current || new Set();
-        allowed.forEach((v) => merged.add(String(v)));
-        values.set(field, merged);
+        if (current !== null) {
+          const merged = current || new Set();
+          allowedValues.forEach((v) => merged.add(String(v)));
+          values.set(field, merged);
+        }
       } else {
         values.set(field, null);
+      }
+
+      // A role granting the field without an owner requirement lifts it.
+      if (constraint.owner && owners.get(field) !== null) {
+        owners.set(field, constraint.owner);
+      } else if (!constraint.owner) {
+        owners.set(field, null);
       }
     }
   }
 
-  return matched ? { fields, values } : null;
+  return matched ? { fields, values, owners } : null;
+}
+
+// The record owners this payload requires the session to be, if any.
+function requiredOwnersFor(allowance, payload) {
+  const required = new Set();
+  if (!allowance || !payload || typeof payload !== 'object') return required;
+
+  for (const field of Object.keys(payload)) {
+    const owner = allowance.owners.get(field);
+    if (owner) required.add(owner);
+  }
+  return required;
 }
 
 // The first field in the payload this session may not write, or null when the
@@ -279,6 +316,7 @@ function classifyGatewayRequest({ method, path, query = {} }) {
 module.exports = {
   classifyGatewayRequest,
   writeAllowanceFor,
+  requiredOwnersFor,
   firstDisallowedField,
   ENTITY_WRITE_ROLES,
   LINK_WRITE_ROLES,

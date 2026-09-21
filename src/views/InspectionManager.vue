@@ -370,10 +370,20 @@ const saveSchedules = async () => {
 
 const saveInspection = async () => {
   try {
+    // Only this form's own fields. `inspectionData` is the whole fetched record
+    // (`{ ...list[0] }`), and description/conclusion are the report outcome —
+    // shown here read-only and set in InspectionReport — so submitting the
+    // record whole would send them back and could overwrite an outcome written
+    // in the meantime.
+    const formFields = {
+      activityTypeId: inspectionData.value.activityTypeId,
+      objective: inspectionData.value.objective,
+      scope: inspectionData.value.scope,
+    };
     if (!inspectionData.value.id) {
-      await inspectionStore.addInspection(siteVisitId, inspectedProviderId, inspectionData.value);
+      await inspectionStore.addInspection(siteVisitId, inspectedProviderId, formFields);
     } else {
-      await inspectionStore.updateInspection(inspectionData.value, inspectedProviderId);
+      await inspectionStore.updateInspection({ id: inspectionData.value.id, ...formFields }, inspectedProviderId);
     }
     await inspectionStore.getInspections(inspectedProviderId);
     const list = inspectionStore.getForInspectedProvider(inspectedProviderId);

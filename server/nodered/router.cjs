@@ -28,7 +28,13 @@ const {
   hasRefs,
 } = require('../auth/specialtyScope.cjs');
 const { createScopeGuard, SCOPE_FORBIDDEN, SCOPE_UNVERIFIED } = require('./scopeGuard.cjs');
-const { classifyGatewayRequest, writeAllowanceFor, firstDisallowedField } = require('./gatewayPolicy.cjs');
+const {
+  classifyGatewayRequest,
+  writeAllowanceFor,
+  requiredOwnersFor,
+  firstDisallowedField,
+} = require('./gatewayPolicy.cjs');
+const { createOwnershipGuard } = require('./ownershipGuard.cjs');
 
 const GATEWAY_FORBIDDEN = 'AUTH_GATEWAY_FORBIDDEN';
 const FIELD_FORBIDDEN = 'AUTH_GATEWAY_FIELD_FORBIDDEN';
@@ -90,6 +96,7 @@ function filterReadResponse({ entity, scope, body }) {
 function createNodeRedProxyRouter({ auth, config, logger, nodeRedClient }) {
   const router = express.Router();
   const scopeGuard = createScopeGuard({ nodeRedClient, logger });
+  const ownershipGuard = createOwnershipGuard({ nodeRedClient, logger });
   const baseUrl = String(config?.baseUrl || '').replace(/\/$/, '');
   const apiKey = config?.apiKey || '';
 
@@ -137,7 +144,8 @@ function createNodeRedProxyRouter({ auth, config, logger, nodeRedClient }) {
     // has none.
     if (decision.kind === 'write' && decision.byRole && decision.hasPayload) {
       const allowance = writeAllowanceFor(decision.byRole, req.auth?.session?.roles);
-      const refused = firstDisallowedField(allowance, forwardableBody(req));
+      const payload = forwardableBody(req);
+      const refused = firstDisallowedField(allowance, payload);
       if (refused) {
         logger?.warn?.('Refused a gateway write of a field the session may not set', {
           entity: decision.entity,
@@ -149,6 +157,28 @@ function createNodeRedProxyRouter({ auth, config, logger, nodeRedClient }) {
           ? `${decision.entity}.${refused.field} may only be set to ${refused.allowed.join(', ')} by this session.`
           : `This session may not write ${decision.entity}.${refused.field}.`;
         return res.status(403).json(buildError(FIELD_FORBIDDEN, detail));
+      }
+
+      // Some fields belong to a person rather than a role: an inspection's
+      // report outcome is the main inspector's, and that is a fact about the
+      // record, not about the session's roles.
+      for (const owner of requiredOwnersFor(allowance, payload)) {
+        const refusal = await ownershipGuard.checkRecordOwner({
+          owner,
+          session: req.auth?.session,
+          ticket: req.auth?.ticket,
+          entity: decision.entity,
+          id: decision.id,
+        });
+        if (refusal) {
+          logger?.warn?.('Refused a gateway write of a field owned by another user', {
+            entity: decision.entity,
+            id: decision.id,
+            owner,
+            code: refusal.code,
+          });
+          return res.status(refusal.status).json(buildError(refusal.code, refusal.message));
+        }
       }
     }
 

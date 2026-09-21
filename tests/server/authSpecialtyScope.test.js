@@ -128,9 +128,10 @@ describe('session specialty scope', () => {
     expect(res.body.roles).toEqual(expect.arrayContaining(['inspector', otherRole]));
     expect(res.body.specialtyScope).toBeNull();
     expect(res.body.specialtyScopeIds).toBeNull();
-    // The Inspector record is not even looked up for a session that is not
-    // working as an inspector.
-    expect(nodeRedClient.getInspectorByExternalId).not.toHaveBeenCalled();
+    // The record *is* looked up, because the session still needs to know which
+    // Inspector it is — an inspector who is also a planner can still be the main
+    // inspector of a site visit. Only the scope is dropped.
+    expect(nodeRedClient.getInspectorByExternalId).toHaveBeenCalled();
   });
 
   it('leaves a planner with an Inspector record unscoped', async () => {

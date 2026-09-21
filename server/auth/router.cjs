@@ -11,7 +11,7 @@ const {
   shouldRefreshRoles,
   buildSessionResponse,
 } = require('./sessionPolicy.cjs');
-const { scopeFromInspector, isSpecialtyScopedSession } = require('./specialtyScope.cjs');
+const { scopeFromInspector, isSpecialtyScopedSession, holdsInspectorRole } = require('./specialtyScope.cjs');
 
 function buildError(code, message) {
   return {
@@ -120,16 +120,23 @@ function createAuthRouter({ config, sessionRepository, alfrescoClient, loginRate
   //                         (never lock someone out over a gateway hiccup); on
   //                         refresh the caller keeps the scope it already had
   //                         rather than silently widening access.
-  async function resolveSpecialtyScope({ username, roles, ticket }) {
-    if (!isSpecialtyScopedSession(roles) || !nodeRedClient || !username) {
-      return null;
+  async function resolveInspectorContext({ username, roles, ticket }) {
+    if (!holdsInspectorRole(roles) || !nodeRedClient || !username) {
+      return { inspectorId: null, scope: null };
     }
     try {
       const inspector = await nodeRedClient.getInspectorByExternalId({ ticket, externalId: username });
+      // The id is the session's own identity as an inspector, kept whatever the
+      // other roles are: it is what says whether this user is the main inspector
+      // of a given site visit (see nodered/ownershipGuard.cjs).
+      const inspectorId = inspector?.id ? String(inspector.id) : null;
+      if (!isSpecialtyScopedSession(roles)) {
+        return { inspectorId, scope: null };
+      }
       const scope = scopeFromInspector(inspector);
-      return scope.codes.length > 0 || scope.ids.length > 0 ? scope : null;
+      return { inspectorId, scope: scope.codes.length > 0 || scope.ids.length > 0 ? scope : null };
     } catch (error) {
-      logger.warn('Specialty scope resolution failed; keeping the previous scope', error);
+      logger.warn('Inspector context resolution failed; keeping the previous values', error);
       return undefined;
     }
   }
@@ -179,12 +186,13 @@ function createAuthRouter({ config, sessionRepository, alfrescoClient, loginRate
       const csrfSecret = crypto.randomBytes(24).toString('base64url');
       const { roles, groups } = await resolveRoles(username, auth.ticket, auth.groups);
       const encryptedTicket = ticketProtector.encrypt(auth.ticket);
-      const resolvedSpecialtyScope =
-        (await resolveSpecialtyScope({
+      const resolvedInspector =
+        (await resolveInspectorContext({
           username: auth.user?.username || username,
           roles,
           ticket: auth.ticket,
-        })) ?? null;
+        })) ?? { inspectorId: null, scope: null };
+      const resolvedSpecialtyScope = resolvedInspector.scope;
 
       const session = {
         sessionId,
@@ -203,6 +211,7 @@ function createAuthRouter({ config, sessionRepository, alfrescoClient, loginRate
         expiresAtAbsolute: times.expiresAtAbsolute,
         metadata: {
           groups,
+          inspectorId: resolvedInspector.inspectorId ?? null,
           specialtyScope: resolvedSpecialtyScope?.codes ?? null,
           specialtyScopeIds: resolvedSpecialtyScope?.ids ?? null,
         },
@@ -248,6 +257,7 @@ function createAuthRouter({ config, sessionRepository, alfrescoClient, loginRate
     let nextGroups = Array.isArray(session.metadata?.groups) ? session.metadata.groups : [];
     let nextSpecialtyScope = session.metadata?.specialtyScope ?? null;
     let nextSpecialtyScopeIds = session.metadata?.specialtyScopeIds ?? null;
+    let nextInspectorId = session.metadata?.inspectorId ?? null;
 
     if (shouldSlideIdle(session, currentTime, config)) {
       nextIdle = slideIdleExpiry(session, currentTime, config);
@@ -259,14 +269,15 @@ function createAuthRouter({ config, sessionRepository, alfrescoClient, loginRate
         const resolvedAuth = await resolveRoles(session.username, ticket);
         nextRoles = resolvedAuth.roles;
         nextGroups = resolvedAuth.groups;
-        const resolvedScope = await resolveSpecialtyScope({
+        const resolvedInspector = await resolveInspectorContext({
           username: session.username,
           roles: nextRoles,
           ticket,
         });
-        if (resolvedScope !== undefined) {
-          nextSpecialtyScope = resolvedScope?.codes ?? null;
-          nextSpecialtyScopeIds = resolvedScope?.ids ?? null;
+        if (resolvedInspector !== undefined) {
+          nextSpecialtyScope = resolvedInspector.scope?.codes ?? null;
+          nextSpecialtyScopeIds = resolvedInspector.scope?.ids ?? null;
+          nextInspectorId = resolvedInspector.inspectorId ?? null;
         }
         nextLastRoleRefreshAt = currentTime;
         await sessionRepository.updateSessionRoles(session.sessionId, {
@@ -275,6 +286,7 @@ function createAuthRouter({ config, sessionRepository, alfrescoClient, loginRate
           metadata: {
             ...(session.metadata || {}),
             groups: nextGroups,
+            inspectorId: nextInspectorId,
             specialtyScope: nextSpecialtyScope,
             specialtyScopeIds: nextSpecialtyScopeIds,
           },
@@ -301,6 +313,7 @@ function createAuthRouter({ config, sessionRepository, alfrescoClient, loginRate
     const nextMetadata = {
       ...(session.metadata || {}),
       groups: nextGroups,
+      inspectorId: nextInspectorId,
       specialtyScope: nextSpecialtyScope,
       specialtyScopeIds: nextSpecialtyScopeIds,
     };
