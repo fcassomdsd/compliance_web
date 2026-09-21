@@ -78,6 +78,54 @@ class AlfrescoClient {
       .filter(Boolean);
   }
 
+  // People belonging to a group, for role-addressed notifications. The `where`
+  // filter keeps nested groups out: this platform's role groups hold users
+  // directly, so a GROUP member would be a configuration surprise rather than a
+  // tree to walk.
+  async listGroupMembers({ ticket, groupId }) {
+    if (!groupId || !ticket) {
+      return [];
+    }
+
+    const response = await this.request({
+      method: 'get',
+      url: `${this.baseUrl}/alfresco/api/-default-/public/alfresco/versions/1/groups/${encodeURIComponent(groupId)}/members`,
+      params: {
+        where: "(memberType='PERSON')",
+        maxItems: 1000,
+        alf_ticket: ticket,
+      },
+    });
+
+    const entries = response?.data?.list?.entries || [];
+    return entries.map((entry) => entry?.entry?.id).filter(Boolean);
+  }
+
+  // A person's email, which is what an email notification needs. Alfresco is the
+  // only place this platform holds one — the domain model carries none.
+  async getPerson({ ticket, personId }) {
+    if (!personId || !ticket) {
+      return null;
+    }
+
+    const response = await this.request({
+      method: 'get',
+      url: `${this.baseUrl}/alfresco/api/-default-/public/alfresco/versions/1/people/${encodeURIComponent(personId)}`,
+      params: { alf_ticket: ticket },
+    });
+
+    const entry = response?.data?.entry;
+    if (!entry?.id) {
+      return null;
+    }
+    return {
+      username: entry.id,
+      email: entry.email || null,
+      displayName: [entry.firstName, entry.lastName].filter(Boolean).join(' ') || entry.id,
+      enabled: entry.enabled !== false,
+    };
+  }
+
   async searchNodes({ ticket, query, skipCount = 0, maxItems = 100 }) {
     if (!ticket) {
       throw new Error('Alfresco ticket is required');

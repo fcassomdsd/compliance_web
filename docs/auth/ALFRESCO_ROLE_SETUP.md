@@ -25,20 +25,31 @@ The application authenticates users through Alfresco and assigns roles based on 
 
 ## Step 1: Create Alfresco Groups
 
-In Alfresco, create groups corresponding to each application role. Recommended group naming:
+Create one group per application role. **These names are already mapped** — the
+migration `0003_group_role_mappings.sql` seeds the group → role rows, so creating the
+group in Alfresco and adding the user to it is all that is needed:
 
-1. **admin** → Create group: `app-admin`
-2. **inspector** → Create group: `app-inspector`  
-3. **planner** → Create group: `app-planner`
-4. **assigner** → Create group: `app-assigner`
-5. **cap_entry** → Create group: `app-cap-entry`
-6. **reporter** → Create group: `app-reporter`
-7. **closure_reviewer** → Create group: `U-VSO-IN_ClosureReviewer`
+| Role | Alfresco group |
+|---|---|
+| `admin` | `U-VSO-IN_Admin` |
+| `inspector` | `U-VSO-IN_Inspector` |
+| `planner` | `U-VSO-PI_PlanInspeccion` |
+| `assigner` | `U-VSO-IN_Assigner` |
+| `cap_entry` | `U-VSO-FN_CAPEntry` |
+| `reporter` | `U-VSO-IN_Reporter` |
+| `closure_reviewer` | `U-VSO-IN_ClosureReviewer` |
 
-> The `app-*` names above are the original proposal. The mappings in use store the
-> `U-VSO-*` authority names (see the table in `alfresco_group_role_map`); the role
-> lookup strips a leading `GROUP_` and compares case-insensitively, so either form
-> matches — but match the existing rows when adding a role.
+The lookup strips a leading `GROUP_` and compares case-insensitively, so both
+`U-VSO-IN_Inspector` and `GROUP_U-VSO-IN_Inspector` match the seeded row.
+
+> These are the **adopting authority's** group names, not a product constant. An
+> authority with its own naming adds its own rows to `alfresco_group_role_map` (Step 3)
+> or renames these; nothing else in the application changes. See
+> `COUNTRY_ADAPTATION_GUIDE.md` at the repo root.
+
+> `U-VSO-EL_EspecialistaLider` is **not** a role group. Being main inspector is a
+> per-site-visit attribution (`SiteVisit.mainInspectorId`), so it is not something a
+> standing group membership can express; `0003` deactivates any mapping for it.
 
 > **For a demo deployment this is scripted**: `compliance_cmis/scripts/seed-demo-identities.sh`
 > creates the groups, the demo users, their memberships and the repository access in one
@@ -88,7 +99,7 @@ it on rejection (an open finding must never carry a closure date).
 2. Go to **Administration** → **Groups**
 3. Create a new group for each role:
    - Click **Create Group**
-   - Enter group identifier (e.g., `app-cap-entry`)
+   - Enter group identifier (e.g., `U-VSO-FN_CAPEntry`)
    - Enter display name (e.g., `CAP Entry Users`)
    - Click **Create Group**
 4. For each group, add users:
@@ -103,57 +114,56 @@ Once groups are created, add your users to the appropriate groups based on their
 
 ```
 User: john.inspector
-  Groups: app-inspector, app-admin (if also admin)
+  Groups: U-VSO-IN_Inspector
 
 User: jane.planner
-  Groups: app-planner
+  Groups: U-VSO-PI_PlanInspeccion
 
 User: bob.cap-entry
-  Groups: app-cap-entry
+  Groups: U-VSO-FN_CAPEntry
 ```
 
-## Step 3: Create Role Mappings in Database
+Membership is the only thing that grants a role, and a user may hold several. Note that
+a second role **removes the specialty scope**: a planner who also holds `U-VSO-IN_Inspector`
+because they occasionally run an inspection works as a planner and sees every specialty.
+See [`SPECIALTY_SCOPE_ENFORCEMENT.md`](SPECIALTY_SCOPE_ENFORCEMENT.md).
 
-The application uses PostgreSQL to map Alfresco groups to application roles. The mapping table is `alfresco_group_role_map`.
+## Step 3: Role mappings in the database
 
-### Example Setup via SQL
+**Nothing to do for the roles in Step 1** — `migrations/0003_group_role_mappings.sql`
+seeds them, and `npm run db:migrate` applies it. Confirm with:
 
 ```sql
--- Note: These role IDs should match your app_role table.
--- First, verify the role IDs:
-SELECT id, role_key FROM app_role;
+SELECT m.alfresco_group, r.role_key, m.is_active
+FROM alfresco_group_role_map m
+JOIN app_role r ON r.id = m.role_id
+ORDER BY r.role_key;
+```
 
--- Then create the mappings.
--- Replace '<admin-role-uuid>' with the actual UUID from your app_role table.
+### Adding a mapping for your own group name
 
+Only needed when the authority uses different group names, or when one role is held by
+more than one group. Match on `role_key` rather than pasting a UUID:
+
+```sql
 INSERT INTO alfresco_group_role_map (alfresco_group, role_id, is_active, priority)
-VALUES
-  ('app-admin', '<admin-role-uuid>', true, 1),
-  ('app-inspector', '<inspector-role-uuid>', true, 10),
-  ('app-planner', '<planner-role-uuid>', true, 10),
-  ('app-cap-entry', '<cap-entry-role-uuid>', true, 10),
-  ('app-reporter', '<reporter-role-uuid>', true, 10)
+SELECT 'YOUR-GROUP-NAME', id, TRUE, 10
+FROM app_role
+WHERE role_key = 'cap_entry'
 ON CONFLICT (alfresco_group, role_id) DO NOTHING;
 ```
 
-### Or, using psql directly:
-
-```bash
-# Connect to the database
-psql -h localhost -U postgres -d compliance_db
-
-# Get the role IDs
-SELECT id, role_key FROM app_role;
-
-# Copy the UUIDs and substitute them in the INSERT statement above
-```
+`priority` is descriptive only — `resolveRolesForGroups` returns every active mapped
+role, and authorization is an any-role match. To retire a mapping, set
+`is_active = FALSE` rather than deleting it; the resolver requires `is_active` on both
+the mapping and the role.
 
 ## Step 4: Test the Setup
 
 ### Test CAP Entry Role (Most Common Issue)
 
 1. **In Alfresco Share:**
-   - Log in as a user in the `app-cap-entry` group
+   - Log in as a user in the `U-VSO-FN_CAPEntry` group
    - Confirm the user appears in that group
 
 2. **In the Application:**
@@ -181,12 +191,12 @@ If you see an error message like **"Role not authorized for this operation"** (H
 1. **Check user group membership** in Alfresco Share
    - Navigate to **Administration** → **Groups**
    - Click your user's groups
-   - Verify `app-cap-entry` is listed
+   - Verify `U-VSO-FN_CAPEntry` is listed
 
 2. **Check database mapping** via SQL:
    ```sql
    SELECT * FROM alfresco_group_role_map 
-   WHERE alfresco_group = 'app-cap-entry';
+   WHERE alfresco_group = 'U-VSO-FN_CAPEntry';
    ```
    - Should return one row with `is_active = true`
 
@@ -211,7 +221,7 @@ If you've just added a user to a group, they may need to **log out and log back 
 **Check these in order:**
 
 1. **User's Alfresco groups:**
-   - In Alfresco Share, confirm user is in a mapped group (e.g., `app-cap-entry`)
+   - In Alfresco Share, confirm user is in a mapped group (e.g., `U-VSO-FN_CAPEntry`)
 
 2. **Group-to-role mapping in database:**
    ```sql
@@ -230,24 +240,21 @@ If you've just added a user to a group, they may need to **log out and log back 
 
 ### Group Exists but Mapping is Missing
 
-Create the mapping in the database:
+Only happens for a group name the authority added itself — the names in Step 1 are
+seeded. Add it with the `role_key` form in Step 3, and check the migration actually ran:
 
 ```sql
--- Get the cap_entry role id
-SELECT id FROM app_role WHERE role_key = 'cap_entry';
-
--- Create the mapping (replace UUID with output above)
-INSERT INTO alfresco_group_role_map (alfresco_group, role_id, is_active, priority)
-VALUES ('app-cap-entry', '<uuid-from-above>', true, 10);
+SELECT filename FROM schema_migrations ORDER BY filename;
 ```
 
 ### User Still Can't Access After Mapping
 
 1. User must **log out completely** and **log back in**
 2. Check that the backend can reach Alfresco
-3. Verify Alfresco groups are spelled consistently (case-sensitive):
-   - Alfresco group: `app-cap-entry` (exact spelling)
-   - Database mapping: `app-cap-entry` (must match exactly)
+3. Verify the group name matches the mapping. The comparison is **not** case-sensitive
+   and a leading `GROUP_` is stripped, so `GROUP_U-VSO-FN_CAPEntry` and
+   `u-vso-fn_capentry` both match the seeded row — but a different name entirely (a
+   typo, or a group the authority renamed) grants nothing.
 
 ## API Reference
 

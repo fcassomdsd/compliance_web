@@ -131,6 +131,7 @@ async function runSiteVisitSchedulingSync({
   username,
   password,
   notificationService,
+  roleRecipients,
   logger = console,
   now = () => new Date(),
 }) {
@@ -274,6 +275,8 @@ async function runSiteVisitSchedulingSync({
     if (createdSummaries.length > 0) {
       await notifyRoleInbox({
         notificationService,
+        roleRecipients,
+        role: 'planner',
         envVar: 'PLANNER_NOTIFICATIONS_EMAIL',
         eventType: 'site_visit_auto_scheduled',
         subject: `${createdSummaries.length} site visit(s) auto-scheduled`,
@@ -310,6 +313,7 @@ function startSiteVisitSchedulingJob({
   username,
   password,
   notificationService,
+  roleRecipients,
   logger = console,
   now = () => new Date(),
   runHourLocal = 2,
@@ -320,7 +324,7 @@ function startSiteVisitSchedulingJob({
     const waitMs = untilNextRunMs(runHourLocal, now());
     timeoutId = setTimeout(async () => {
       try {
-        await runSiteVisitSchedulingSync({ alfrescoClient, nodeRedClient, username, password, notificationService, logger, now });
+        await runSiteVisitSchedulingSync({ alfrescoClient, nodeRedClient, username, password, notificationService, roleRecipients, logger, now });
       } catch (error) {
         logger.error('Site visit scheduling sync failed', error);
       } finally {
@@ -338,7 +342,7 @@ function startSiteVisitSchedulingJob({
         clearTimeout(timeoutId);
       }
     },
-    runNow: () => runSiteVisitSchedulingSync({ alfrescoClient, nodeRedClient, username, password, notificationService, logger, now }),
+    runNow: () => runSiteVisitSchedulingSync({ alfrescoClient, nodeRedClient, username, password, notificationService, roleRecipients, logger, now }),
   };
 }
 

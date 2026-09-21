@@ -10,7 +10,7 @@ const { createNotificationsRouter } = require('./notifications/router.cjs');
 const { createUsoapRouter } = require('./usoap/router.cjs');
 const { createNodeRedProxyRouter } = require('./nodered/router.cjs');
 
-function createApp({ config, sessionRepository, alfrescoClient, loginRateLimiter, logger, capDraftRepository, notificationRepository, notificationService, nodeRedClient, now }) {
+function createApp({ config, sessionRepository, alfrescoClient, loginRateLimiter, logger, capDraftRepository, notificationRepository, notificationService, roleRecipients, nodeRedClient, now }) {
   const app = express();
   // Required for correct client IPs behind the nginx terminator (login rate
   // limiting and audit logging both key off req.ip).
@@ -47,6 +47,7 @@ function createApp({ config, sessionRepository, alfrescoClient, loginRateLimiter
       auth,
       alfrescoClient,
       notificationService,
+      roleRecipients,
       nodeRedClient,
       now,
     })

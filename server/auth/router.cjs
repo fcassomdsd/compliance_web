@@ -11,7 +11,7 @@ const {
   shouldRefreshRoles,
   buildSessionResponse,
 } = require('./sessionPolicy.cjs');
-const { scopeFromInspector } = require('./specialtyScope.cjs');
+const { scopeFromInspector, isSpecialtyScopedSession } = require('./specialtyScope.cjs');
 
 function buildError(code, message) {
   return {
@@ -99,10 +99,6 @@ function createAuthRouter({ config, sessionRepository, alfrescoClient, loginRate
     };
   }
 
-  function isAdminRole(roles) {
-    return (roles || []).some((role) => String(role || '').trim().toLowerCase() === 'admin');
-  }
-
   // A session's specialty scope is the specialties of the Inspector record whose
   // externalUserID matches the signed-in Alfresco user — the Inspector is the
   // single source of truth for who does what, so nothing is duplicated onto the
@@ -110,16 +106,22 @@ function createAuthRouter({ config, sessionRepository, alfrescoClient, loginRate
   // document ids) and `ids` (AtroCore link ids such as `spec_ats`), because the
   // enforcement points speak both.
   //
-  //   null                  resolved as unscoped: an admin, a user with no
-  //                         Inspector record, or an inspector with none linked.
-  //                         Full access.
+  // It is resolved only for a session that works **as an inspector**
+  // (`isSpecialtyScopedSession`). Any other role means the user is working under
+  // that role and sees everything: a planner or an assigner who occasionally runs
+  // an inspection has an Inspector record, and that record must not narrow the
+  // work they do as a planner. The Inspector record is then never looked up.
+  //
+  //   null                  resolved as unscoped: a session not working as an
+  //                         inspector, a user with no Inspector record, or an
+  //                         inspector with none linked. Full access.
   //   { codes, ids }        the specialties the session is limited to.
   //   undefined             the lookup failed. On login that means unscoped
   //                         (never lock someone out over a gateway hiccup); on
   //                         refresh the caller keeps the scope it already had
   //                         rather than silently widening access.
   async function resolveSpecialtyScope({ username, roles, ticket }) {
-    if (isAdminRole(roles) || !nodeRedClient || !username) {
+    if (!isSpecialtyScopedSession(roles) || !nodeRedClient || !username) {
       return null;
     }
     try {
@@ -292,6 +294,17 @@ function createAuthRouter({ config, sessionRepository, alfrescoClient, loginRate
       }
     }
 
+    // One view of the refreshed metadata, used by the rotation, the response and
+    // (above) the role update alike. A role change forces a rotation, and a role
+    // change is exactly when the specialty scope changes — writing the session's
+    // pre-refresh metadata here would carry the stale scope into the rotated row.
+    const nextMetadata = {
+      ...(session.metadata || {}),
+      groups: nextGroups,
+      specialtyScope: nextSpecialtyScope,
+      specialtyScopeIds: nextSpecialtyScopeIds,
+    };
+
     const rolesChanged = JSON.stringify(nextRoles) !== JSON.stringify(session.roles || []);
     if (shouldRotateSession(session, currentTime, rolesChanged)) {
       nextSessionId = crypto.randomUUID();
@@ -304,7 +317,7 @@ function createAuthRouter({ config, sessionRepository, alfrescoClient, loginRate
         lastSeenAt: currentTime,
         lastRoleRefreshAt: nextLastRoleRefreshAt,
         expiresAtIdle: nextIdle,
-        metadata: session.metadata || {},
+        metadata: nextMetadata,
       });
       setAuthCookie(res, config.cookieName, nextSessionId, config);
       auditAuthEvent(logger, 'session_rotated', {
@@ -327,11 +340,7 @@ function createAuthRouter({ config, sessionRepository, alfrescoClient, loginRate
       lastRoleRefreshAt: nextLastRoleRefreshAt,
       expiresAtIdle: nextIdle,
       roleRefreshAt: new Date(new Date(nextLastRoleRefreshAt).getTime() + config.roleRefreshIntervalSeconds * 1000),
-      metadata: {
-        ...(session.metadata || {}),
-        groups: nextGroups,
-        specialtyScope: nextSpecialtyScope,
-      },
+      metadata: nextMetadata,
     };
 
     const response = buildSessionResponse(hydrated, config);

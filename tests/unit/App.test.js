@@ -6,16 +6,90 @@ import { createRouter, createMemoryHistory } from 'vue-router';
 import App from '@/App.vue';
 import { useAuthStore } from '@/stores/authStore';
 
+// Mirrors the real route table (src/router/index.js): the nav is rendered from
+// route *names* and filtered by each route's own `meta.requiredRoles`, so a stub
+// table without those two things no longer exercises App.vue.
+function page(id) {
+  return { template: `<div id="${id}">${id}</div>` };
+}
+
 const routes = [
-  { path: '/', redirect: '/inspection' },
-  { path: '/inspection', component: { template: '<div id="inspection-page">Inspection</div>' } },
-  { path: '/assign-inspectors', component: { template: '<div id="assign-page">Assign</div>' } },
-  { path: '/checklist', component: { template: '<div id="checklist-page">Checklist</div>' } },
-  { path: '/inspection-plan', component: { template: '<div id="plan-page">Plan</div>' } },
-  { path: '/inspection-report', component: { template: '<div id="report-page">Report</div>' } },
-  { path: '/follow-ups', component: { template: '<div id="follow-ups-page">Follow-ups</div>' } },
-  { path: '/login', name: 'login', component: { template: '<div id="login-page">Login</div>' } },
-  { path: '/:pathMatch(.*)*', component: { template: '<div id="not-found-page">Not Found</div>' } },
+  { path: '/', redirect: '/oversight-posture' },
+  {
+    path: '/oversight-posture',
+    name: 'oversightPosture',
+    component: page('oversight-page'),
+    meta: { requiredRoles: ['inspector', 'planner', 'reporter', 'admin'] },
+  },
+  {
+    path: '/site-visit',
+    name: 'siteVisit',
+    component: page('site-visit-page'),
+    meta: { requiredRoles: ['planner', 'admin'] },
+  },
+  {
+    path: '/assign-inspectors',
+    name: 'assignInspectors',
+    component: page('assign-page'),
+    meta: { requiredRoles: ['assigner', 'admin'] },
+  },
+  {
+    path: '/checklist',
+    name: 'checklist',
+    component: page('checklist-page'),
+    meta: { requiredRoles: ['inspector', 'admin'] },
+  },
+  {
+    path: '/inspection-plan',
+    name: 'inspectionPlan',
+    component: page('plan-page'),
+    meta: { requiredRoles: ['planner', 'inspector', 'admin'] },
+  },
+  {
+    path: '/inspection-report',
+    name: 'inspectionReport',
+    component: page('report-page'),
+    meta: { requiredRoles: ['inspector', 'admin'] },
+  },
+  {
+    path: '/findings',
+    name: 'findings',
+    component: page('findings-page'),
+    meta: { requiredRoles: ['inspector', 'planner', 'cap_entry', 'closure_reviewer', 'admin'] },
+  },
+  {
+    path: '/corrective-actions',
+    name: 'correctiveActions',
+    component: page('caps-page'),
+    meta: { requiredRoles: ['inspector', 'planner', 'cap_entry', 'admin'] },
+  },
+  {
+    path: '/follow-ups',
+    name: 'followUps',
+    component: page('follow-ups-page'),
+    meta: { requiredRoles: ['inspector', 'planner', 'cap_entry', 'admin'] },
+  },
+  {
+    path: '/inspection-cadences',
+    name: 'inspectionCadences',
+    component: page('cadences-page'),
+    meta: { requiredRoles: ['planner', 'admin'] },
+  },
+  {
+    path: '/provider-history',
+    name: 'providerHistory',
+    component: page('provider-history-page'),
+    meta: { requiredRoles: ['inspector', 'planner', 'reporter', 'admin'] },
+  },
+  {
+    path: '/usoap-evidence-report',
+    name: 'usoapEvidenceReport',
+    component: page('usoap-page'),
+    meta: { requiredRoles: ['inspector', 'planner', 'reporter', 'admin'] },
+  },
+  { path: '/notifications', name: 'notifications', component: page('notifications-page') },
+  { path: '/login', name: 'login', component: page('login-page') },
+  { path: '/:pathMatch(.*)*', component: page('not-found-page') },
 ];
 
 function createTestRouter() {
@@ -25,9 +99,13 @@ function createTestRouter() {
   });
 }
 
-async function mountAppAt(path = '/inspection') {
+// `admin` by default so the tests that are not about role filtering see the
+// whole nav, the way every user used to.
+async function mountAppAt(path = '/oversight-posture', roles = ['admin']) {
   const router = createTestRouter();
   const pinia = createPinia();
+  const authStore = useAuthStore(pinia);
+  authStore.roles = roles;
 
   router.push(path);
   await router.isReady();
@@ -38,7 +116,11 @@ async function mountAppAt(path = '/inspection') {
     },
   });
 
-  return { wrapper, router };
+  return { wrapper, router, authStore };
+}
+
+function navLabels(wrapper) {
+  return wrapper.findAll('a.nav-link').map((link) => link.text().trim());
 }
 
 describe('App.vue (router navigation)', () => {
@@ -80,14 +162,54 @@ describe('App.vue (router navigation)', () => {
     ]);
   });
 
-  it('loads inspection route content by default', async () => {
+  it('offers only the links a role may actually open', async () => {
+    const { wrapper } = await mountAppAt('/corrective-actions', ['cap_entry']);
+
+    expect(navLabels(wrapper)).toEqual(['Findings', 'Corrective Actions', 'Follow-ups']);
+  });
+
+  it('offers a reporter its reports and nothing else', async () => {
+    const { wrapper } = await mountAppAt('/oversight-posture', ['reporter']);
+
+    expect(navLabels(wrapper)).toEqual([
+      'Oversight Posture',
+      'Provider History',
+      'USOAP Evidence Report',
+    ]);
+  });
+
+  it('offers a planner and an inspector the union of what either may open', async () => {
+    const { wrapper } = await mountAppAt('/oversight-posture', ['inspector', 'planner']);
+
+    expect(navLabels(wrapper)).toEqual([
+      'Oversight Posture',
+      'Site Visits',
+      'Inspection Checklist',
+      'Inspection Plan',
+      'Inspection Report',
+      'Findings',
+      'Corrective Actions',
+      'Follow-ups',
+      'Inspection Cadences',
+      'Provider History',
+      'USOAP Evidence Report',
+    ]);
+  });
+
+  it('offers nothing to a session whose groups map to no role', async () => {
+    const { wrapper } = await mountAppAt('/notifications', []);
+
+    expect(navLabels(wrapper)).toEqual([]);
+  });
+
+  it('loads the landing route content by default', async () => {
     const { wrapper } = await mountAppAt('/');
 
-    expect(wrapper.find('#inspection-page').exists()).toBe(true);
+    expect(wrapper.find('#oversight-page').exists()).toBe(true);
   });
 
   it('navigates to checklist route and renders its content', async () => {
-    const { wrapper, router } = await mountAppAt('/inspection');
+    const { wrapper, router } = await mountAppAt('/oversight-posture');
 
     await router.push('/checklist');
     await wrapper.vm.$nextTick();
@@ -127,7 +249,7 @@ describe('App.vue (router navigation)', () => {
     const logoutSpy = vi.spyOn(authStore, 'logout').mockResolvedValue(true);
     const pushSpy = vi.spyOn(router, 'push');
 
-    router.push('/inspection');
+    router.push('/oversight-posture');
     await router.isReady();
 
     const wrapper = mount(App, {
@@ -157,7 +279,7 @@ describe('App.vue (router navigation)', () => {
       authStore.user = { username: 'fernando.casso' };
       const ensureSessionFreshSpy = vi.spyOn(authStore, 'ensureSessionFresh').mockResolvedValue(true);
 
-      router.push('/inspection');
+      router.push('/oversight-posture');
       await router.isReady();
 
       mount(App, {

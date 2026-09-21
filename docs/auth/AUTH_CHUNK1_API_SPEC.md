@@ -108,8 +108,9 @@ Behavior notes:
 1. If role refresh interval has elapsed, backend re-fetches groups and remaps roles.
 2. If role refresh fails due to provider outage, backend may use cached roles for a short grace period (default 5 minutes) before forcing re-auth.
 3. `specialtyScope` is the set of specialty codes the session may see and act on, taken from the signed-in user's `Inspector` record (`externalUserID` = the Alfresco username) through Node-RED's `GET /inspector/:externalId`, which returns `specialties: [{ id, code, name }]`. The Inspector record is the single source of truth; nothing is duplicated onto the assignment groups, which would need keeping in sync.
-   - `null` means **unscoped** (full access): an `admin`, a user with no `Inspector` record, or an inspector with no specialties linked. Unmatched users must never be locked out by this feature.
-   - It is resolved at login and refreshed with the role cache; on a refresh failure the previously cached scope is kept rather than widened. On a login-time failure the session starts unscoped.
+   - It is resolved **only for a session working as an inspector**: `inspector` among its roles and none of `admin`, `planner`, `assigner`, `reporter`, `cap_entry`, `closure_reviewer`. Any of those means the user is working under that role and is unscoped — a planner or an assigner who occasionally runs an inspection has an `Inspector` record, and it must not narrow their work. For such a session the record is never looked up.
+   - `null` means **unscoped** (full access): any session not working as an inspector, a user with no `Inspector` record, or an inspector with no specialties linked. Unmatched users must never be locked out by this feature.
+   - It is resolved at login and re-evaluated with the role cache, so a role gained mid-session clears it at the next refresh rather than at the next login; on a refresh *failure* the previously cached scope is kept rather than widened. On a login-time failure the session starts unscoped.
    - It is stored in `auth_session.metadata_json` alongside `groups`, so no schema change was needed.
    - `specialtyScopeIds` travels beside it: the same specialties as AtroCore link ids (`spec_ats`).
      Findings, CAPs and document ids use the codes; the AtroCore relations the UI and the gateway

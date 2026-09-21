@@ -1,79 +1,233 @@
-# Authentication Chunk 1 Route Authorization Matrix
+# Route authorization matrix
 
-Status: Draft for review
-Scope: Frontend route meta policy and guard behavior
+Status: current — regenerated from the code on `develop`, 2026-09-21
+Scope: every role gate in `compliance_web`, frontend and server
 
-## 1. Guard Conventions
+This replaces an earlier draft that had drifted from the code (it listed an `/inspection` route that
+no longer exists and the wrong roles for three others, and interleaved frontend routes with `/api`
+paths). Frontend routes and server routes are now separate tables, because they are separate
+mechanisms: the first decides what the browser will navigate to, the second is the boundary.
 
-1. requiresAuth: route requires authenticated session.
-2. requiredRoles: list of roles accepted by any-role match.
-3. requireRole behavior: allow if user has at least one required role.
+## 1. Conventions
 
-Pseudo-rule:
+- **Any-role match, both sides.** A user is authorized if `userRoles ∩ requiredRoles` is non-empty.
+  Server: `requireRoles` in `server/auth/sessionAuth.cjs`. Frontend: `authStore.hasRole` via
+  `requireRole` in `src/router/guards.js`. Comparison is trimmed and lowercased on both sides.
+- An empty or absent `requiredRoles` means **no role gate** — not "deny".
+- Every server route except `/health` and the login/session bootstrap requires a session; every
+  mutating route additionally requires the CSRF header.
+- `admin` appears in every role gate; it is the break-glass role.
+- Unknown Alfresco groups grant no roles, so a user whose groups map to nothing authenticates and is
+  refused by every gated route.
 
-1. if requiresAuth is true and user is not authenticated -> redirect to login entry route.
-2. if requiredRoles exists and user has no role intersection -> redirect to forbidden route.
-3. else allow navigation.
+Frontend guard order (`applyAuthGuards`): `requireAuth` → redirect to `login` with a `redirect`
+query; then `requireRole` → redirect to `forbidden`.
 
-## 2. Route Matrix (Current App)
+## 2. Role catalog
 
-| Route | Name | requiresAuth | requiredRoles | Notes |
-|---|---|---:|---|---|
-| /inspection | inspection | true | inspector, admin | Main inspection management |
-| /assign-inspectors | assignInspectors | true | assigner, admin | Assignment workflow. Formerly scoped to a specialty subset by AGA/SNA/VA Alfresco-group membership; that domain-based scoping was retired along with the domain grouping itself — an assigner now sees/acts on all specialties. |
-| /checklist | checklist | true | inspector, planner, admin | Checklist access |
-| /inspection-plan | inspectionPlan | true | planner, admin | Planning route |
-| /inspection-report | inspectionReport | true | reporter, admin | Reporting route |
-| /api/findings | findingsApi | true | inspector, planner, cap_entry, closure_reviewer, admin | Findings list and filters. `closure_reviewer` reads only — the role's sole write is `closure-review`. |
-| /api/findings/:findingId | findingDetailApi | true | inspector, planner, cap_entry, closure_reviewer, admin | Finding detail. A reviewer has to see the finding it is asked to close. |
-| /api/findings/:findingId/caps | capSubmitApi | true | cap_entry, admin | CAP submission |
-| /api/findings/:findingId/review | findingReviewApi | true | inspector, admin | Confirm a finding (optionally correcting description/severity/classification), only from Pending Review; PATCH |
-| /api/findings/:findingId/closure-review | findingClosureReviewApi | true | closure_reviewer, admin | Approve/reject a pending finding closure (only from Pending Closure Approval; PATCH) |
-| /api/findings/:findingId/deadline-extension-requests | deadlineExtensionRequestApi | true | cap_entry, admin | Request a resolution-deadline extension (POST) |
-| /api/findings/:findingId/deadline-extension-review | deadlineExtensionReviewApi | true | inspector, admin | Accept/reject a pending deadline extension request (only from Requested; PATCH) |
-| /api/findings/:findingId/follow-ups/:followUpId/evidence-review | followUpEvidenceReviewApi | true | inspector, admin | Mark a follow-up's evidence Adequate/Inadequate (only from Pending Review; PATCH). A follow-up cannot affect findingStatus until this is Adequate |
-| /api/caps | capsApi | true | inspector, planner, cap_entry, admin | CAP list and filters |
-| /api/caps/:capId | capDetailApi | true | inspector, planner, cap_entry, admin | CAP detail |
-| /api/caps/:capId | capUpdateApi | true | cap_entry, admin | CAP content edit (Returned CAPs only; PATCH) |
-| /api/caps/:capId/review | capReviewApi | true | inspector, admin | CAP review decision (only from Pending review) |
-| /api/caps/drafts | capDraftCreateApi | true | cap_entry, admin | Create a draft CAP (Postgres-staged, POST) |
-| /api/caps/drafts | capDraftListApi | true | cap_entry, admin | List current user's draft CAPs (GET) |
-| /api/caps/drafts/:draftId | capDraftDetailApi | true | cap_entry, admin | Draft CAP detail (GET) |
-| /api/caps/drafts/:draftId | capDraftUpdateApi | true | cap_entry, admin | Save draft CAP content (PATCH) |
-| /api/caps/drafts/:draftId | capDraftDeleteApi | true | cap_entry, admin | Discard a draft CAP (DELETE) |
-| /api/caps/drafts/:draftId/submit | capDraftSubmitApi | true | cap_entry, admin | Promote a draft into a real, Pending-review CAP |
-| /api/caps/:capId/evidence/:evidenceNodeId/content | capEvidenceContentApi | true | inspector, planner, cap_entry, admin | View/download RCA or Risk Assessment evidence (never gated by CAP status) |
-| /api/caps/:capId/evidence/:evidenceNodeId | capEvidenceDeleteApi | true | cap_entry, admin | Remove evidence (Returned CAPs only; DELETE) |
-| /forbidden | forbidden | true | (none) | UX page for denied role |
-| /login | login | false | (none) | Login entry point |
-| /:pathMatch(.*)* | notFound | false | (none) | Catch-all |
+Seeded by `migrations/0001_initial_schema.sql` and `0002_closure_reviewer_role.sql`:
 
-## 3. Notes on Backend Enforcement
+| Role | What it is for |
+|---|---|
+| `admin` | Full access |
+| `inspector` | Inspection execution, checklists, finding/CAP review |
+| `planner` | Site visits, planning, inspection cadences |
+| `reporter` | Reports and report views |
+| `cap_entry` | Corrective-action entry and drafts, deadline-extension requests |
+| `assigner` | Inspector-to-specialty assignment (`/assign-inspectors`) |
+| `closure_reviewer` | Approving/rejecting a pending finding closure |
 
-1. Router guards improve UX but do not replace API authorization.
-2. API endpoints for each domain action must enforce the same role policy.
-3. API policy should use the same any-role semantics for consistency.
+Roles come from Alfresco group membership through the `alfresco_group_role_map` table; group names
+are normalised (trim, lowercase, optional `GROUP_` prefix stripped) before lookup. Only
+`U-VSO-IN_ClosureReviewer` is seeded in the repo — the rest are deployment data. Changing a user's
+roles means changing their group membership or the mapping table, and the user must log out and
+back in (or wait for the 15-minute role refresh).
 
-## 4. Proposed Role Catalog (Initial)
+Whether a session is additionally narrowed to a set of specialties is a separate rule that keys off
+this same role set: see [`SPECIALTY_SCOPE_ENFORCEMENT.md`](SPECIALTY_SCOPE_ENFORCEMENT.md).
 
-1. admin: full access
-2. inspector: inspection execution and checklist operations
-3. planner: assignment and planning operations
-4. reporter: report generation and report views
-5. cap_entry: corrective action entry operations
-6. assigner: inspector-to-specialty assignment workflow (`/assign-inspectors`) — undocumented until now; the actual guard has used this role, not `planner`, since the Assign Inspectors view shipped
+## 3. Frontend routes (`src/router/index.js`)
 
-## 5. Mapping Source
+| Route | Name | requiresAuth | requiredRoles |
+|---|---|---:|---|
+| `/` | home | true | *(none — redirects to the first permitted nav entry)* |
+| `/oversight-posture` | oversightPosture | true | inspector, planner, reporter, admin |
+| `/site-visit` | siteVisit | true | planner, admin |
+| `/site-visit/:siteVisitId/provider/:providerId` | providerInspection | true | planner, admin |
+| `/assign-inspectors` | assignInspectors | true | assigner, admin |
+| `/checklist` | checklist | true | inspector, admin |
+| `/inspection-plan` | inspectionPlan | true | planner, inspector, admin |
+| `/inspection-report` | inspectionReport | true | inspector, admin |
+| `/findings` | findings | true | inspector, planner, cap_entry, closure_reviewer, admin |
+| `/corrective-actions` | correctiveActions | true | inspector, planner, cap_entry, admin |
+| `/follow-ups` | followUps | true | inspector, planner, cap_entry, admin |
+| `/inspection-cadences` | inspectionCadences | true | planner, admin |
+| `/provider-history` | providerHistory | true | inspector, planner, reporter, admin |
+| `/usoap-evidence-report` | usoapEvidenceReport | true | inspector, planner, reporter, admin |
+| `/notifications` | notifications | true | *(none)* |
+| `/login` | login | false | *(public)* |
+| `/forbidden` | forbidden | true | *(none)* |
+| `/:pathMatch(.*)*` | notFound | false | *(public)* |
 
-1. Roles are assigned by mapping Alfresco groups to app roles via database table.
-2. Mapping table owner: application administration process.
-3. Group naming should be normalized before lookup (trim + lowercase).
+The navigation bar and the landing page are both derived from these same arrays
+(`src/router/navigation.js`): the nav offers only the entries the session may open, and `/` lands on
+the first of them, falling back to `/notifications`. Neither is a boundary — they exist so the app
+does not offer what the guard would refuse.
 
-## 6. Test Cases for This Matrix
+## 4. Server routes
 
-1. Anonymous user to /inspection -> redirect login.
-2. Authenticated user with inspector role to /inspection -> allowed.
-3. Authenticated user with inspector role to /assign-inspectors -> forbidden.
-4. Authenticated user with planner role to /assign-inspectors -> allowed.
-5. Authenticated user with admin role -> allowed on all protected routes.
-6. Unknown route -> notFound.
+### `/api/findings` — `server/findings/router.cjs`
+
+| Route | Roles |
+|---|---|
+| `GET /api/findings` | inspector, planner, cap_entry, closure_reviewer, admin |
+| `GET /api/findings/follow-ups` | inspector, planner, cap_entry, closure_reviewer, admin |
+| `GET /api/findings/:findingId` | inspector, planner, cap_entry, closure_reviewer, admin |
+| `GET /api/findings/:findingId/evidence/:evidenceNodeId/content` | inspector, planner, cap_entry, closure_reviewer, admin |
+| `GET /api/findings/:findingId/follow-ups/:followUpId/evidence/:evidenceNodeId/content` | inspector, planner, cap_entry, closure_reviewer, admin |
+| `POST /api/findings/:findingId/follow-ups` | inspector, admin |
+| `POST /api/findings/:findingId/follow-ups/:followUpId/evidence` | inspector, admin |
+| `PATCH /api/findings/:findingId/follow-ups/:followUpId/evidence-review` | inspector, admin |
+| `PATCH /api/findings/:findingId/review` | inspector, admin |
+| `PATCH /api/findings/:findingId/deadline-extension-review` | inspector, admin |
+| `POST /api/findings/:findingId/deadline-extension-requests` | cap_entry, admin |
+| `PATCH /api/findings/:findingId/closure-review` | closure_reviewer, admin |
+
+`closure_reviewer` reads only; `closure-review` is the role's sole write.
+
+### `/api/caps` and CAP submission — `server/caps/router.cjs`
+
+| Route | Roles |
+|---|---|
+| `GET /api/caps`, `GET /api/caps/:capId` | inspector, planner, cap_entry, admin |
+| `GET /api/caps/:capId/evidence/:evidenceNodeId/content` | inspector, planner, cap_entry, admin |
+| `PUT /api/caps/:capId/evaluation` | inspector, admin |
+| `PATCH /api/caps/:capId/review` | inspector, admin |
+| `POST /api/findings/:findingId/caps` | cap_entry, admin |
+| `PATCH /api/caps/:capId` | cap_entry, admin |
+| `PATCH /api/caps/:capId/actions/:sequenceNumber` | cap_entry, admin |
+| `POST /api/caps/:capId/{rca,risk-assessment,containment}/evidence` | cap_entry, admin |
+| `DELETE /api/caps/:capId/evidence/:evidenceNodeId` | cap_entry, admin |
+| `/api/caps/drafts*` — create, list, read, update, delete, submit | cap_entry, admin |
+
+### Reports and USOAP — `server/reports/router.cjs`, `server/usoap/router.cjs`
+
+| Route | Roles |
+|---|---|
+| `GET /api/reports/oversight-posture` + `/filter-options` | inspector, planner, reporter, admin |
+| `GET /api/reports/provider-history` | inspector, planner, reporter, admin |
+| `GET /api/reports/usoap-ce-evidence` + `/candidates/:nodeId/content` | inspector, planner, reporter, admin |
+| `POST /api/usoap/direct-tag` | inspector, planner, reporter, admin |
+
+### Notifications — `server/notifications/router.cjs`
+
+| Route | Roles |
+|---|---|
+| `GET /api/notifications`, `/unread-count`, `PATCH /:id/read` | *(session only — scoped to the recipient)* |
+| `GET /api/notifications/failures` | admin |
+
+### Auth — `server/auth/router.cjs`
+
+No role gate on any route: `POST /login`, `GET /session`, `POST /locale`, `POST /logout`,
+`GET /ticket` (own session + CSRF), `GET /diagnostics` (unauthenticated).
+
+## 5. The Node-RED gateway (`/nodered/*`)
+
+`server/nodered/router.cjs` is an **allow-list**, not a pass-through: a request that
+`server/nodered/gatewayPolicy.cjs` does not classify is refused with 403 `AUTH_GATEWAY_FORBIDDEN`
+and never reaches the gateway. That matters because the same gateway also serves the Electron app
+and the import service — `/importCanonical`, `/importFollowUps`, `/checklist`, `/findings/open` and
+the rest are not reachable from a browser session.
+
+Order of checks: session → classification → role → specialty scope → forward.
+
+### Reads — a session is enough
+
+`POST /queryEntity`, `GET /getLinks`, `GET /inspector/:externalId`, `GET /siteVisit/:ref`,
+`GET /assignmentGroup/:group`.
+
+Every role legitimately reads reference data, and `/inspector/:externalId` is called for *every*
+user at login. What a scoped session may **see** is decided by the specialty read filter, not by a
+role. A prefixed read takes exactly one further path segment.
+
+### Writes — per entity
+
+| Entity | add | update | delete |
+|---|---|---|---|
+| `SiteVisit` | planner, admin | planner, admin | planner, admin |
+| `InspectedProvider` | planner, admin | planner, admin | planner, admin |
+| `Inspection` | planner, admin | planner, **inspector**, **assigner**, admin | planner, admin |
+| `InspectionSchedule` | planner, admin | planner, admin | planner, admin |
+| `InspectedService` | planner, admin | planner, admin | planner, admin |
+| `InspectedSpecialty` | planner, admin | planner, admin | planner, admin |
+| `InspectionQuestion` | inspector, admin | inspector, admin | inspector, admin |
+| `InspectionCadence` | planner, admin | planner, admin | planner, admin |
+
+Any other entity cannot be written through the proxy at all: locations, providers, inspectors,
+specialties, checklist questions and the rest of the reference data are maintained in AtroCore
+itself.
+
+`Inspection.update` carries three roles because three screens perform it — InspectionManager as a
+planner, InspectionReport as an inspector, AssignInspectors as an assigner. This is **entity-level**
+authorization: it cannot express "an assigner may set `status=Assigned` and nothing else". That
+distinction belongs in the flows or a domain layer.
+
+### Link writes — per entity + relation
+
+| Relation | Roles |
+|---|---|
+| `InspectedSpecialty.actingInspectors` | assigner, admin |
+
+The paths are `/addLinks` and `/deleteLinks` — **no `Entity` suffix**, which is what the flows
+expose and what the client calls. The proxy previously looked for `/addLinksEntity`, so link writes
+matched no rule and were forwarded without a specialty check.
+
+### Actions — the two state-changing GETs
+
+| Action | Roles |
+|---|---|
+| `GET /inspectionPlan` | planner, inspector, admin |
+| `GET /inspectionReport` | inspector, admin |
+
+Matching `/inspection-plan` and `/inspection-report` in the frontend table.
+
+### What this means for `assigner`
+
+`assigner` is now enforced server-side: it is the only role besides `admin` that may write
+`InspectedSpecialty.actingInspectors`, and one of three that may update an `Inspection`. It is no
+longer a frontend-only role.
+
+### Interaction with the specialty scope
+
+The scope applies only to a session working as an inspector, and the only gateway writes an
+inspector may perform are `InspectionQuestion.*` and `Inspection.update` — so those are where the
+write-side specialty guard actually bites. Every other gateway write belongs to a planner or an
+assigner, and those sessions are unscoped by definition. The guard still runs on link writes and on
+the other entities; it is simply unreachable for them under the current role matrix, and stays in
+place so that it holds if the matrix changes. The **read** filter is unaffected and still applies to
+every scope-controlled read a scoped session makes.
+
+## 6. Test cases for this matrix
+
+1. Anonymous user → any `requiresAuth` route → redirect to `login` carrying `redirect`.
+2. `inspector` → `/checklist` → allowed; → `/assign-inspectors` → `/forbidden`.
+3. `assigner` → `/assign-inspectors` → allowed; → `/site-visit` → `/forbidden`.
+4. `admin` → every protected route → allowed.
+5. `closure_reviewer` → `GET /api/findings/:id` → 200; `PATCH …/closure-review` → 200;
+   `PATCH …/review` → 403.
+6. `cap_entry` → `POST /api/findings/:id/caps` → 200; `PUT /api/caps/:id/evaluation` → 403.
+7. A session whose groups map to no role → authenticates, 403 on every gated route, lands on
+   `/notifications`.
+8. Unknown route → `notFound`.
+9. Gateway: `reporter` → `POST /nodered/addEntity?entity=SiteVisit` → 403; `planner` → 200.
+10. Gateway: `planner` → `POST /nodered/addEntity?entity=InspectionQuestion` → 403;
+    `inspector` → 200.
+11. Gateway: any role → `POST /nodered/importCanonical` → 403 `AUTH_GATEWAY_FORBIDDEN`;
+    `DELETE /nodered/deleteEntity?entity=Location` → 403.
+12. Gateway: `inspector` → `POST /nodered/addLinks?entity=InspectedSpecialty&link=actingInspectors`
+    → 403; `assigner` → forwarded.
+
+Covered by `tests/unit/router/guards.test.js`, `tests/unit/router/navigation.test.js`,
+`tests/unit/App.test.js`, `tests/server/nodeRedProxy.test.js` and the server router tests;
+`npm run test:auth:all` runs the gate. `scripts/verify-specialty-scope-e2e.sh` drives the gateway
+rules over HTTP against the real server process.

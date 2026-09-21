@@ -176,8 +176,9 @@ const availableInspectedSpecialties = computed(() => {
     return [];
   }
 
-  const shouldFilterInspectorAssignments = authStore.hasRole('inspector')
-    && !authStore.hasRole(['admin', 'planner']);
+  // Only a session actually working as an inspector is narrowed to its own
+  // assignments; the same rule the server applies to the specialty scope.
+  const shouldFilterInspectorAssignments = authStore.isActingAsInspector;
 
   const inspectorId = authStore.inspectorProfile?.id;
   const actingInspectorsByInspectedSpecialty = inspectedSpecialtyStore.inspectors || {};
@@ -216,9 +217,7 @@ const availableInspectedSpecialties = computed(() => {
   return specialties;
 });
 
-const isInspectorScopeFiltered = computed(() => {
-  return authStore.hasRole('inspector') && !authStore.hasRole(['admin', 'planner']);
-});
+const isInspectorScopeFiltered = computed(() => authStore.isActingAsInspector);
 
 /**
  * Handle inspection selection change

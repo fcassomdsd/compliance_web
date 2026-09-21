@@ -107,4 +107,8 @@ function createSessionAuth({ config, sessionRepository, now = () => new Date() }
 module.exports = {
   createSessionAuth,
   buildError,
+  // The Node-RED proxy gates gateway operations with the same any-role rule the
+  // route middleware uses, but decides the role set per request rather than per
+  // mount (see ../nodered/gatewayPolicy.cjs).
+  requireRoles,
 };

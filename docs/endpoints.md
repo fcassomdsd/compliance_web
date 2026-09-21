@@ -5,6 +5,11 @@ mounts in `server/app.cjs`. Do not edit by hand — run
 `node scripts/verify-endpoints.mjs --write` after changing a route and commit
 the result.
 
+`ALL /nodered/*` is the gateway proxy's mount, not a licence to call anything
+under it: which operations it forwards, and the roles each one needs, is the
+allow-list in `server/nodered/gatewayPolicy.cjs` — tabulated in
+[`auth/AUTH_CHUNK1_ROUTE_AUTH_MATRIX.md`](auth/AUTH_CHUNK1_ROUTE_AUTH_MATRIX.md) §5.
+
 | Method | Path |
 |---|---|
 | ALL | `/nodered/*` |
