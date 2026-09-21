@@ -15,6 +15,14 @@
 const express = require('express');
 
 const { buildError } = require('../auth/sessionAuth.cjs');
+const {
+  isScopeControlled,
+  sessionScope,
+  scopeControlledFields,
+  refsFromRecord,
+  scopeAllowsRefs,
+  hasRefs,
+} = require('../auth/specialtyScope.cjs');
 const { createScopeGuard, SCOPE_FORBIDDEN, SCOPE_UNVERIFIED } = require('./scopeGuard.cjs');
 
 // `${method}Entity` routes from src/services/apiServices.js. `query` and the
@@ -37,6 +45,52 @@ function forwardableBody(req) {
   if (body === undefined || body === null) return undefined;
   if (typeof body === 'object' && Object.keys(body).length === 0) return undefined;
   return body;
+}
+
+// `select` is concatenated into the gateway's upstream URL, so it owns its
+// trailing separator. Appending the scope fields keeps a caller from hiding the
+// data the read filter needs by selecting a narrow column list.
+function withScopeSelect(target, entity) {
+  const fields = scopeControlledFields(entity) || [];
+  if (fields.length === 0) return target;
+
+  const [path, queryString = ''] = target.split('?');
+  const params = new URLSearchParams(queryString);
+  const select = params.get('select');
+  if (select === null) return target;
+
+  const missing = fields.filter((field) => !select.split(',').includes(field));
+  if (missing.length === 0) return target;
+
+  params.set('select', `${select}${select.endsWith('&') ? '' : ','}${missing.join(',')}&`);
+  return `${path}?${params.toString()}`;
+}
+
+// Drop the rows whose specialty is outside the session's scope. A row whose
+// specialty cannot be read at all is kept: the platform treats a record that
+// belongs to no specialty as not scope-controlled.
+function filterReadResponse({ entity, scope, body }) {
+  if (typeof body !== 'string') return body;
+
+  let parsed;
+  try {
+    parsed = JSON.parse(body);
+  } catch {
+    return body;
+  }
+
+  const rows = Array.isArray(parsed?.list) ? parsed.list : Array.isArray(parsed) ? parsed : null;
+  if (!rows) return body;
+
+  const kept = rows.filter((row) => {
+    const refs = refsFromRecord(entity, row);
+    return !hasRefs(refs) || scopeAllowsRefs(scope, refs);
+  });
+
+  if (kept.length === rows.length) return body;
+
+  const next = Array.isArray(parsed) ? kept : { ...parsed, list: kept, total: kept.length };
+  return JSON.stringify(next);
 }
 
 function createNodeRedProxyRouter({ auth, config, logger, nodeRedClient }) {
@@ -78,6 +132,15 @@ function createNodeRedProxyRouter({ auth, config, logger, nodeRedClient }) {
       }
     }
 
+    // A scoped session must not read another specialty's records either, and the
+    // gateway is what the UI lists them through. The fields that identify a
+    // record's specialty are forced into the upstream read — a caller asking for
+    // `select=id` must not be able to hide them — and the rows that come back
+    // outside the scope are dropped (`total` is recomputed so it matches).
+    const readScope = method === 'query' && isScopeControlled(String(req.query?.entity || ''))
+      ? sessionScope(req.auth?.session)
+      : { scoped: false };
+
     const target = `${baseUrl}${req.originalUrl.replace(/^\/nodered/, '')}`;
     const headers = { 'X-Alfresco-Ticket': req.auth?.ticket || '' };
     if (apiKey) headers['X-API-Key'] = apiKey;
@@ -87,10 +150,21 @@ function createNodeRedProxyRouter({ auth, config, logger, nodeRedClient }) {
     try {
       const upstream = await nodeRedClient.request({
         method: req.method,
-        url: target,
+        url: readScope.scoped ? withScopeSelect(target, String(req.query?.entity || '')) : target,
         headers,
         data: forwardableBody(req),
       });
+
+      if (readScope.scoped && upstream.status === 200) {
+        const filtered = filterReadResponse({
+          entity: String(req.query?.entity || ''),
+          scope: readScope,
+          body: upstream.data,
+        });
+        res.status(upstream.status);
+        if (upstream.contentType) res.type(upstream.contentType);
+        return res.send(filtered);
+      }
 
       res.status(upstream.status);
       if (upstream.contentType) res.type(upstream.contentType);

@@ -288,4 +288,75 @@ describe('Node-RED proxy', () => {
     expect(res.status).toBe(403);
     expect(res.body.code).toBe('AUTH_SCOPE_UNVERIFIED');
   });
+
+  it('drops out-of-scope rows from a gateway read', async () => {
+    gateway = await startStubGateway((entry, res) => {
+      if (entry.url.startsWith('/inspector/')) return json(res, 200, INSPECTOR);
+      if (entry.url.includes('entity=ChecklistQuestion')) {
+        return json(res, 200, {
+          total: 2,
+          list: [
+            { id: 'q-ats', specialty: { id: 'spec_ats', code: 'ATS' } },
+            { id: 'q-met', specialty: { id: 'spec_met', code: 'MET' } },
+          ],
+        });
+      }
+      return json(res, 200, { ok: true });
+    });
+    const { app } = buildTestApp({ gatewayUrl: gateway.url });
+    const cookie = await loginCookie(app);
+
+    const res = await request(app)
+      .post('/nodered/queryEntity?entity=ChecklistQuestion')
+      .set('Cookie', cookie)
+      .send({ deleted: false });
+
+    expect(res.status).toBe(200);
+    expect(res.body.list.map((row) => row.id)).toEqual(['q-ats']);
+    // The count has to agree with the list it is returned with.
+    expect(res.body.total).toBe(1);
+  });
+
+  it('forces the scope fields into a narrow select so they cannot be hidden', async () => {
+    gateway = await startStubGateway((entry, res) => {
+      if (entry.url.startsWith('/inspector/')) return json(res, 200, INSPECTOR);
+      return json(res, 200, { total: 1, list: [{ id: 'i-1', inspectedSpecialties: [{ specialtyId: 'spec_ats' }] }] });
+    });
+    const { app } = buildTestApp({ gatewayUrl: gateway.url });
+    const cookie = await loginCookie(app);
+
+    const res = await request(app)
+      .post('/nodered/queryEntity?entity=Inspection&select=id,status&')
+      .set('Cookie', cookie)
+      .send({});
+
+    expect(res.status).toBe(200);
+    const forwarded = gateway.requests.at(-1).url;
+    expect(forwarded).toContain('inspectedSpecialties');
+    expect(forwarded).toContain('status');
+  });
+
+  it('leaves reads untouched for an unscoped session', async () => {
+    gateway = await startStubGateway((entry, res) => {
+      if (entry.url.startsWith('/inspector/')) return json(res, 200, INSPECTOR);
+      return json(res, 200, {
+        total: 2,
+        list: [
+          { id: 'q-ats', specialty: { id: 'spec_ats', code: 'ATS' } },
+          { id: 'q-met', specialty: { id: 'spec_met', code: 'MET' } },
+        ],
+      });
+    });
+    const { app } = buildTestApp({ gatewayUrl: gateway.url, groups: ['GROUP_ADMIN'] });
+    const cookie = await loginCookie(app, 'root.admin');
+
+    const res = await request(app)
+      .post('/nodered/queryEntity?entity=ChecklistQuestion')
+      .set('Cookie', cookie)
+      .send({ deleted: false });
+
+    expect(res.status).toBe(200);
+    expect(res.body.list).toHaveLength(2);
+    expect(res.body.total).toBe(2);
+  });
 });
