@@ -328,7 +328,7 @@ function applyFindingFilters({ findings, status, capOverdueOnly, solutionOverdue
   });
 }
 
-function createFindingsRouter({ auth, alfrescoClient, notificationService, nodeRedClient, now = () => new Date() }) {
+function createFindingsRouter({ auth, alfrescoClient, notificationService, roleRecipients, nodeRedClient, now = () => new Date() }) {
   const router = express.Router();
 
   router.get(
@@ -721,6 +721,8 @@ function createFindingsRouter({ auth, alfrescoClient, notificationService, nodeR
 
         await notifyRoleInbox({
           notificationService,
+          roleRecipients,
+          role: 'inspector',
           envVar: 'INSPECTOR_NOTIFICATIONS_EMAIL',
           eventType: 'evidence_review_pending',
           ...buildNotificationMessage('evidence_review_pending', { findingId: finding.findingId, followUpId }),
@@ -823,6 +825,8 @@ function createFindingsRouter({ auth, alfrescoClient, notificationService, nodeR
           if (nextFindingStatus === FINDING_STATUS.PENDING_CLOSURE_APPROVAL) {
             await notifyRoleInbox({
               notificationService,
+              roleRecipients,
+              role: 'inspector',
               envVar: 'INSPECTOR_NOTIFICATIONS_EMAIL',
               eventType: 'closure_pending_approval',
               ...buildNotificationMessage('closure_pending_approval', { findingId: req.params.findingId }),
@@ -832,6 +836,8 @@ function createFindingsRouter({ auth, alfrescoClient, notificationService, nodeR
         } else {
           await notifyRoleInbox({
             notificationService,
+            roleRecipients,
+            role: 'inspector',
             envVar: 'INSPECTOR_NOTIFICATIONS_EMAIL',
             eventType: 'evidence_inadequate',
             ...buildNotificationMessage('evidence_inadequate', {
@@ -1171,6 +1177,8 @@ function createFindingsRouter({ auth, alfrescoClient, notificationService, nodeR
         if (decision === 'approve') {
           await notifyRoleInbox({
             notificationService,
+            roleRecipients,
+            role: 'cap_entry',
             envVar: 'CAP_ENTRY_NOTIFICATIONS_EMAIL',
             eventType: 'finding_closed',
             ...buildNotificationMessage('finding_closed', { findingId: req.params.findingId }),
@@ -1179,6 +1187,8 @@ function createFindingsRouter({ auth, alfrescoClient, notificationService, nodeR
         } else {
           await notifyRoleInbox({
             notificationService,
+            roleRecipients,
+            role: 'inspector',
             envVar: 'INSPECTOR_NOTIFICATIONS_EMAIL',
             eventType: 'closure_rejected',
             ...buildNotificationMessage('closure_rejected', { findingId: req.params.findingId }),
@@ -1241,6 +1251,8 @@ function createFindingsRouter({ auth, alfrescoClient, notificationService, nodeR
 
         await notifyRoleInbox({
           notificationService,
+          roleRecipients,
+          role: 'inspector',
           envVar: 'INSPECTOR_NOTIFICATIONS_EMAIL',
           eventType: 'deadline_extension_requested',
           ...buildNotificationMessage('deadline_extension_requested', {
@@ -1301,6 +1313,8 @@ function createFindingsRouter({ auth, alfrescoClient, notificationService, nodeR
 
         await notifyRoleInbox({
           notificationService,
+          roleRecipients,
+          role: 'cap_entry',
           envVar: 'CAP_ENTRY_NOTIFICATIONS_EMAIL',
           eventType: 'deadline_extension_reviewed',
           ...buildNotificationMessage('deadline_extension_reviewed', {

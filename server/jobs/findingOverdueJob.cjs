@@ -65,12 +65,14 @@ async function escalateNewlyOverdueFinding({ finding, effectiveStatus, notificat
 // "Pending Review" via the canonical-import webscript in compliance_cmis,
 // which this service doesn't observe synchronously — so this polls
 // instead, same as overdue detection itself.
-async function sendPendingReviewDigest({ pendingReviewFindings, notificationService }) {
+async function sendPendingReviewDigest({ pendingReviewFindings, notificationService, roleRecipients }) {
   if (pendingReviewFindings.length === 0) {
     return;
   }
   await notifyRoleInbox({
     notificationService,
+    roleRecipients,
+    role: 'inspector',
     envVar: 'INSPECTOR_NOTIFICATIONS_EMAIL',
     eventType: 'finding_review_pending',
     subject: `${pendingReviewFindings.length} finding(s) awaiting review`,
@@ -82,7 +84,7 @@ async function sendPendingReviewDigest({ pendingReviewFindings, notificationServ
   });
 }
 
-async function runFindingOverdueSync({ alfrescoClient, username, password, notificationService, logger = console, now = () => new Date() }) {
+async function runFindingOverdueSync({ alfrescoClient, username, password, notificationService, roleRecipients, logger = console, now = () => new Date() }) {
   if (!username || !password) {
     logger.warn('Finding overdue job skipped: ALFRESCO_JOB_USERNAME/ALFRESCO_JOB_PASSWORD not configured');
     return { skipped: true, updated: 0, drift: 0 };
@@ -149,7 +151,7 @@ async function runFindingOverdueSync({ alfrescoClient, username, password, notif
       }
     }
 
-    await sendPendingReviewDigest({ pendingReviewFindings, notificationService });
+    await sendPendingReviewDigest({ pendingReviewFindings, notificationService, roleRecipients });
 
     logger.info('Finding overdue sync completed', { updated, drift, pendingReview: pendingReviewFindings.length, total: findings.length });
     return { skipped: false, updated, drift, pendingReview: pendingReviewFindings.length };
@@ -163,6 +165,7 @@ function startFindingOverdueJob({
   username,
   password,
   notificationService,
+  roleRecipients,
   logger = console,
   now = () => new Date(),
   runHourLocal = 1,
@@ -173,7 +176,7 @@ function startFindingOverdueJob({
     const waitMs = untilNextRunMs(runHourLocal, now());
     timeoutId = setTimeout(async () => {
       try {
-        await runFindingOverdueSync({ alfrescoClient, username, password, notificationService, logger, now });
+        await runFindingOverdueSync({ alfrescoClient, username, password, notificationService, roleRecipients, logger, now });
       } catch (error) {
         logger.error('Finding overdue sync failed', error);
       } finally {
@@ -191,7 +194,7 @@ function startFindingOverdueJob({
         clearTimeout(timeoutId);
       }
     },
-    runNow: () => runFindingOverdueSync({ alfrescoClient, username, password, notificationService, logger, now }),
+    runNow: () => runFindingOverdueSync({ alfrescoClient, username, password, notificationService, roleRecipients, logger, now }),
   };
 }
 

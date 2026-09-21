@@ -237,6 +237,31 @@ class PgSessionRepository {
     return result.rows.map((row) => row.role_key);
   }
 
+  // The Alfresco groups that currently grant a role — the inverse of
+  // resolveRolesForGroups, used to address a notification to everyone holding a
+  // role. Same activity rule: both the mapping and the role must be active.
+  async listGroupsForRole(roleKey) {
+    const key = String(roleKey || '').trim().toLowerCase();
+    if (!key) {
+      return [];
+    }
+
+    const result = await this.pool.query(
+      `
+      SELECT agrm.alfresco_group
+      FROM alfresco_group_role_map agrm
+      INNER JOIN app_role ar ON ar.id = agrm.role_id
+      WHERE agrm.is_active = TRUE
+        AND ar.is_active = TRUE
+        AND LOWER(TRIM(ar.role_key)) = $1
+      ORDER BY agrm.priority, agrm.alfresco_group
+      `,
+      [key]
+    );
+
+    return result.rows.map((row) => row.alfresco_group);
+  }
+
   async revokeSession(sessionId, revokedAt) {
     await this.pool.query(
       `

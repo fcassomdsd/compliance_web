@@ -10,6 +10,7 @@ const { startFindingOverdueJob } = require('./jobs/findingOverdueJob.cjs');
 const { PgNotificationRepository } = require('./notifications/pgNotificationRepository.cjs');
 const { createEmailTransport } = require('./notifications/emailTransport.cjs');
 const { createNotificationService } = require('./notifications/notificationService.cjs');
+const { createRoleRecipientResolver } = require('./notifications/roleRecipients.cjs');
 const { startNotificationSendJob } = require('./jobs/notificationSendJob.cjs');
 const { startSessionCleanupJob } = require('./jobs/sessionCleanupJob.cjs');
 const { NodeRedClient } = require('./atrocore/nodeRedClient.cjs');
@@ -63,6 +64,23 @@ async function start() {
     emailTransport,
     logger: auditLogger,
   });
+  // Who holds a role, for notifications addressed to one. It reads group
+  // membership with the same service account the scheduled jobs use; without it
+  // every role notification falls back to its fixed distribution list.
+  const roleRecipients = createRoleRecipientResolver({
+    sessionRepository,
+    alfrescoClient,
+    username: process.env.ALFRESCO_JOB_USERNAME,
+    password: process.env.ALFRESCO_JOB_PASSWORD,
+    ttlMs: Number(process.env.ROLE_RECIPIENT_CACHE_MS || 15 * 60 * 1000),
+    logger: auditLogger,
+  });
+  if (!roleRecipients.isConfigured()) {
+    auditLogger.warn(
+      'ALFRESCO_JOB_USERNAME/ALFRESCO_JOB_PASSWORD not configured: role notifications will use the fixed distribution lists, and the notification centre will stay empty'
+    );
+  }
+
   const nodeRedClient = new NodeRedClient({ baseUrl: process.env.NODE_RED_BASE_URL });
   const runtimeConfigWithGateway = {
     ...runtimeConfig,
@@ -81,6 +99,7 @@ async function start() {
     capDraftRepository,
     notificationRepository,
     notificationService,
+    roleRecipients,
     nodeRedClient,
   });
 
@@ -93,6 +112,7 @@ async function start() {
     username: process.env.ALFRESCO_JOB_USERNAME,
     password: process.env.ALFRESCO_JOB_PASSWORD,
     notificationService,
+    roleRecipients,
     logger: auditLogger,
     runHourLocal: Number(process.env.FINDING_OVERDUE_JOB_HOUR || 1),
   });
@@ -110,6 +130,7 @@ async function start() {
     username: process.env.ALFRESCO_JOB_USERNAME,
     password: process.env.ALFRESCO_JOB_PASSWORD,
     notificationService,
+    roleRecipients,
     logger: auditLogger,
     runHourLocal: Number(process.env.SITE_VISIT_SCHEDULING_JOB_HOUR || 2),
   });
