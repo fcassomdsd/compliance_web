@@ -101,3 +101,11 @@ Unit and route tests live next to the code they cover:
 | store and picker gating | `tests/unit/...`, `tests/server/...` (see `npm run test:auth:all`) |
 
 `npm run test:auth:all` runs the full pre-merge gate for anything touching auth, roles or scope.
+
+`scripts/verify-specialty-scope-e2e.sh` boots the **real** server process against a throwaway
+PostgreSQL and a stub of the two upstreams (their credentials are not in this repository) and drives
+it over HTTP: an unauthenticated gateway call is refused, login resolves the scope, a scoped
+`queryEntity` read drops the out-of-scope row, the gateway is shown to receive the API key and the
+session's ticket and never the session cookie, and an out-of-scope write is refused. The unit tests
+call `createApp` directly, so this is what covers the wiring in `server/index.cjs` and the real
+session store. It needs Docker.

@@ -3,6 +3,15 @@ services:
     ports:
       - "5433:5432"
 
+  # The app server owns /nodered now: the browser (and the Vite dev server) send
+  # the gateway prefix here, where the Node-RED API key, the session's own
+  # Alfresco ticket and the specialty-scope check live. The backend therefore has
+  # to reach node-red, which is on the external alfresco_backend network.
+  #
+  # This used to be a `frontend-dev` override setting VITE_NODE_RED_PROXY_TARGET,
+  # because Vite proxied /nodered straight to node-red. Vite now proxies it to
+  # the app server (`NODE_RED_BASE_URL` comes from docker-compose.yml), so that
+  # override is gone.
   backend:
     ports:
       - "4000:4000"
@@ -11,15 +20,6 @@ services:
     networks:
       - default
       - alfresco_backend
-
-  # Without this the Vite dev server falls back to http://localhost:1880, which
-  # is the frontend container itself — the /nodered proxy then fails with
-  # ECONNREFUSED and Vite answers the browser with HTTP 500 ("apiEntityCRUD:
-  # Request failed with status code 500"). node-red is reached through the
-  # alfresco_backend network declared in docker-compose.yml.
-  frontend-dev:
-    environment:
-      VITE_NODE_RED_PROXY_TARGET: http://node-red:1880
 
 networks:
   alfresco_backend:
