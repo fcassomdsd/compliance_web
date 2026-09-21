@@ -26,41 +26,15 @@
       </button>
     </div>
     <div class="controls-container" :class="{ 'nav-open': navOpen }">
-      <RouterLink to="/oversight-posture" class="nav-link" exact-active-class="active-view" @click="navOpen = false">
-        {{ t('app.nav.oversightPosture') }}
-      </RouterLink>
-      <RouterLink to="/site-visit" class="nav-link" exact-active-class="active-view" @click="navOpen = false">
-        {{ t('app.nav.siteVisits') }}
-      </RouterLink>
-      <RouterLink to="/assign-inspectors" class="nav-link" exact-active-class="active-view" @click="navOpen = false">
-        {{ t('app.nav.assignInspectors') }}
-      </RouterLink>
-      <RouterLink to="/checklist" class="nav-link" exact-active-class="active-view" @click="navOpen = false">
-        {{ t('app.nav.inspectionChecklist') }}
-      </RouterLink>
-      <RouterLink to="/inspection-plan" class="nav-link" exact-active-class="active-view" @click="navOpen = false">
-        {{ t('app.nav.inspectionPlan') }}
-      </RouterLink>
-      <RouterLink to="/inspection-report" class="nav-link" exact-active-class="active-view" @click="navOpen = false">
-        {{ t('app.nav.inspectionReport') }}
-      </RouterLink>
-      <RouterLink to="/findings" class="nav-link" exact-active-class="active-view" @click="navOpen = false">
-        {{ t('app.nav.findings') }}
-      </RouterLink>
-      <RouterLink to="/corrective-actions" class="nav-link" exact-active-class="active-view" @click="navOpen = false">
-        {{ t('app.nav.correctiveActions') }}
-      </RouterLink>
-      <RouterLink to="/follow-ups" class="nav-link" exact-active-class="active-view" @click="navOpen = false">
-        {{ t('app.nav.followUps') }}
-      </RouterLink>
-      <RouterLink to="/inspection-cadences" class="nav-link" exact-active-class="active-view" @click="navOpen = false">
-        {{ t('app.nav.inspectionCadences') }}
-      </RouterLink>
-      <RouterLink to="/provider-history" class="nav-link" exact-active-class="active-view" @click="navOpen = false">
-        {{ t('app.nav.providerHistory') }}
-      </RouterLink>
-      <RouterLink to="/usoap-evidence-report" class="nav-link" exact-active-class="active-view" @click="navOpen = false">
-        {{ t('app.nav.usoapEvidenceReport') }}
+      <RouterLink
+        v-for="item in navItems"
+        :key="item.name"
+        :to="{ name: item.name }"
+        class="nav-link"
+        exact-active-class="active-view"
+        @click="navOpen = false"
+      >
+        {{ t(item.labelKey) }}
       </RouterLink>
     </div>
     <RouterView v-slot="{ Component }">
@@ -72,10 +46,11 @@
 </template>
 
 <script setup>
-import { ref, onMounted, onUnmounted } from 'vue';
+import { ref, computed, onMounted, onUnmounted } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/authStore';
+import { permittedNavItems } from '@/router/navigation';
 import BaseButton from '@/components/base/BaseButton.vue';
 import NotificationBell from '@/components/NotificationBell.vue';
 import logo from './assets/images/logos/compliance-logo.png'
@@ -84,6 +59,10 @@ const { t, locale } = useI18n();
 const router = useRouter()
 const authStore = useAuthStore()
 const navOpen = ref(false)
+
+// Offer only what the session may actually open. This is UX, not a boundary —
+// the route guard and the server gates are what refuse a denied destination.
+const navItems = computed(() => permittedNavItems(router, authStore.hasRole))
 
 async function onLogout() {
   try {

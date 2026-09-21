@@ -5,9 +5,9 @@ const routes = [
   {
     path: '/',
     name: 'home',
-    // Role-aware landing page: inspectors land on the oversight posture
-    // dashboard, everyone else keeps the previous default. Deciding this
-    // inside HomeView.vue (rather than a static redirect string) means the
+    // Role-aware landing page: HomeView.vue sends the user to the first
+    // navigation entry their roles permit (see router/navigation.js). Deciding
+    // this inside the view (rather than a static redirect string) means the
     // auth guard has already refreshed authStore.roles before we choose.
     component: () => import('@/views/HomeView.vue'),
     meta: { requiresAuth: true },
