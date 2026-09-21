@@ -139,7 +139,7 @@ and never reaches the gateway. That matters because the same gateway also serves
 and the import service — `/importCanonical`, `/importFollowUps`, `/checklist`, `/findings/open` and
 the rest are not reachable from a browser session.
 
-Order of checks: session → classification → role → specialty scope → forward.
+Order of checks: session → classification → role → **field rules** → specialty scope → forward.
 
 ### Reads — a session is enough
 
@@ -156,7 +156,7 @@ role. A prefixed read takes exactly one further path segment.
 |---|---|---|---|
 | `SiteVisit` | planner, admin | planner, admin | planner, admin |
 | `InspectedProvider` | planner, admin | planner, admin | planner, admin |
-| `Inspection` | planner, admin | planner, **inspector**, **assigner**, admin | planner, admin |
+| `Inspection` | planner, admin | planner, **inspector**, **assigner**, admin — per field, see below | planner, admin |
 | `InspectionSchedule` | planner, admin | planner, admin | planner, admin |
 | `InspectedService` | planner, admin | planner, admin | planner, admin |
 | `InspectedSpecialty` | planner, admin | planner, admin | planner, admin |
@@ -167,10 +167,27 @@ Any other entity cannot be written through the proxy at all: locations, provider
 specialties, checklist questions and the rest of the reference data are maintained in AtroCore
 itself.
 
-`Inspection.update` carries three roles because three screens perform it — InspectionManager as a
-planner, InspectionReport as an inspector, AssignInspectors as an assigner. This is **entity-level**
-authorization: it cannot express "an assigner may set `status=Assigned` and nothing else". That
-distinction belongs in the flows or a domain layer.
+#### Field rules on `Inspection.update`
+
+`Inspection.update` is the only gateway write more than one non-admin role performs, and the three
+roles do three different jobs on it — so its rule names the fields, and where a screen only ever
+writes one value, the values:
+
+| Role | May write | Why |
+|---|---|---|
+| `planner` | *anything* | It owns the record. InspectionManager loads the inspection with `{ ...list[0] }` and saves it back whole, so its payload carries every column AtroCore returns — a field list for the owner would be a list of the table's columns and would break the moment one was added. |
+| `inspector` | `activityTypeId`, `objective`, `scope`, `description`, `conclusion`, `code` | InspectionReport stamps the report outcome before generating it. **Not `status`**: the `Reported` transition belongs to the `/inspectionReport` action. `code` is there because `updateInspection` re-mints the activity code when the activity type changes while the inspection is still at `Created`. |
+| `assigner` | `status`, and only the value `Assigned` | AssignInspectors moves the inspection to `Assigned` on both its paths (first assignment and reassignment) and does nothing else to it. |
+| `admin` | *anything* | Break-glass. |
+
+A session holding two roles gets the **union** of their field sets, the same way authorization is an
+any-role match — so an assigner who is also a planner is unrestricted. A payload is refused whole,
+with 403 `AUTH_GATEWAY_FIELD_FORBIDDEN`, as soon as one field is out of bounds; nothing reaches the
+gateway.
+
+Every other write keeps a plain role list, because a single role owns the entity outright. Field
+rules are for the case this table shows: a role reaching an entity it does not own, for one narrow
+purpose.
 
 ### Link writes — per entity + relation
 
@@ -226,6 +243,10 @@ every scope-controlled read a scoped session makes.
     `DELETE /nodered/deleteEntity?entity=Location` → 403.
 12. Gateway: `inspector` → `POST /nodered/addLinks?entity=InspectedSpecialty&link=actingInspectors`
     → 403; `assigner` → forwarded.
+13. Gateway fields: `assigner` → `PUT …updateEntity?entity=Inspection` with `{"status":"Assigned"}`
+    → 200; with `{"status":"Complete"}` or `{"objective":"…"}` → 403
+    `AUTH_GATEWAY_FIELD_FORBIDDEN`. `inspector` → `{"conclusion":"…"}` → 200; `{"status":"Reported"}`
+    → 403. `planner` → the whole round-tripped record → 200.
 
 Covered by `tests/unit/router/guards.test.js`, `tests/unit/router/navigation.test.js`,
 `tests/unit/App.test.js`, `tests/server/nodeRedProxy.test.js` and the server router tests;

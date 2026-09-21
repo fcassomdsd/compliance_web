@@ -69,6 +69,7 @@ http.createServer((req, res) => {
     const GROUPS = {
       'pablo.planner': ['GROUP_U-VSO-IN_Inspector', 'GROUP_U-VSO-PI_PlanInspeccion'],
       'paula.planneronly': ['GROUP_U-VSO-PI_PlanInspeccion'],
+      'alba.assigner': ['GROUP_U-VSO-IN_Assigner'],
     };
     if (url.pathname.endsWith('/groups')) {
       const user = Object.keys(GROUPS).find((name) => url.pathname.includes(name));
@@ -86,6 +87,12 @@ http.createServer((req, res) => {
           { id: 'q-met', specialty: { id: 'spec_met', code: 'MET' } },
         ],
       });
+    }
+    // A readable Inspection, so the specialty guard can attribute a write to it.
+    // No inspected specialties: a record that belongs to no specialty is not
+    // scope-controlled, which leaves the field rules as what the check exercises.
+    if (url.pathname === '/queryEntity' && url.searchParams.get('entity') === 'Inspection') {
+      return send(res, 200, { total: 1, list: [{ id: 'insp-1', inspectedSpecialties: [] }] });
     }
     if (url.pathname === '/addEntity') return send(res, 200, { id: 'added-1' });
     return send(res, 200, { ok: true, path: url.pathname });
@@ -224,6 +231,30 @@ sys.exit(0 if ids == ['q-ats', 'q-met'] and data.get('total') == 2 else 1)
 code=$(curl -s -o /dev/null -w '%{http_code}' -b "$PLANNER_JAR" -X POST "http://127.0.0.1:${APP_PORT}/nodered/addEntity?entity=InspectedSpecialty" -H 'Content-Type: application/json' -d '{"specialtyId":"spec_met"}')
 check "planner writes outside the Inspector record's specialties -> 200" 200 "$code"
 
+# Inspection.update is the one write three roles perform, so its rule names the
+# fields each may set. An assigner moves an inspection to Assigned and does
+# nothing else to it.
+ASSIGNER_JAR="$WORK_DIR/cookies-assigner.txt"
+curl -s -c "$ASSIGNER_JAR" -X POST "http://127.0.0.1:${APP_PORT}/api/auth/login" -H 'Content-Type: application/json' \
+  -d '{"username":"alba.assigner","password":"secret"}' >/dev/null
+
+code=$(curl -s -o /dev/null -w '%{http_code}' -b "$ASSIGNER_JAR" -X PUT "http://127.0.0.1:${APP_PORT}/nodered/updateEntity?entity=Inspection&id=insp-1" -H 'Content-Type: application/json' -d '{"status":"Assigned"}')
+check "assigner setting status=Assigned -> 200" 200 "$code"
+
+code=$(curl -s -o /dev/null -w '%{http_code}' -b "$ASSIGNER_JAR" -X PUT "http://127.0.0.1:${APP_PORT}/nodered/updateEntity?entity=Inspection&id=insp-1" -H 'Content-Type: application/json' -d '{"status":"Complete"}')
+check "assigner setting any other status -> 403" 403 "$code"
+
+code=$(curl -s -o /dev/null -w '%{http_code}' -b "$ASSIGNER_JAR" -X PUT "http://127.0.0.1:${APP_PORT}/nodered/updateEntity?entity=Inspection&id=insp-1" -H 'Content-Type: application/json' -d '{"objective":"rewritten"}')
+check "assigner editing the inspection itself -> 403" 403 "$code"
+
+# The inspector stamps the report outcome; the Reported transition is the
+# /inspectionReport action's job, not a field write.
+code=$(curl -s -o /dev/null -w '%{http_code}' -b "$JAR" -X PUT "http://127.0.0.1:${APP_PORT}/nodered/updateEntity?entity=Inspection&id=insp-1" -H 'Content-Type: application/json' -d '{"conclusion":"text","description":"text"}')
+check "inspector stamping the report outcome -> 200" 200 "$code"
+
+code=$(curl -s -o /dev/null -w '%{http_code}' -b "$JAR" -X PUT "http://127.0.0.1:${APP_PORT}/nodered/updateEntity?entity=Inspection&id=insp-1" -H 'Content-Type: application/json' -d '{"status":"Reported"}')
+check "inspector setting the status directly -> 403" 403 "$code"
+
 # This user holds both roles, so the union of both role sets is what they get.
 code=$(curl -s -o /dev/null -w '%{http_code}' -b "$PLANNER_JAR" -X POST "http://127.0.0.1:${APP_PORT}/nodered/addEntity?entity=InspectionQuestion" -H 'Content-Type: application/json' -d '{"questionId":"q-1"}')
 check "inspector+planner writes either role's entity -> 200" 200 "$code"
@@ -238,6 +269,10 @@ check "planner-only writing an inspector's entity -> 403" 403 "$code"
 
 code=$(curl -s -o /dev/null -w '%{http_code}' -b "$ONLY_JAR" -X POST "http://127.0.0.1:${APP_PORT}/nodered/addEntity?entity=SiteVisit" -H 'Content-Type: application/json' -d '{"locationId":"loc-1"}')
 check "planner-only writing its own entity -> 200" 200 "$code"
+
+# The planner owns the record and saves it back whole.
+code=$(curl -s -o /dev/null -w '%{http_code}' -b "$ONLY_JAR" -X PUT "http://127.0.0.1:${APP_PORT}/nodered/updateEntity?entity=Inspection&id=insp-1" -H 'Content-Type: application/json' -d '{"status":"Defined","objective":"o","inspectedProviderName":"round-tripped"}')
+check "planner saving the whole record -> 200" 200 "$code"
 
 echo
 echo "sandbox e2e: ${pass} passed, ${fail} failed"

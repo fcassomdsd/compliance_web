@@ -261,7 +261,6 @@ describe('Node-RED proxy', () => {
   it.each([
     ['planner', 'GROUP_PLANNER', 200],
     ['inspector', 'GROUP_INSPECTOR', 200],
-    ['assigner', 'GROUP_ASSIGNER', 200],
     ['reporter', 'GROUP_REPORTER', 403],
   ])('lets %s PUT updateEntity?entity=Inspection -> %i', async (role, group, expected) => {
     gateway = await startStubGateway((entry, res) => {
@@ -277,9 +276,121 @@ describe('Node-RED proxy', () => {
     const res = await request(app)
       .put('/nodered/updateEntity?entity=Inspection&id=insp-1')
       .set('Cookie', cookie)
-      .send({ status: 'Assigned' });
+      .send({ objective: 'Revised objective' });
 
     expect(res.status).toBe(expected);
+  });
+
+  // Inspection.update is the only write three roles perform, and they do three
+  // different jobs on it — so the rule names the fields each may set.
+  describe('field-level rules on Inspection.update', () => {
+    async function update(group, payload) {
+      gateway = await startStubGateway((entry, res) => {
+        if (entry.url.startsWith('/inspector/')) return json(res, 200, INSPECTOR);
+        if (entry.url.startsWith('/queryEntity')) {
+          return json(res, 200, { total: 1, list: [{ id: 'insp-1', inspectedSpecialties: [] }] });
+        }
+        return json(res, 200, { ok: true });
+      });
+      const { app } = buildTestApp({ gatewayUrl: gateway.url, groups: [group] });
+      const cookie = await loginCookie(app, 'user.x');
+      return request(app)
+        .put('/nodered/updateEntity?entity=Inspection&id=insp-1')
+        .set('Cookie', cookie)
+        .send(payload);
+    }
+
+    it('lets an assigner move an inspection to Assigned', async () => {
+      const res = await update('GROUP_ASSIGNER', { status: 'Assigned' });
+      expect(res.status).toBe(200);
+    });
+
+    it('stops an assigner setting any other status', async () => {
+      const res = await update('GROUP_ASSIGNER', { status: 'Complete' });
+      expect(res.status).toBe(403);
+      expect(res.body.code).toBe('AUTH_GATEWAY_FIELD_FORBIDDEN');
+      expect(res.body.message).toContain('Assigned');
+      expect(gateway.requests.filter((e) => e.url.startsWith('/updateEntity'))).toHaveLength(0);
+    });
+
+    it('stops an assigner editing the inspection itself', async () => {
+      const res = await update('GROUP_ASSIGNER', { objective: 'Rewritten by the assigner' });
+      expect(res.status).toBe(403);
+      expect(res.body.code).toBe('AUTH_GATEWAY_FIELD_FORBIDDEN');
+    });
+
+    it('refuses the whole payload when one field is out of bounds', async () => {
+      const res = await update('GROUP_ASSIGNER', { status: 'Assigned', objective: 'smuggled' });
+      expect(res.status).toBe(403);
+      expect(gateway.requests.filter((e) => e.url.startsWith('/updateEntity'))).toHaveLength(0);
+    });
+
+    it('lets an inspector stamp the report outcome', async () => {
+      const res = await update('GROUP_INSPECTOR', {
+        description: 'd',
+        conclusion: 'c',
+        objective: 'o',
+        scope: 's',
+        activityTypeId: 'at-1',
+      });
+      expect(res.status).toBe(200);
+    });
+
+    it('stops an inspector setting the status directly', async () => {
+      // The Reported transition is /inspectionReport's job, not a field write.
+      const res = await update('GROUP_INSPECTOR', { status: 'Reported' });
+      expect(res.status).toBe(403);
+      expect(res.body.code).toBe('AUTH_GATEWAY_FIELD_FORBIDDEN');
+    });
+
+    // The planner owns the record: InspectionManager loads it whole and saves it
+    // back whole, so its payload carries every column AtroCore returns.
+    it('leaves the owning role unrestricted', async () => {
+      const res = await update('GROUP_PLANNER', {
+        status: 'Defined',
+        objective: 'o',
+        inspectedProviderName: 'Round-tripped from the fetched record',
+        someColumnAddedLater: true,
+      });
+      expect(res.status).toBe(200);
+    });
+
+    it('grants the union of both role sets to a user holding two roles', async () => {
+      gateway = await startStubGateway((entry, res) => {
+        if (entry.url.startsWith('/inspector/')) return json(res, 200, INSPECTOR);
+        if (entry.url.startsWith('/queryEntity')) {
+          return json(res, 200, { total: 1, list: [{ id: 'insp-1', inspectedSpecialties: [] }] });
+        }
+        return json(res, 200, { ok: true });
+      });
+      const { app } = buildTestApp({
+        gatewayUrl: gateway.url,
+        groups: ['GROUP_ASSIGNER', 'GROUP_PLANNER'],
+      });
+      const cookie = await loginCookie(app, 'user.both');
+
+      // A planner may set any status, so holding both roles lifts the
+      // assigner's value restriction rather than intersecting with it.
+      const res = await request(app)
+        .put('/nodered/updateEntity?entity=Inspection&id=insp-1')
+        .set('Cookie', cookie)
+        .send({ status: 'Complete' });
+
+      expect(res.status).toBe(200);
+    });
+
+    it('leaves an entity with a plain role list unrestricted', async () => {
+      gateway = await startStubGateway(defaultHandler);
+      const { app } = buildTestApp({ gatewayUrl: gateway.url, groups: ['GROUP_PLANNER'] });
+      const cookie = await loginCookie(app, 'pablo.planner');
+
+      const res = await request(app)
+        .post('/nodered/addEntity?entity=SiteVisit')
+        .set('Cookie', cookie)
+        .send({ locationId: 'loc-1', startDate: '2026-10-01', anythingElse: true });
+
+      expect(res.status).toBe(200);
+    });
   });
 
   it.each([
@@ -415,7 +526,7 @@ describe('Node-RED proxy', () => {
     const res = await request(app)
       .put('/nodered/updateEntity?entity=Inspection&id=insp-met')
       .set('Cookie', cookie)
-      .send({ status: 'Reported' });
+      .send({ conclusion: 'Report text' });
 
     expect(res.status).toBe(403);
     expect(res.body.code).toBe('AUTH_SCOPE_FORBIDDEN');
@@ -446,7 +557,7 @@ describe('Node-RED proxy', () => {
     const res = await request(app)
       .put('/nodered/updateEntity?entity=Inspection&id=insp-1')
       .set('Cookie', cookie)
-      .send({ status: 'Reported' });
+      .send({ conclusion: 'Report text' });
 
     expect(res.status).toBe(403);
     expect(res.body.code).toBe('AUTH_SCOPE_UNVERIFIED');
