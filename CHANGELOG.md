@@ -47,6 +47,10 @@ All notable changes to this project will be documented in this file.
 
 - **`docker-compose.dev.yml` no longer sets `VITE_NODE_RED_PROXY_TARGET`.** Vite proxies `/nodered` to the app server now, not to node-red, so the override and its `frontend-dev` service are gone; the comment on the `backend` override explains why the backend has to stay on the `alfresco_backend` network — it is what reaches node-red.
 
+### Removed
+
+- **The service-area client surface is gone: it was superseded by inspected providers.** A service area scoped *location services* — a location service belongs to a service area, so when a planner or an assigner worked an oversight activity the area decided which location services were offered for selection. Inspected providers replaced that selection path, and the code was left behind: `authStore.canManageServiceArea` had not been called by any view since the commit that introduced it (`bf8dad5 feat: add per-provider inspections and service areas`), `src/stores/serviceAreaStore.js` was imported nowhere, `apiServiceAreas()` was called nowhere, and none of it had a test — while still looking live, and carrying a latent bug (the getter required the `planner` role and so refused an `admin`). All four are removed, along with the `GET /serviceAreas` entry in the gateway allow-list. `inspectorProfile` and `refreshDomainContext` stay: `ChecklistManager` uses the profile's `id` to narrow a checklist to the inspector's own assignments. Node-RED still serves `/serviceAreas` and AtroCore still holds the entity — this removes only this app's unused client for them.
+
 ### Documentation
 
 - **`docs/auth/SPECIALTY_SCOPE_ENFORCEMENT.md` is the map of the feature**: the rule (null scope = unscoped, ids vs codes, records with no specialty), every enforcement point (the gateway proxy's write guard and read filter, the `/api` list and document-id filters, the reports, the UI pickers), what is deliberately not covered yet (link mutations, `inspectionPlan`/`inspectionReport`, the `/api/auth/ticket` contract), and which test covers which layer. `AUTH_CHUNK1_API_SPEC.md` §4.2 now documents `specialtyScopeIds` and links to it.

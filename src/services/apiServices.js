@@ -275,19 +275,6 @@ export async function apiInspectionReport(inspectionCode, reportDate, servicePro
   }
 }
 
-export async function apiServiceAreas() {
-  try {
-    const result = await axios({
-      method: 'get',
-      url: `${apiServer}/serviceAreas`,
-      headers: buildNodeRedHeaders(),
-    });
-    return { data: result.data, status: result.status };
-  } catch (error) {
-    throw new Error('apiServiceAreas: ' + error.message);
-  }
-}
-
 export async function apiInspectorByAlfrescoUser(alfrescoUserId) {
   try {
     if (!alfrescoUserId || typeof alfrescoUserId !== 'string' || alfrescoUserId.trim().length === 0) {

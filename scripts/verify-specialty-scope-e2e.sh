@@ -97,10 +97,21 @@ echo "== throwaway PostgreSQL"
 docker rm -f "$PG_CONTAINER" >/dev/null 2>&1
 docker run -d --name "$PG_CONTAINER" -e POSTGRES_USER=compliance -e POSTGRES_PASSWORD=e2e \
   -e POSTGRES_DB="$DB" -p 5544:5432 postgres:16-alpine >/dev/null
-for _ in $(seq 1 40); do
-  docker exec "$PG_CONTAINER" pg_isready -U compliance -d "$DB" >/dev/null 2>&1 && break
+# The postgres image runs a temporary server during initdb and then restarts it,
+# so pg_isready can succeed against a server that is about to go away — which
+# surfaces as "Connection terminated unexpectedly" from the migration a moment
+# later. Wait for the published port to answer a real query twice in a row.
+ready=0
+for _ in $(seq 1 60); do
+  if docker exec "$PG_CONTAINER" psql -U compliance -d "$DB" -tAc 'SELECT 1' >/dev/null 2>&1; then
+    ready=$((ready+1))
+    [ "$ready" -ge 2 ] && break
+  else
+    ready=0
+  fi
   sleep 1
 done
+[ "$ready" -ge 2 ] || { echo "FAIL: PostgreSQL did not become ready"; exit 1; }
 DATABASE_URL="postgres://compliance:e2e@127.0.0.1:5544/${DB}"
 
 (cd "$REPO_DIR" && DATABASE_URL="$DATABASE_URL" npm run db:migrate >"$WORK_DIR/migrate.log" 2>&1) \

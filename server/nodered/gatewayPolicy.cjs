@@ -84,7 +84,6 @@ const ACTION_ROLES = {
 const READ_ROUTES = [
   { method: 'POST', path: '/queryEntity' },
   { method: 'GET', path: '/getLinks' },
-  { method: 'GET', path: '/serviceAreas' },
   { method: 'GET', prefix: '/inspector/' },
   { method: 'GET', prefix: '/siteVisit/' },
   { method: 'GET', prefix: '/assignmentGroup/' },

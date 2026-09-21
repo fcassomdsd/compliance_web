@@ -163,7 +163,7 @@ describe('Node-RED proxy', () => {
     const { app } = buildTestApp({ gatewayUrl: gateway.url });
     const cookie = await loginCookie(app);
 
-    const res = await request(app).get('/nodered/serviceAreas').set('Cookie', cookie);
+    const res = await request(app).get('/nodered/siteVisit/V-ZZZZ-2026-01').set('Cookie', cookie);
 
     expect(res.status).toBe(503);
     expect(res.body).toEqual({ success: false, error: 'upstream down' });
@@ -179,6 +179,9 @@ describe('Node-RED proxy', () => {
     ['GET', '/nodered/findings/open'],
     ['GET', '/nodered/content/lastSeq'],
     ['GET', '/nodered/inspectors'],
+    // Service areas scoped location services before inspected providers
+    // superseded them; the app no longer reads them.
+    ['GET', '/nodered/serviceAreas'],
   ])('refuses %s %s, which this app never calls', async (method, path) => {
     gateway = await startStubGateway(defaultHandler);
     const { app } = buildTestApp({ gatewayUrl: gateway.url, groups: ['GROUP_ADMIN'] });

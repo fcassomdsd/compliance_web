@@ -143,8 +143,8 @@ Order of checks: session → classification → role → specialty scope → for
 
 ### Reads — a session is enough
 
-`POST /queryEntity`, `GET /getLinks`, `GET /serviceAreas`, `GET /inspector/:externalId`,
-`GET /siteVisit/:ref`, `GET /assignmentGroup/:group`.
+`POST /queryEntity`, `GET /getLinks`, `GET /inspector/:externalId`, `GET /siteVisit/:ref`,
+`GET /assignmentGroup/:group`.
 
 Every role legitimately reads reference data, and `/inspector/:externalId` is called for *every*
 user at login. What a scoped session may **see** is decided by the specialty read filter, not by a

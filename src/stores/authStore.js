@@ -67,12 +67,6 @@ export const useAuthStore = defineStore('auth', {
       if (!specialtyId) return true;
       return state.specialtyScopeIds.includes(String(specialtyId).toLowerCase());
     },
-    canManageServiceArea: (state) => (serviceAreaId) => {
-      if (!state.hasRole('planner')) return false;
-      const plannerArea = state.inspectorProfile?.serviceAreaId;
-      if (plannerArea === null || plannerArea === undefined) return true;
-      return plannerArea === serviceAreaId;
-    },
   },
 
   actions: {
