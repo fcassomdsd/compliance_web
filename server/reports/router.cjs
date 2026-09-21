@@ -153,13 +153,6 @@ function createReportsRouter({ auth, alfrescoClient, now = () => new Date() }) {
     }
   );
 
-  // NOTE (specialty scope): /provider-history is the one report not narrowed for
-  // scoped sessions. Its summary and byInspection aggregates are computed inside
-  // the CMIS webscript from every finding the provider has, and the webscript
-  // takes no specialty filter yet — filtering the artifact list here would leave
-  // counts that disagree with the list. The fix belongs in the webscript: the
-  // same comma-separated `specialtyCode` query parameter the CE-evidence
-  // webscript already accepts, passed from here.
   router.get(
     '/provider-history',
     auth.authenticate,
@@ -173,10 +166,14 @@ function createReportsRouter({ auth, alfrescoClient, now = () => new Date() }) {
 
         const year = String(req.query?.year || '').trim() || undefined;
 
+        // The webscript narrows its queries to these codes, so the summary and
+        // byInspection aggregates match the artifact list the session may see.
+        const scope = scopeFrom(req);
         const report = await alfrescoClient.getProviderHistoryReport({
           ticket: req.auth.ticket,
           providerId,
           year,
+          specialtyCodes: scope.scoped ? scope.codes : [],
         });
 
         return res.status(200).json(report);

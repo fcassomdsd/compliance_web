@@ -374,7 +374,7 @@ class AlfrescoClient {
     return entries[0] || null;
   }
 
-  async getProviderHistoryReport({ ticket, providerId, year }) {
+  async getProviderHistoryReport({ ticket, providerId, year, specialtyCodes }) {
     if (!ticket || !providerId) {
       throw new Error('ticket and providerId are required');
     }
@@ -388,6 +388,12 @@ class AlfrescoClient {
       data: {
         providerId,
         ...(year ? { year } : {}),
+        // The webscript narrows every artifact query on this list, so a scoped
+        // session's summary and per-inspection counts describe the same
+        // population as its artifact list.
+        ...(Array.isArray(specialtyCodes) && specialtyCodes.length
+          ? { specialtyCode: specialtyCodes.join(',') }
+          : {}),
       },
     });
 
