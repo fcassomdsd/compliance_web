@@ -180,6 +180,26 @@ describe('authStore', () => {
     expect(store.hasRole(['reporter', 'admin'])).toBe(false);
   });
 
+  // Mirrors the server's isSpecialtyScopedSession: a planner or an assigner who
+  // also has an Inspector record works under that role, not as an inspector.
+  it.each([
+    [['inspector'], true],
+    [['Inspector'], true],
+    [['inspector', 'leadInspector'], true],
+    [['inspector', 'planner'], false],
+    [['inspector', 'cap_entry'], false],
+    [['inspector', 'closure_reviewer'], false],
+    [['inspector', 'assigner'], false],
+    [['inspector', 'admin'], false],
+    [['planner'], false],
+    [[], false],
+  ])('isActingAsInspector is %s -> %s', (roles, expected) => {
+    const store = useAuthStore();
+    store.roles = roles;
+
+    expect(store.isActingAsInspector).toBe(expected);
+  });
+
   it('ensureSessionFresh refreshes when store is stale', async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-03-31T10:00:00Z'));

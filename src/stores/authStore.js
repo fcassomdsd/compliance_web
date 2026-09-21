@@ -2,6 +2,10 @@ import { defineStore } from 'pinia';
 import { authLogin, authLogout, authSession, authTicket, authSetLocale } from '@/services/authServices';
 import { apiInspectorByAlfrescoUser, setAlfrescoTicket } from '@/services/apiServices';
 
+// Every role in the app's catalog except `inspector`; the mirror of
+// SCOPE_EXEMPTING_ROLES in server/auth/specialtyScope.cjs. Keep the two in step.
+const SCOPE_EXEMPTING_ROLES = ['admin', 'planner', 'assigner', 'reporter', 'cap_entry', 'closure_reviewer'];
+
 function extractStatusCode(error) {
   const match = String(error?.message || '').match(/status code (\d{3})/i);
   return match ? Number(match[1]) : null;
@@ -16,9 +20,10 @@ export const useAuthStore = defineStore('auth', {
     roles: [],
     groups: [],
     // Specialty codes this session may see and act on; null means unscoped
-    // (admin, no inspector record, no specialties linked) — full access. The
-    // server enforces this on every write and on the API responses; these
-    // getters keep the UI from offering what the server would refuse.
+    // (any session not working as an inspector, no inspector record, no
+    // specialties linked) — full access. The server enforces this on every write
+    // and on the API responses; these getters keep the UI from offering what the
+    // server would refuse.
     specialtyScope: null,
     specialtyScopeIds: null,
     inspectorProfile: null,
@@ -38,6 +43,15 @@ export const useAuthStore = defineStore('auth', {
 
       const roleSet = new Set((state.roles || []).map((role) => String(role).trim().toLowerCase()));
       return required.some((role) => roleSet.has(String(role).trim().toLowerCase()));
+    },
+    // Does this session work as an inspector? Holding any other catalog role
+    // means the user is working under that role — a planner or an assigner who
+    // also has an Inspector record is not an inspector here. Mirrors
+    // SCOPE_EXEMPTING_ROLES in server/auth/specialtyScope.cjs, which is what
+    // decides whether the session carries a specialty scope at all.
+    isActingAsInspector: (state) => {
+      if (!state.hasRole('inspector')) return false;
+      return !state.hasRole(SCOPE_EXEMPTING_ROLES);
     },
     // null scope = unscoped, so every specialty is in scope.
     specialtyInScope: (state) => (code) => {

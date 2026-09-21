@@ -61,7 +61,14 @@ http.createServer((req, res) => {
     lastRequest = { method: req.method, path: url.pathname, headers: req.headers, body: raw || null };
 
     if (url.pathname.includes('/authentication/versions/1/tickets')) return send(res, 201, { entry: { id: 'E2E-TICKET' } });
-    if (url.pathname.endsWith('/groups')) return send(res, 200, { list: { entries: [{ entry: { id: 'GROUP_INSPECTOR' } }] } });
+    // Both users have the same Inspector record; only their groups differ, which
+    // is the whole point — the scope must follow the role, not the record.
+    if (url.pathname.endsWith('/groups')) {
+      const groups = url.pathname.includes('pablo.planner')
+        ? [{ entry: { id: 'GROUP_INSPECTOR' } }, { entry: { id: 'GROUP_PLANNER' } }]
+        : [{ entry: { id: 'GROUP_INSPECTOR' } }];
+      return send(res, 200, { list: { entries: groups } });
+    }
     if (url.pathname.startsWith('/inspector/')) {
       return send(res, 200, { id: 'insp-ana', name: 'Ana', specialties: [{ id: 'spec_ats', code: 'ATS', name: 'ATS' }] });
     }
@@ -92,9 +99,11 @@ DATABASE_URL="postgres://compliance:e2e@127.0.0.1:5544/${DB}"
 
 (cd "$REPO_DIR" && DATABASE_URL="$DATABASE_URL" npm run db:migrate >"$WORK_DIR/migrate.log" 2>&1) \
   || { echo "FAIL: migration"; tail -5 "$WORK_DIR/migrate.log"; exit 1; }
-# The role mapping lives in the database, not in code; one group is enough here.
+# The role mapping lives in the database, not in code. Two groups: one user works
+# as an inspector, the other holds the planner role as well and must be unscoped.
 docker exec "$PG_CONTAINER" psql -U compliance -d "$DB" -c \
-  "INSERT INTO alfresco_group_role_map (alfresco_group, role_id) SELECT 'GROUP_INSPECTOR', id FROM app_role WHERE role_key='inspector' ON CONFLICT DO NOTHING;" >/dev/null
+  "INSERT INTO alfresco_group_role_map (alfresco_group, role_id) SELECT 'GROUP_INSPECTOR', id FROM app_role WHERE role_key='inspector' ON CONFLICT DO NOTHING;
+   INSERT INTO alfresco_group_role_map (alfresco_group, role_id) SELECT 'GROUP_PLANNER', id FROM app_role WHERE role_key='planner' ON CONFLICT DO NOTHING;" >/dev/null
 
 echo "== stub upstreams + real server"
 STUB_PORT=$STUB_PORT node "$WORK_DIR/stub-upstreams.cjs" >"$WORK_DIR/stub.log" 2>&1 &
@@ -156,6 +165,30 @@ check "out-of-scope addEntity -> 403" 403 "$code"
 
 code=$(curl -s -o /dev/null -w '%{http_code}' -b "$JAR" -X POST "http://127.0.0.1:${APP_PORT}/nodered/addEntity?entity=InspectedSpecialty" -H 'Content-Type: application/json' -d '{"specialtyId":"spec_ats"}')
 check "in-scope addEntity -> 200" 200 "$code"
+
+# Same Inspector record, same specialties — but this user also holds the planner
+# role, so the session works as a planner and is not narrowed at all.
+PLANNER_JAR="$WORK_DIR/cookies-planner.txt"
+curl -s -c "$PLANNER_JAR" -X POST "http://127.0.0.1:${APP_PORT}/api/auth/login" -H 'Content-Type: application/json' \
+  -d '{"username":"pablo.planner","password":"secret"}' | python3 -c "
+import json, sys
+data = json.load(sys.stdin)
+print('  planner roles:', data.get('roles'), '| scope:', data.get('specialtyScope'))
+sys.exit(0 if sorted(data.get('roles') or []) == ['inspector', 'planner']
+         and data.get('specialtyScope') is None and data.get('specialtyScopeIds') is None else 1)
+" && { echo "  ok   inspector+planner login is unscoped"; pass=$((pass+1)); } || { echo "  FAIL planner scope"; fail=$((fail+1)); }
+
+curl -s -b "$PLANNER_JAR" -X POST "http://127.0.0.1:${APP_PORT}/nodered/queryEntity?entity=ChecklistQuestion" \
+  -H 'Content-Type: application/json' -d '{"deleted":false}' | python3 -c "
+import json, sys
+data = json.load(sys.stdin)
+ids = [row.get('id') for row in data.get('list', [])]
+print('  planner read rows:', ids, '| total:', data.get('total'))
+sys.exit(0 if ids == ['q-ats', 'q-met'] and data.get('total') == 2 else 1)
+" && { echo "  ok   planner reads the row the inspector cannot"; pass=$((pass+1)); } || { echo "  FAIL planner read filtering"; fail=$((fail+1)); }
+
+code=$(curl -s -o /dev/null -w '%{http_code}' -b "$PLANNER_JAR" -X POST "http://127.0.0.1:${APP_PORT}/nodered/addEntity?entity=InspectedSpecialty" -H 'Content-Type: application/json' -d '{"specialtyId":"spec_met"}')
+check "planner writes outside the Inspector record's specialties -> 200" 200 "$code"
 
 echo
 echo "sandbox e2e: ${pass} passed, ${fail} failed"

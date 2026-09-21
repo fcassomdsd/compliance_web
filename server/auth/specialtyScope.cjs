@@ -9,13 +9,43 @@
 //   metadata.specialtyScopeIds  ids    (spec_ats, …)     — AtroCore relations use
 //                                                          link ids
 //
-// `null`/empty means **unscoped**: an admin, a user with no Inspector record, or
-// an inspector with no specialties linked. Unscoped sessions are fully
-// permissive — this feature must never lock out a user who is not an inspector.
+// The scope is resolved only for a session that works **as an inspector**
+// (`isSpecialtyScopedSession` below). Every other session is unscoped, including
+// a planner's or an assigner's who happens to have an Inspector record.
+//
+// `null`/empty means **unscoped**: any non-inspector session, a user with no
+// Inspector record, or an inspector with no specialties linked. Unscoped
+// sessions are fully permissive — this feature must never lock out a user who is
+// not working as an inspector.
 //
 // See docs/auth/AUTH_CHUNK1_API_SPEC.md (§4.2) and docs/auth/SPECIALTY_SCOPE_ENFORCEMENT.md.
 
 const CODE_PATTERN = /^[A-Za-z]{3,4}$/;
+
+const INSPECTOR_ROLE = 'inspector';
+
+// Every role in the app's catalog except `inspector`. Holding one of these means
+// the user is working under *that* role, so the specialty scope does not apply —
+// a planner or an assigner who also has an Inspector record (because they
+// occasionally run an inspection themselves) is not an inspector for this
+// purpose. Keep in step with `migrations/0001_initial_schema.sql` (+ `0002`) and
+// with `isActingAsInspector` in `src/stores/authStore.js`.
+//
+// The rule is deliberately written against the catalog rather than as "inspector
+// is the only role": a deployment-local role the app gates on nowhere must not
+// be able to switch the scope off.
+const SCOPE_EXEMPTING_ROLES = ['admin', 'planner', 'assigner', 'reporter', 'cap_entry', 'closure_reviewer'];
+
+function toRoleSet(roles) {
+  return new Set((Array.isArray(roles) ? roles : []).map((role) => String(role ?? '').trim().toLowerCase()));
+}
+
+// Does this session work as an inspector, and therefore carry a specialty scope?
+function isSpecialtyScopedSession(roles) {
+  const held = toRoleSet(roles);
+  if (!held.has(INSPECTOR_ROLE)) return false;
+  return !SCOPE_EXEMPTING_ROLES.some((role) => held.has(role));
+}
 
 function normalizeCode(value) {
   const trimmed = String(value ?? '').trim();
@@ -196,6 +226,8 @@ function hasRefs(refs) {
 }
 
 module.exports = {
+  SCOPE_EXEMPTING_ROLES,
+  isSpecialtyScopedSession,
   normalizeCode,
   normalizeId,
   scopeFromInspector,

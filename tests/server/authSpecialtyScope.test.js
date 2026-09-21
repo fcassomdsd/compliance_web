@@ -11,8 +11,8 @@ const { InMemorySessionRepository } = require('../setup/mocks/InMemorySessionRep
 // resolves at GET /inspector/:externalId as
 // { id, name, specialties: [{ id, code, name }] }. Nothing is duplicated onto
 // the assignment groups, so this is the only lookup involved.
-function buildTestApp({ nodeRedClient, groups = ['GROUP_INSPECTOR'], config: configOverrides = {}, now } = {}) {
-  const repo = new InMemorySessionRepository();
+function buildTestApp({ nodeRedClient, groups = ['GROUP_INSPECTOR'], groupRoleMap, config: configOverrides = {}, now } = {}) {
+  const repo = new InMemorySessionRepository(groupRoleMap);
   const alfrescoClient = {
     createTicket: vi.fn(async (username) => ({
       ticket: `ticket-${username}`,
@@ -61,6 +61,19 @@ const inspectorWith = (codes) => ({
   })),
 });
 
+// The catalog roles the default mock map does not carry, for the combinations
+// that decide whether a session is specialty-scoped.
+const ROLE_MAP = new Map([
+  ['group_inspector', ['inspector']],
+  ['group_planner', ['planner']],
+  ['group_admin', ['admin']],
+  ['group_cap_entry', ['cap_entry']],
+  ['group_closure_reviewer', ['closure_reviewer']],
+  ['group_assigner', ['assigner']],
+  // A role the app gates on nowhere — the shape of a deployment-local mapping.
+  ['group_lead', ['leadInspector']],
+]);
+
 async function login(app, username = 'ana.inspector') {
   const res = await request(app).post('/api/auth/login').send({ username, password: 'secret' });
   return res;
@@ -95,6 +108,85 @@ describe('session specialty scope', () => {
     expect(res.body.roles).toContain('admin');
     expect(res.body.specialtyScope).toBeNull();
     expect(nodeRedClient.getInspectorByExternalId).not.toHaveBeenCalled();
+  });
+
+  // The scope follows the role the user works under, not the existence of an
+  // Inspector record. Planners and assigners who occasionally run an inspection
+  // have one, and it must not narrow the work they do under their own role.
+  it.each([
+    [['GROUP_INSPECTOR', 'GROUP_PLANNER'], 'planner'],
+    [['GROUP_INSPECTOR', 'GROUP_CAP_ENTRY'], 'cap_entry'],
+    [['GROUP_INSPECTOR', 'GROUP_CLOSURE_REVIEWER'], 'closure_reviewer'],
+    [['GROUP_INSPECTOR', 'GROUP_ASSIGNER'], 'assigner'],
+  ])('leaves an inspector who also holds %j unscoped', async (groups, otherRole) => {
+    const nodeRedClient = inspectorWith(['ATS']);
+    const { app } = buildTestApp({ nodeRedClient, groups, groupRoleMap: ROLE_MAP });
+
+    const res = await login(app);
+
+    expect(res.status).toBe(200);
+    expect(res.body.roles).toEqual(expect.arrayContaining(['inspector', otherRole]));
+    expect(res.body.specialtyScope).toBeNull();
+    expect(res.body.specialtyScopeIds).toBeNull();
+    // The Inspector record is not even looked up for a session that is not
+    // working as an inspector.
+    expect(nodeRedClient.getInspectorByExternalId).not.toHaveBeenCalled();
+  });
+
+  it('leaves a planner with an Inspector record unscoped', async () => {
+    const nodeRedClient = inspectorWith(['ATS']);
+    const { app } = buildTestApp({ nodeRedClient, groups: ['GROUP_PLANNER'], groupRoleMap: ROLE_MAP });
+
+    const res = await login(app, 'pablo.planner');
+
+    expect(res.status).toBe(200);
+    expect(res.body.roles).toEqual(['planner']);
+    expect(res.body.specialtyScope).toBeNull();
+    expect(nodeRedClient.getInspectorByExternalId).not.toHaveBeenCalled();
+  });
+
+  // A role the app gates on nowhere cannot switch the scope off; otherwise a
+  // deployment adding a local group→role mapping would silently widen access.
+  it('keeps an inspector scoped alongside a role the catalog does not carry', async () => {
+    const nodeRedClient = inspectorWith(['ATS']);
+    const { app } = buildTestApp({
+      nodeRedClient,
+      groups: ['GROUP_INSPECTOR', 'GROUP_LEAD'],
+      groupRoleMap: ROLE_MAP,
+    });
+
+    const res = await login(app);
+
+    expect(res.status).toBe(200);
+    expect(res.body.roles).toEqual(expect.arrayContaining(['inspector', 'leadInspector']));
+    expect(res.body.specialtyScope).toEqual(['ATS']);
+  });
+
+  it('clears a resolved scope when the refresh finds the user has gained a role', async () => {
+    const nodeRedClient = inspectorWith(['ATS']);
+    let groups = ['GROUP_INSPECTOR'];
+    const { app, alfrescoClient } = buildTestApp({
+      nodeRedClient,
+      groups,
+      groupRoleMap: ROLE_MAP,
+      config: { roleRefreshIntervalSeconds: 0 },
+    });
+
+    const loginRes = await login(app);
+    const cookie = loginRes.headers['set-cookie'];
+    expect(loginRes.body.specialtyScope).toEqual(['ATS']);
+
+    // The user is added to the planners' Alfresco group; the next role refresh
+    // picks it up and the session stops being an inspector session.
+    groups = ['GROUP_INSPECTOR', 'GROUP_PLANNER'];
+    alfrescoClient.getUserGroups.mockResolvedValue(groups);
+
+    const refreshed = await request(app).get('/api/auth/session').set('Cookie', cookie);
+
+    expect(refreshed.status).toBe(200);
+    expect(refreshed.body.roles).toEqual(expect.arrayContaining(['inspector', 'planner']));
+    expect(refreshed.body.specialtyScope).toBeNull();
+    expect(refreshed.body.specialtyScopeIds).toBeNull();
   });
 
   it('leaves a user with no Inspector record unscoped', async () => {
