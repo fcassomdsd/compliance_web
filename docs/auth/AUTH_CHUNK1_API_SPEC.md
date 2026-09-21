@@ -111,6 +111,11 @@ Behavior notes:
    - `null` means **unscoped** (full access): an `admin`, a user with no `Inspector` record, or an inspector with no specialties linked. Unmatched users must never be locked out by this feature.
    - It is resolved at login and refreshed with the role cache; on a refresh failure the previously cached scope is kept rather than widened. On a login-time failure the session starts unscoped.
    - It is stored in `auth_session.metadata_json` alongside `groups`, so no schema change was needed.
+   - `specialtyScopeIds` travels beside it: the same specialties as AtroCore link ids (`spec_ats`).
+     Findings, CAPs and document ids use the codes; the AtroCore relations the UI and the gateway
+     filters work with use the ids. Both are `null` for an unscoped session.
+   - Where the scope is enforced — the gateway proxy (writes *and* reads), the `/api` filters and
+     the UI's pickers — is documented in [`SPECIALTY_SCOPE_ENFORCEMENT.md`](SPECIALTY_SCOPE_ENFORCEMENT.md).
 
 ### 4.3 POST /api/auth/logout
 

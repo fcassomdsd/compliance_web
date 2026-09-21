@@ -29,6 +29,8 @@ All notable changes to this project will be documented in this file.
 
 ### Documentation
 
+- **`docs/auth/SPECIALTY_SCOPE_ENFORCEMENT.md` is the map of the feature**: the rule (null scope = unscoped, ids vs codes, records with no specialty), every enforcement point (the gateway proxy's write guard and read filter, the `/api` list and document-id filters, the reports, the UI pickers), what is deliberately not covered yet (link mutations, `inspectionPlan`/`inspectionReport`, the `/api/auth/ticket` contract), and which test covers which layer. `AUTH_CHUNK1_API_SPEC.md` §4.2 now documents `specialtyScopeIds` and links to it.
+
 - **README's development URL corrected to `http://localhost:3000`** (`vite.config.js` serves 3000, not 5173).
 - **`CONTRIBUTING.md` and `.gitlab-ci.yml` no longer link to the removed `docs/auth/phase-1-contract` / `phase-8-operational-readiness` directories**; they point at `docs/auth/AUTH_CHUNK1_API_SPEC.md` and `docs/auth/AUTH_CHUNK8_OPERATIONAL_READINESS.md`.
 - The `auth_session` cleanup statement in `migrations/0001_initial_schema.sql` is now documented as implemented by the session-cleanup job rather than as a scheduler TODO.
