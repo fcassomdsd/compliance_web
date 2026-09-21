@@ -69,6 +69,13 @@ function buildSessionResponse(session, config) {
       Array.isArray(session.metadata?.specialtyScope) && session.metadata.specialtyScope.length > 0
         ? session.metadata.specialtyScope
         : null,
+    // The same set as AtroCore link ids (`spec_ats`). The UI needs both: the
+    // views key inspected specialties by id, while findings, CAPs and document
+    // ids carry codes.
+    specialtyScopeIds:
+      Array.isArray(session.metadata?.specialtyScopeIds) && session.metadata.specialtyScopeIds.length > 0
+        ? session.metadata.specialtyScopeIds
+        : null,
     locale: session.metadata?.locale || null,
     session: {
       issuedAt: toIso(session.createdAt),

@@ -80,6 +80,9 @@ describe('session specialty scope', () => {
     });
     // uppercased, de-duplicated, order preserved
     expect(res.body.specialtyScope).toEqual(['ATS', 'NAV']);
+    // the ids travel too: the UI keys inspected specialties by `spec_ats`, not
+    // by the code the document ids use
+    expect(res.body.specialtyScopeIds).toEqual(['spec_ats', 'spec_nav']);
   });
 
   it('leaves admins unscoped without looking them up', async () => {

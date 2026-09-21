@@ -101,6 +101,7 @@ import { useInspectorStore } from '@/stores/inspectorStore';
 import { useInspectedSpecialtyStore } from '@/stores/inspectedSpecialtyStore';
 import { formatDate } from '@/utils/formatDate';
 import { useInspectedProviderStore } from '@/stores/inspectedProviderStore';
+import { useAuthStore } from '@/stores/authStore';
 import { useToast } from 'vue-toastification';
 import saveImg from '@/assets/images/icons/save.png';
 import cancelImg from '@/assets/images/icons/cancel.png';
@@ -114,6 +115,7 @@ const inspectionStore = useInspectionStore();
 const inspectorStore = useInspectorStore();
 const inspectedStore = useInspectedSpecialtyStore();
 const inspectedProviderStore = useInspectedProviderStore();
+const authStore = useAuthStore();
 const toast = useToast();
 
 const currentInspection = ref(null);
@@ -159,6 +161,11 @@ const buildSpecialtiesList = () => {
   // assignable by anyone who can reach this view.
   for (const specKey of Object.keys(specObj)) {
       const specialty = specObj[specKey];
+      // A scoped user only assigns inspectors to the specialties they may act
+      // on; the server refuses the rest anyway (Node-RED write guard).
+      if (!authStore.specialtyIdInScope(specKey)) {
+        continue;
+      }
       specialtiesList.value.push({ "id" : specKey, name: specialty.name, inspectedId: specialty.id });
       // prefill assignments by matching inspectors' declared specialties
       const inspectors = inspectorStore.inspectorSpecialties?.[specKey]?.inspectors || [];

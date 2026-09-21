@@ -200,6 +200,12 @@ const availableInspectedSpecialties = computed(() => {
         continue;
       }
 
+      // Only the session's own specialties are offered; picking another one
+      // would build a checklist the API refuses to save.
+      if (!authStore.specialtyIdInScope(specialty.id)) {
+        continue;
+      }
+
       specialties.push({
         id: specialty.id,
         specialtyName: specialty.name,
