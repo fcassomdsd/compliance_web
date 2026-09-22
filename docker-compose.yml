@@ -65,6 +65,16 @@ services:
       ALFRESCO_JOB_PASSWORD: ${ALFRESCO_JOB_PASSWORD:-}
       # How long the role -> users lookup is cached, in ms (default 15 minutes).
       ROLE_RECIPIENT_CACHE_MS: ${ROLE_RECIPIENT_CACHE_MS:-}
+      # Hour of the day each daily job runs, as a plain integer 0-23, in the
+      # container's timezone — UTC unless the image is given another one.
+      # Defaults: 1 and 2. Left empty, the defaults apply.
+      #
+      # The scheduler rolls forward, never back: if the hour has already passed
+      # when the process starts, the first run is that hour *tomorrow*. So to
+      # make a job run soon, pick an hour still ahead of the container clock
+      # (`docker compose exec backend date -u`) and restart the service.
+      FINDING_OVERDUE_JOB_HOUR: ${FINDING_OVERDUE_JOB_HOUR:-}
+      SITE_VISIT_SCHEDULING_JOB_HOUR: ${SITE_VISIT_SCHEDULING_JOB_HOUR:-}
       # Email delivery. Without SMTP_HOST the transport is not configured and
       # email notifications queue and fail; the in-app notifications a role
       # notification also creates are unaffected, since they need no transport.
