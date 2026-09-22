@@ -27,6 +27,20 @@ const LOCATION_SERVICE = {
   serviceProviderName: 'Provider 1',
 };
 
+function cadence(overrides = {}) {
+  return {
+    id: 'cadence-1',
+    active: true,
+    intervalMonths: 12,
+    locationServiceId: 'lsvc-1',
+    locationServiceName: 'ATS at Main Airport',
+    specialtyId: 'specialty-1',
+    specialtyName: 'VIG',
+    activityTypeId: 'at-a',
+    ...overrides,
+  };
+}
+
 const ACTIVITY_TYPES = [
   { id: 'at-a', code: 'A', name: 'Auditoria' },
   { id: 'at-i', code: 'I', name: 'Inspeccion' },
@@ -147,7 +161,7 @@ function buildNotificationService() {
     },
   };
   const logger = { info: () => {}, warn: () => {}, error: () => {} };
-  return { service: createNotificationService({ repository, emailTransport, logger }), sent };
+  return { service: createNotificationService({ repository, emailTransport, logger }), sent, repository };
 }
 
 const LOCATION = { id: 'loc-1', name: 'Main Airport', icaoCode: 'MDPP' };
@@ -226,7 +240,7 @@ describe('runSiteVisitSchedulingSync', () => {
       cadences: [{
         id: 'cadence-1',
         active: true,
-        nextDueDate: '2026-08-10',
+        nextDueDate: '2026-08-20',
         intervalMonths: 12,
         locationServiceId: 'lsvc-1',
         locationServiceName: 'ATS at Main Airport',
@@ -266,8 +280,11 @@ describe('runSiteVisitSchedulingSync', () => {
     expect(nodeRedClient.state.inspections[0].code).not.toBe(nodeRedClient.state.siteVisits[0].code);
 
     const updatedCadence = nodeRedClient.state.cadences.get('cadence-1');
+    // lastScheduledDate is when the visit was raised; nextDueDate advances from
+    // the due date it just satisfied, so the cadence keeps its original phase
+    // however late the run was.
     expect(updatedCadence.lastScheduledDate).toBe('2026-08-15');
-    expect(updatedCadence.nextDueDate).toBe('2027-08-15');
+    expect(updatedCadence.nextDueDate).toBe('2027-08-20');
 
     expect(sent).toHaveLength(1);
     expect(sent[0].to).toBe('planners@example.com');
@@ -280,7 +297,7 @@ describe('runSiteVisitSchedulingSync', () => {
       location: LOCATION,
       locationServices: [LOCATION_SERVICE],
       cadences: [{
-        id: 'cadence-1', active: true, nextDueDate: '2026-08-10', intervalMonths: 12,
+        id: 'cadence-1', active: true, nextDueDate: '2026-08-20', intervalMonths: 12,
         locationServiceId: 'lsvc-1',
       }],
     });
@@ -292,13 +309,139 @@ describe('runSiteVisitSchedulingSync', () => {
     expect(nodeRedClient.state.inspections[0].activityTypeId).toBeNull();
   });
 
-  it('does not fire a cadence whose nextDueDate is still in the future', async () => {
+  // The point of the lead time: the visit exists before the activity is due, and
+  // carries the due date, so there is time to plan it.
+  it('dates the visit on the cadence due date, not on the day the job ran', async () => {
+    const nodeRedClient = buildNodeRedClient({
+      location: LOCATION,
+      locationServices: [LOCATION_SERVICE],
+      cadences: [cadence({ nextDueDate: '2026-08-20' })],
+    });
+
+    await runSiteVisitSchedulingSync({
+      alfrescoClient: buildAlfrescoClient(),
+      nodeRedClient,
+      username: 'job-user',
+      password: 'job-pass',
+      now: () => NOW,
+    });
+
+    expect(nodeRedClient.state.siteVisits[0].startDate).toBe('2026-08-20');
+    expect(nodeRedClient.state.siteVisits[0].startDate).not.toBe('2026-08-15');
+  });
+
+  it.each([
+    ['inside its own longer window', 45, '2026-09-20', 1],
+    ['outside the default window', undefined, '2026-09-20', 0],
+    ['inside the default window', undefined, '2026-08-25', 1],
+    ['outside its own shorter window', 3, '2026-08-25', 0],
+    ['on the day, with no notice asked for', 0, '2026-08-15', 1],
+  ])('honours planningLeadDays %s', async (_label, planningLeadDays, nextDueDate, expected) => {
+    const nodeRedClient = buildNodeRedClient({
+      location: LOCATION,
+      locationServices: [LOCATION_SERVICE],
+      cadences: [cadence({ nextDueDate, planningLeadDays })],
+    });
+
+    const result = await runSiteVisitSchedulingSync({
+      alfrescoClient: buildAlfrescoClient(),
+      nodeRedClient,
+      username: 'job-user',
+      password: 'job-pass',
+      now: () => NOW,
+    });
+
+    expect(result.created).toBe(expected);
+  });
+
+  it('takes the code year from the visit date when the due date is in the next year', async () => {
+    const nodeRedClient = buildNodeRedClient({
+      location: LOCATION,
+      locationServices: [LOCATION_SERVICE],
+      // Due in January, picked up in December through a long lead time.
+      cadences: [cadence({ nextDueDate: '2027-01-05', planningLeadDays: 30 })],
+    });
+
+    await runSiteVisitSchedulingSync({
+      alfrescoClient: buildAlfrescoClient(),
+      nodeRedClient,
+      username: 'job-user',
+      password: 'job-pass',
+      now: () => new Date('2026-12-20T10:00:00.000Z'),
+    });
+
+    // 2027, from the visit's own start date — the rule siteVisitStore applies —
+    // and not 2026 from the run date.
+    expect(nodeRedClient.state.siteVisits[0].code).toBe('V-MDPP-2027-01');
+    expect(nodeRedClient.state.siteVisits[0].startDate).toBe('2027-01-05');
+  });
+
+  describe('a cadence whose due date has already passed', () => {
+    function pastDueRun(extra = {}) {
+      const nodeRedClient = buildNodeRedClient({
+        location: LOCATION,
+        locationServices: [LOCATION_SERVICE],
+        cadences: [cadence({ nextDueDate: '2026-07-01', name: 'ATS annual audit', ...extra })],
+      });
+      const { service, sent, repository } = buildNotificationService();
+      return { nodeRedClient, service, sent, repository };
+    }
+
+    it('is not scheduled, and its cadence is left untouched', async () => {
+      const { nodeRedClient, service } = pastDueRun();
+
+      const result = await runSiteVisitSchedulingSync({
+        alfrescoClient: buildAlfrescoClient(),
+        nodeRedClient,
+        username: 'job-user',
+        password: 'job-pass',
+        notificationService: service,
+        now: () => NOW,
+      });
+
+      expect(result.created).toBe(0);
+      expect(result.pastDue).toBe(1);
+      expect(nodeRedClient.state.siteVisits).toHaveLength(0);
+      // nextDueDate is deliberately not advanced: the cadence keeps reporting
+      // until a human deals with it, rather than skipping a cycle silently.
+      expect(nodeRedClient.state.cadences.get('cadence-1').nextDueDate).toBe('2026-07-01');
+      expect(nodeRedClient.state.cadences.get('cadence-1').lastScheduledDate).toBeUndefined();
+    });
+
+    it('is reported to planners rather than passing in silence', async () => {
+      const { nodeRedClient, service, sent, repository } = pastDueRun();
+
+      await runSiteVisitSchedulingSync({
+        alfrescoClient: buildAlfrescoClient(),
+        nodeRedClient,
+        username: 'job-user',
+        password: 'job-pass',
+        notificationService: service,
+        now: () => NOW,
+      });
+
+      // What a planner receives...
+      expect(sent).toHaveLength(1);
+      expect(sent[0].to).toBe('planners@example.com');
+      expect(sent[0].subject).toContain('past due');
+      expect(sent[0].text).toContain('ATS annual audit');
+      expect(sent[0].text).toContain('2026-07-01');
+
+      // ...and what was recorded, which is what a reader of the audit trail sees.
+      const stored = Array.from(repository.rows.values());
+      expect(stored).toHaveLength(1);
+      expect(stored[0].eventType).toBe('inspection_cadence_past_due');
+      expect(stored[0].context.pastDueCadenceIds).toEqual(['cadence-1']);
+    });
+  });
+
+  it('does not fire a cadence whose due date is beyond its planning lead window', async () => {
     const alfrescoClient = buildAlfrescoClient();
     const nodeRedClient = buildNodeRedClient({
       location: LOCATION,
       locationServices: [LOCATION_SERVICE],
       cadences: [{
-        id: 'cadence-1', active: true, nextDueDate: '2026-09-01', intervalMonths: 12,
+        id: 'cadence-1', active: true, nextDueDate: '2026-10-01', intervalMonths: 12,
         locationServiceId: 'lsvc-1',
       }],
     });
@@ -318,7 +461,7 @@ describe('runSiteVisitSchedulingSync', () => {
       locationServices: [LOCATION_SERVICE],
       siteVisits: [{ locationId: 'loc-1', code: 'V-MDPP-2026-01' }, { locationId: 'loc-1', code: 'V-MDPP-2026-02' }],
       cadences: [{
-        id: 'cadence-1', active: true, nextDueDate: '2026-08-10', intervalMonths: 12,
+        id: 'cadence-1', active: true, nextDueDate: '2026-08-20', intervalMonths: 12,
         locationServiceId: 'lsvc-1',
       }],
     });
@@ -337,7 +480,7 @@ describe('runSiteVisitSchedulingSync', () => {
       siteVisits: [{ locationId: 'loc-1', code: 'V-MDPP-2026-01' }],
       inspections: [{ code: 'AV-MDPP-A-0006' }, { code: 'AV-MDPP-I-0002' }],
       cadences: [{
-        id: 'cadence-1', active: true, nextDueDate: '2026-08-10', intervalMonths: 12,
+        id: 'cadence-1', active: true, nextDueDate: '2026-08-20', intervalMonths: 12,
         locationServiceId: 'lsvc-1', activityTypeId: 'at-a',
       }],
     });
@@ -357,7 +500,7 @@ describe('runSiteVisitSchedulingSync', () => {
       // so the sweep reaches the ICAO guard rather than the earlier one.
       locationServices: [LOCATION_SERVICE],
       cadences: [{
-        id: 'cadence-1', active: true, nextDueDate: '2026-08-10', intervalMonths: 12,
+        id: 'cadence-1', active: true, nextDueDate: '2026-08-20', intervalMonths: 12,
         locationServiceId: 'lsvc-1',
       }],
     });
@@ -375,7 +518,7 @@ describe('runSiteVisitSchedulingSync', () => {
       location: LOCATION,
       locationServices: [],
       cadences: [{
-        id: 'cadence-1', active: true, nextDueDate: '2026-08-10', intervalMonths: 12,
+        id: 'cadence-1', active: true, nextDueDate: '2026-08-20', intervalMonths: 12,
         locationServiceId: 'lsvc-gone',
       }],
     });
@@ -400,7 +543,7 @@ describe('runSiteVisitSchedulingSync', () => {
       siteVisits: [{ id: 'sv-old', locationId: 'loc-1', code: 'V-MDPP-2026-01' }],
       inspectedProviders: [{ id: 'iprov-old', siteVisitId: 'sv-old', serviceProviderId: 'provider-1', name: 'Provider 1' }],
       cadences: [{
-        id: 'cadence-1', active: true, nextDueDate: '2026-08-10', intervalMonths: 12,
+        id: 'cadence-1', active: true, nextDueDate: '2026-08-20', intervalMonths: 12,
         locationServiceId: 'lsvc-1', activityTypeId: 'at-i',
       }],
     });
@@ -450,7 +593,7 @@ describe('runSiteVisitSchedulingSync', () => {
       location: LOCATION,
       locationServices: [LOCATION_SERVICE],
       cadences: [{
-        id: 'cadence-1', active: true, nextDueDate: '2026-08-10', intervalMonths: 12,
+        id: 'cadence-1', active: true, nextDueDate: '2026-08-20', intervalMonths: 12,
         locationServiceId: 'lsvc-1',
       }],
     });

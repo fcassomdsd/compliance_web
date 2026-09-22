@@ -20,6 +20,48 @@ function addMonths(dateStr, months) {
   return date.toISOString().slice(0, 10);
 }
 
+function addDays(dateStr, days) {
+  const date = new Date(`${dateStr}T00:00:00.000Z`);
+  date.setUTCDate(date.getUTCDate() + Number(days || 0));
+  return date.toISOString().slice(0, 10);
+}
+
+// Notice a cadence needs before its due date, when it names none itself.
+const DEFAULT_PLANNING_LEAD_DAYS = 20;
+
+// `InspectionCadence.planningLeadDays`, or the deployment default. A negative or
+// non-numeric value is treated as absent rather than as zero: zero is a
+// meaningful choice (schedule on the day) and must be set deliberately.
+function planningLeadDaysFor(cadence, fallback) {
+  const declared = Number(cadence?.planningLeadDays);
+  return Number.isFinite(declared) && declared >= 0 ? declared : fallback;
+}
+
+// A cadence is ready to schedule when its due date is near enough to need
+// planning, and has not already arrived.
+//
+//   nextDueDate < today                  past due: skipped, and reported — the
+//                                        date has gone, so a human decides
+//                                        whether it still happens and when
+//   today <= nextDueDate <= today + lead  due: raise the visit now
+//   nextDueDate > today + lead            not yet
+//
+// Due *today* counts as due, not past due. It has no notice left, but it has not
+// been missed — and treating it as past due would make `planningLeadDays = 0`
+// unusable, since its window (`today < d <= today`) is empty: such a cadence
+// would go straight from "not yet" to "past due" without ever being scheduled.
+//
+// The visit created carries the **due date** as its startDate: that is when the
+// activity is to take place. Before this, the job waited for the due date to
+// arrive and then dated the visit that same day, which left no planning time at
+// all and made the visit's date mean "when the job ran".
+function classifyCadence(cadence, today, fallbackLeadDays) {
+  if (!cadence?.nextDueDate) return 'incomplete';
+  if (cadence.nextDueDate < today) return 'pastDue';
+  const lead = planningLeadDaysFor(cadence, fallbackLeadDays);
+  return cadence.nextDueDate <= addDays(today, lead) ? 'due' : 'notYet';
+}
+
 // Mirrors src/stores/siteVisitStore.js's addSiteVisit code-generation
 // algorithm exactly, so auto-scheduled and manually-created site visits at
 // the same location share one continuous sequence. Scoped by location AND
@@ -132,6 +174,7 @@ async function runSiteVisitSchedulingSync({
   password,
   notificationService,
   roleRecipients,
+  defaultPlanningLeadDays = DEFAULT_PLANNING_LEAD_DAYS,
   logger = console,
   now = () => new Date(),
 }) {
@@ -151,16 +194,25 @@ async function runSiteVisitSchedulingSync({
       entity: 'InspectionCadence',
       data: { active: true },
     });
-    const dueCadences = (cadenceResult.list || []).filter(
-      (cadence) => cadence.nextDueDate && cadence.nextDueDate <= today
-    );
+    const dueCadences = [];
+    const pastDueCadences = [];
+    for (const cadence of cadenceResult.list || []) {
+      const verdict = classifyCadence(cadence, today, defaultPlanningLeadDays);
+      if (verdict === 'due') dueCadences.push(cadence);
+      else if (verdict === 'pastDue') pastDueCadences.push(cadence);
+    }
 
     const createdSummaries = [];
     const resolveLocationService = buildLocationServiceResolver({ nodeRedClient, ticket });
     const resolveActivityTypeCode = buildActivityTypeResolver({ nodeRedClient, ticket });
-    const codeYear = Number.parseInt(today.slice(0, 4), 10);
-
     for (const cadence of dueCadences) {
+      // The visit takes place on the cadence's due date, and the code's year
+      // comes from the visit's own start date — the same rule
+      // siteVisitStore.addSiteVisit applies, so auto-scheduled and
+      // hand-created visits share one sequence per location and year.
+      const visitDate = cadence.nextDueDate;
+      const codeYear = Number.parseInt(visitDate.slice(0, 4), 10);
+
       const locationService = await resolveLocationService(cadence);
       if (!locationService) {
         logger.warn('Skipping due cadence: location service missing, or has no location/provider', {
@@ -198,7 +250,7 @@ async function runSiteVisitSchedulingSync({
         entity: 'SiteVisit',
         data: {
           locationId: locationService.locationId,
-          startDate: today,
+          startDate: visitDate,
           code,
           status: 'Created',
         },
@@ -259,40 +311,89 @@ async function runSiteVisitSchedulingSync({
         entity: 'InspectionCadence',
         id: cadence.id,
         data: {
+          // The cycle is measured from the due date it just satisfied, not from
+          // the day the job ran: advancing from `today` made the whole schedule
+          // drift forward by however late the run was.
           lastScheduledDate: today,
-          nextDueDate: addMonths(today, cadence.intervalMonths),
+          nextDueDate: addMonths(visitDate, cadence.intervalMonths),
         },
       });
 
       createdSummaries.push({
         code,
+        startDate: visitDate,
+        leadDays: planningLeadDaysFor(cadence, defaultPlanningLeadDays),
         provider: locationService.serviceProviderName || locationService.serviceProviderId,
         specialty: cadence.specialtyName || cadence.specialtyId,
         location: location.name || locationIcaoCode,
       });
     }
 
-    if (createdSummaries.length > 0) {
+    // A past-due cadence is deliberately not scheduled — there is no notice left
+    // to give, so a human decides whether the activity still happens and when.
+    // It must not pass silently, or the cadence simply stops producing visits:
+    // `nextDueDate` is never advanced for it, so it is reported on every run
+    // until someone acts.
+    const pastDueSummaries = pastDueCadences.map((cadence) => ({
+      dueDate: cadence.nextDueDate,
+      name: cadence.name || cadence.id,
+      specialty: cadence.specialtyName || cadence.specialtyId,
+    }));
+
+    if (pastDueSummaries.length > 0) {
+      logger.warn('Cadences are past due and were not scheduled automatically', {
+        count: pastDueSummaries.length,
+        cadences: pastDueSummaries.map((c) => `${c.name} (due ${c.dueDate})`),
+      });
+    }
+
+    if (createdSummaries.length > 0 || pastDueSummaries.length > 0) {
+      const lines = [];
+      if (createdSummaries.length > 0) {
+        lines.push(
+          'The following site visits were automatically created from recurring inspection cadences,',
+          'each dated the day its activity is due:',
+          ...createdSummaries.map(
+            (s) => `- ${s.code}: ${s.provider} / ${s.specialty} at ${s.location}, due ${s.startDate} (${s.leadDays} days' notice)`
+          )
+        );
+      }
+      if (pastDueSummaries.length > 0) {
+        if (lines.length > 0) lines.push('');
+        lines.push(
+          'These cadences are past due and were NOT scheduled automatically, because there is no',
+          'planning notice left to give. Schedule them by hand, or move their next due date:',
+          ...pastDueSummaries.map((c) => `- ${c.name} / ${c.specialty}: due ${c.dueDate}`)
+        );
+      }
+
+      const subject = createdSummaries.length > 0
+        ? `${createdSummaries.length} site visit(s) auto-scheduled`
+          + (pastDueSummaries.length > 0 ? `, ${pastDueSummaries.length} cadence(s) past due` : '')
+        : `${pastDueSummaries.length} cadence(s) past due and not scheduled`;
+
       await notifyRoleInbox({
         notificationService,
         roleRecipients,
         role: 'planner',
         envVar: 'PLANNER_NOTIFICATIONS_EMAIL',
-        eventType: 'site_visit_auto_scheduled',
-        subject: `${createdSummaries.length} site visit(s) auto-scheduled`,
-        body: [
-          'The following site visits were automatically created from recurring inspection cadences:',
-          ...createdSummaries.map((s) => `- ${s.code}: ${s.provider} / ${s.specialty} at ${s.location}`),
-        ].join('\n'),
-        context: { codes: createdSummaries.map((s) => s.code) },
+        eventType: createdSummaries.length > 0 ? 'site_visit_auto_scheduled' : 'inspection_cadence_past_due',
+        subject,
+        body: lines.join('\n'),
+        context: {
+          codes: createdSummaries.map((s) => s.code),
+          pastDueCadenceIds: pastDueCadences.map((c) => c.id),
+        },
       });
     }
 
     logger.info('Site visit scheduling sync completed', {
       created: createdSummaries.length,
       dueCadences: dueCadences.length,
+      pastDue: pastDueSummaries.length,
+      defaultPlanningLeadDays,
     });
-    return { skipped: false, created: createdSummaries.length };
+    return { skipped: false, created: createdSummaries.length, pastDue: pastDueSummaries.length };
   } finally {
     await alfrescoClient.revokeTicket(ticket).catch(() => undefined);
   }
@@ -314,6 +415,7 @@ function startSiteVisitSchedulingJob({
   password,
   notificationService,
   roleRecipients,
+  defaultPlanningLeadDays = DEFAULT_PLANNING_LEAD_DAYS,
   logger = console,
   now = () => new Date(),
   runHourLocal = 2,
@@ -324,7 +426,7 @@ function startSiteVisitSchedulingJob({
     const waitMs = untilNextRunMs(runHourLocal, now());
     timeoutId = setTimeout(async () => {
       try {
-        await runSiteVisitSchedulingSync({ alfrescoClient, nodeRedClient, username, password, notificationService, roleRecipients, logger, now });
+        await runSiteVisitSchedulingSync({ alfrescoClient, nodeRedClient, username, password, notificationService, roleRecipients, defaultPlanningLeadDays, logger, now });
       } catch (error) {
         logger.error('Site visit scheduling sync failed', error);
       } finally {
@@ -342,7 +444,7 @@ function startSiteVisitSchedulingJob({
         clearTimeout(timeoutId);
       }
     },
-    runNow: () => runSiteVisitSchedulingSync({ alfrescoClient, nodeRedClient, username, password, notificationService, roleRecipients, logger, now }),
+    runNow: () => runSiteVisitSchedulingSync({ alfrescoClient, nodeRedClient, username, password, notificationService, roleRecipients, defaultPlanningLeadDays, logger, now }),
   };
 }
 
@@ -351,4 +453,7 @@ module.exports = {
   runSiteVisitSchedulingSync,
   computeNextSiteVisitCode,
   computeNextActivityCode,
+  classifyCadence,
+  planningLeadDaysFor,
+  DEFAULT_PLANNING_LEAD_DAYS,
 };

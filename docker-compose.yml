@@ -75,6 +75,10 @@ services:
       # (`docker compose exec backend date -u`) and restart the service.
       FINDING_OVERDUE_JOB_HOUR: ${FINDING_OVERDUE_JOB_HOUR:-}
       SITE_VISIT_SCHEDULING_JOB_HOUR: ${SITE_VISIT_SCHEDULING_JOB_HOUR:-}
+      # Days of planning notice a recurring cadence gets before its due date,
+      # when the cadence itself names none (InspectionCadence.planningLeadDays).
+      # Default 20.
+      SITE_VISIT_PLANNING_LEAD_DAYS: ${SITE_VISIT_PLANNING_LEAD_DAYS:-}
       # Email delivery. Without SMTP_HOST the transport is not configured and
       # email notifications queue and fail; the in-app notifications a role
       # notification also creates are unaffected, since they need no transport.
