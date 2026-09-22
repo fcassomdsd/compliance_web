@@ -42,6 +42,17 @@
           <input id="cadenceIntervalMonths" v-model.number="form.intervalMonths" type="number" min="1" />
         </div>
         <div class="form-field">
+          <label for="cadencePlanningLeadDays">{{ t('inspectionCadence.planningLeadDays') }}</label>
+          <input
+            id="cadencePlanningLeadDays"
+            v-model.number="form.planningLeadDays"
+            type="number"
+            min="0"
+            :placeholder="t('inspectionCadence.planningLeadDaysPlaceholder')"
+          />
+          <small class="field-hint">{{ t('inspectionCadence.planningLeadDaysHint') }}</small>
+        </div>
+        <div class="form-field">
           <label for="cadenceActivityType">{{ t('inspectionCadence.activityType') }}</label>
           <select id="cadenceActivityType" v-model="form.activityTypeId">
             <option value="">{{ t('inspectionCadence.selectActivityType') }}</option>
@@ -76,6 +87,7 @@
           <th>{{ t('assignInspectors.specialty') }}</th>
           <th>{{ t('inspectionCadence.activityType') }}</th>
           <th>{{ t('inspectionCadence.intervalMonths') }}</th>
+          <th>{{ t('inspectionCadence.planningLeadDays') }}</th>
           <th>{{ t('inspectionCadence.nextDueDate') }}</th>
           <th>{{ t('inspectionCadence.active') }}</th>
           <th>{{ t('common.actions') }}</th>
@@ -88,6 +100,7 @@
           <td>{{ cadence.specialtyName || cadence.specialtyId }}</td>
           <td>{{ activityTypeLabel(cadence) }}</td>
           <td>{{ cadence.intervalMonths }}</td>
+          <td>{{ leadDaysLabel(cadence) }}</td>
           <td>{{ formatDate(cadence.nextDueDate) || '-' }}</td>
           <td>{{ cadence.active ? t('common.yes') : t('common.no') }}</td>
           <td>
@@ -164,6 +177,8 @@ function emptyForm() {
     locationServiceId: '',
     specialtyId: '',
     intervalMonths: 12,
+    // Empty means "use the deployment default"; the job decides what that is.
+    planningLeadDays: '',
     activityTypeId: '',
     lastScheduledDate: '',
     nextDueDate: '',
@@ -197,12 +212,21 @@ function editCadence(cadence) {
     locationServiceId: cadence.locationServiceId || '',
     specialtyId: cadence.specialtyId || '',
     intervalMonths: cadence.intervalMonths || 12,
+    planningLeadDays: cadence.planningLeadDays ?? '',
     activityTypeId: cadence.activityTypeId || '',
     lastScheduledDate: cadence.lastScheduledDate || '',
     nextDueDate: cadence.nextDueDate || '',
     active: Boolean(cadence.active),
   });
   appState.value = 'editing';
+}
+
+// An unset lead time is not zero — it defers to the deployment default, and the
+// table should say so rather than showing a number the cadence does not carry.
+function leadDaysLabel(cadence) {
+  return cadence.planningLeadDays === null || cadence.planningLeadDays === undefined
+    ? t('inspectionCadence.planningLeadDaysDefault')
+    : String(cadence.planningLeadDays);
 }
 
 function cancelEdit() {
@@ -217,6 +241,11 @@ function buildPayload() {
     locationServiceId: form.locationServiceId,
     specialtyId: form.specialtyId,
     intervalMonths: form.intervalMonths,
+    // Null, not 0: an empty box means "use the default", while 0 is a
+    // deliberate choice to raise the visit on the due date itself.
+    planningLeadDays: form.planningLeadDays === '' || form.planningLeadDays === null
+      ? null
+      : Number(form.planningLeadDays),
     activityTypeId: form.activityTypeId,
     lastScheduledDate: form.lastScheduledDate || null,
     nextDueDate: form.nextDueDate,

@@ -131,6 +131,9 @@ async function start() {
     password: process.env.ALFRESCO_JOB_PASSWORD,
     notificationService,
     roleRecipients,
+    // Notice a cadence gets before its due date when it names none itself
+    // (InspectionCadence.planningLeadDays).
+    defaultPlanningLeadDays: Number(process.env.SITE_VISIT_PLANNING_LEAD_DAYS || 20),
     logger: auditLogger,
     runHourLocal: Number(process.env.SITE_VISIT_SCHEDULING_JOB_HOUR || 2),
   });

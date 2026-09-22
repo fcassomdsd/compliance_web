@@ -11,6 +11,10 @@ function mapCadenceEntity(entity) {
     specialtyId: entity.specialtyId,
     specialtyName: entity.specialtyName,
     intervalMonths: entity.intervalMonths,
+    // Notice this cadence needs before its due date. Null means "use the
+    // deployment default" (SITE_VISIT_PLANNING_LEAD_DAYS, 20 days), which the
+    // scheduling job applies — the UI must not invent a number here.
+    planningLeadDays: entity.planningLeadDays ?? null,
     activityTypeId: entity.activityTypeId,
     activityTypeCode: entity.activityTypeCode,
     activityTypeName: entity.activityTypeName,
