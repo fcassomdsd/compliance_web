@@ -69,14 +69,22 @@ http.createServer((req, res) => {
     const GROUPS = {
       'pablo.planner': ['GROUP_U-VSO-IN_Inspector', 'GROUP_U-VSO-PI_PlanInspeccion'],
       'paula.planneronly': ['GROUP_U-VSO-PI_PlanInspeccion'],
+      'alba.assigner': ['GROUP_U-VSO-IN_Assigner'],
     };
     if (url.pathname.endsWith('/groups')) {
       const user = Object.keys(GROUPS).find((name) => url.pathname.includes(name));
       const names = user ? GROUPS[user] : ['GROUP_U-VSO-IN_Inspector'];
       return send(res, 200, { list: { entries: names.map((id) => ({ entry: { id } })) } });
     }
+    // Two inspectors with the same specialty; only ana leads the site visit, so
+    // only ana may write the report outcome.
     if (url.pathname.startsWith('/inspector/')) {
-      return send(res, 200, { id: 'insp-ana', name: 'Ana', specialties: [{ id: 'spec_ats', code: 'ATS', name: 'ATS' }] });
+      const isInes = url.pathname.includes('ines.inspector');
+      return send(res, 200, {
+        id: isInes ? 'insp-ines' : 'insp-ana',
+        name: isInes ? 'Ines' : 'Ana',
+        specialties: [{ id: 'spec_ats', code: 'ATS', name: 'ATS' }],
+      });
     }
     if (url.pathname === '/queryEntity' && url.searchParams.get('entity') === 'ChecklistQuestion') {
       return send(res, 200, {
@@ -86,6 +94,19 @@ http.createServer((req, res) => {
           { id: 'q-met', specialty: { id: 'spec_met', code: 'MET' } },
         ],
       });
+    }
+    // The chain the guards read back: an Inspection with no specialties (so it
+    // is not scope-controlled), and the site visit behind it naming ana's
+    // Inspector record as main inspector — which is what makes the report
+    // outcome hers to write.
+    if (url.pathname === '/queryEntity' && url.searchParams.get('entity') === 'Inspection') {
+      return send(res, 200, { total: 1, list: [{ id: 'insp-1', inspectedProviderId: 'ip-1', inspectedSpecialties: [] }] });
+    }
+    if (url.pathname === '/queryEntity' && url.searchParams.get('entity') === 'InspectedProvider') {
+      return send(res, 200, { total: 1, list: [{ id: 'ip-1', siteVisitId: 'sv-1' }] });
+    }
+    if (url.pathname === '/queryEntity' && url.searchParams.get('entity') === 'SiteVisit') {
+      return send(res, 200, { total: 1, list: [{ id: 'sv-1', mainInspectorId: 'insp-ana' }] });
     }
     if (url.pathname === '/addEntity') return send(res, 200, { id: 'added-1' });
     return send(res, 200, { ok: true, path: url.pathname });
@@ -224,6 +245,44 @@ sys.exit(0 if ids == ['q-ats', 'q-met'] and data.get('total') == 2 else 1)
 code=$(curl -s -o /dev/null -w '%{http_code}' -b "$PLANNER_JAR" -X POST "http://127.0.0.1:${APP_PORT}/nodered/addEntity?entity=InspectedSpecialty" -H 'Content-Type: application/json' -d '{"specialtyId":"spec_met"}')
 check "planner writes outside the Inspector record's specialties -> 200" 200 "$code"
 
+# Status is nobody's to write through updateEntity any more: every transition is
+# a purpose-named action the gateway owns, gated by the role that performs it.
+ASSIGNER_JAR="$WORK_DIR/cookies-assigner.txt"
+curl -s -c "$ASSIGNER_JAR" -X POST "http://127.0.0.1:${APP_PORT}/api/auth/login" -H 'Content-Type: application/json' \
+  -d '{"username":"alba.assigner","password":"secret"}' >/dev/null
+
+code=$(curl -s -o /dev/null -w '%{http_code}' -b "$ASSIGNER_JAR" -X GET "http://127.0.0.1:${APP_PORT}/nodered/inspectionAssign?inspection=insp-1")
+check "assigner calling inspectionAssign -> 200" 200 "$code"
+
+code=$(curl -s -o /dev/null -w '%{http_code}' -b "$ASSIGNER_JAR" -X GET "http://127.0.0.1:${APP_PORT}/nodered/inspectionDefine?inspection=insp-1")
+check "assigner calling inspectionDefine -> 403" 403 "$code"
+
+code=$(curl -s -o /dev/null -w '%{http_code}' -b "$ASSIGNER_JAR" -X PUT "http://127.0.0.1:${APP_PORT}/nodered/updateEntity?entity=Inspection&id=insp-1" -H 'Content-Type: application/json' -d '{"status":"Assigned"}')
+check "assigner writing status through updateEntity -> 403" 403 "$code"
+
+code=$(curl -s -o /dev/null -w '%{http_code}' -b "$ASSIGNER_JAR" -X PUT "http://127.0.0.1:${APP_PORT}/nodered/updateEntity?entity=Inspection&id=insp-1" -H 'Content-Type: application/json' -d '{"objective":"rewritten"}')
+check "assigner editing the inspection itself -> 403" 403 "$code"
+
+# The report outcome is the main inspector's — ana leads this visit, so she may
+# write it. The Reported transition is the /inspectionReport action's job, and
+# the objective/scope are the planner's, shown read-only on the report screen.
+code=$(curl -s -o /dev/null -w '%{http_code}' -b "$JAR" -X PUT "http://127.0.0.1:${APP_PORT}/nodered/updateEntity?entity=Inspection&id=insp-1" -H 'Content-Type: application/json' -d '{"conclusion":"text","description":"text"}')
+check "main inspector stamping the report outcome -> 200" 200 "$code"
+
+code=$(curl -s -o /dev/null -w '%{http_code}' -b "$JAR" -X PUT "http://127.0.0.1:${APP_PORT}/nodered/updateEntity?entity=Inspection&id=insp-1" -H 'Content-Type: application/json' -d '{"status":"Reported"}')
+check "inspector setting the status directly -> 403" 403 "$code"
+
+code=$(curl -s -o /dev/null -w '%{http_code}' -b "$JAR" -X PUT "http://127.0.0.1:${APP_PORT}/nodered/updateEntity?entity=Inspection&id=insp-1" -H 'Content-Type: application/json' -d '{"objective":"rewritten"}')
+check "inspector writing the planner's objective -> 403" 403 "$code"
+
+# Another inspector, same specialty, who does not lead this visit.
+OTHER_JAR="$WORK_DIR/cookies-other-inspector.txt"
+curl -s -c "$OTHER_JAR" -X POST "http://127.0.0.1:${APP_PORT}/api/auth/login" -H 'Content-Type: application/json' \
+  -d '{"username":"ines.inspector","password":"secret"}' >/dev/null
+
+code=$(curl -s -o /dev/null -w '%{http_code}' -b "$OTHER_JAR" -X PUT "http://127.0.0.1:${APP_PORT}/nodered/updateEntity?entity=Inspection&id=insp-1" -H 'Content-Type: application/json' -d '{"conclusion":"text"}')
+check "an inspector who does not lead the visit -> 403" 403 "$code"
+
 # This user holds both roles, so the union of both role sets is what they get.
 code=$(curl -s -o /dev/null -w '%{http_code}' -b "$PLANNER_JAR" -X POST "http://127.0.0.1:${APP_PORT}/nodered/addEntity?entity=InspectionQuestion" -H 'Content-Type: application/json' -d '{"questionId":"q-1"}')
 check "inspector+planner writes either role's entity -> 200" 200 "$code"
@@ -238,6 +297,22 @@ check "planner-only writing an inspector's entity -> 403" 403 "$code"
 
 code=$(curl -s -o /dev/null -w '%{http_code}' -b "$ONLY_JAR" -X POST "http://127.0.0.1:${APP_PORT}/nodered/addEntity?entity=SiteVisit" -H 'Content-Type: application/json' -d '{"locationId":"loc-1"}')
 check "planner-only writing its own entity -> 200" 200 "$code"
+
+# The planner writes the fields its form owns, and not the report outcome.
+code=$(curl -s -o /dev/null -w '%{http_code}' -b "$ONLY_JAR" -X PUT "http://127.0.0.1:${APP_PORT}/nodered/updateEntity?entity=Inspection&id=insp-1" -H 'Content-Type: application/json' -d '{"objective":"o","scope":"s","activityTypeId":"at-1"}')
+check "planner writing its own form fields -> 200" 200 "$code"
+
+code=$(curl -s -o /dev/null -w '%{http_code}' -b "$ONLY_JAR" -X PUT "http://127.0.0.1:${APP_PORT}/nodered/updateEntity?entity=Inspection&id=insp-1" -H 'Content-Type: application/json' -d '{"status":"Defined"}')
+check "planner writing status through updateEntity -> 403" 403 "$code"
+
+code=$(curl -s -o /dev/null -w '%{http_code}' -b "$ONLY_JAR" -X GET "http://127.0.0.1:${APP_PORT}/nodered/inspectionDefine?inspection=insp-1")
+check "planner calling inspectionDefine -> 200" 200 "$code"
+
+code=$(curl -s -o /dev/null -w '%{http_code}' -b "$ONLY_JAR" -X GET "http://127.0.0.1:${APP_PORT}/nodered/inspectionAssign?inspection=insp-1")
+check "planner calling inspectionAssign -> 403" 403 "$code"
+
+code=$(curl -s -o /dev/null -w '%{http_code}' -b "$ONLY_JAR" -X PUT "http://127.0.0.1:${APP_PORT}/nodered/updateEntity?entity=Inspection&id=insp-1" -H 'Content-Type: application/json' -d '{"conclusion":"rewritten by the planner"}')
+check "planner overwriting the report outcome -> 403" 403 "$code"
 
 echo
 echo "sandbox e2e: ${pass} passed, ${fail} failed"

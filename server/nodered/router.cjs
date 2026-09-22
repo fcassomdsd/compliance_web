@@ -28,9 +28,16 @@ const {
   hasRefs,
 } = require('../auth/specialtyScope.cjs');
 const { createScopeGuard, SCOPE_FORBIDDEN, SCOPE_UNVERIFIED } = require('./scopeGuard.cjs');
-const { classifyGatewayRequest } = require('./gatewayPolicy.cjs');
+const {
+  classifyGatewayRequest,
+  writeAllowanceFor,
+  requiredOwnersFor,
+  firstDisallowedField,
+} = require('./gatewayPolicy.cjs');
+const { createOwnershipGuard } = require('./ownershipGuard.cjs');
 
 const GATEWAY_FORBIDDEN = 'AUTH_GATEWAY_FORBIDDEN';
+const FIELD_FORBIDDEN = 'AUTH_GATEWAY_FIELD_FORBIDDEN';
 
 function forwardableBody(req) {
   if (req.method === 'GET' || req.method === 'HEAD') return undefined;
@@ -89,6 +96,7 @@ function filterReadResponse({ entity, scope, body }) {
 function createNodeRedProxyRouter({ auth, config, logger, nodeRedClient }) {
   const router = express.Router();
   const scopeGuard = createScopeGuard({ nodeRedClient, logger });
+  const ownershipGuard = createOwnershipGuard({ nodeRedClient, logger });
   const baseUrl = String(config?.baseUrl || '').replace(/\/$/, '');
   const apiKey = config?.apiKey || '';
 
@@ -129,7 +137,52 @@ function createNodeRedProxyRouter({ auth, config, logger, nodeRedClient }) {
       return res.status(403).json(buildError('AUTH_FORBIDDEN', 'Role not authorized for this operation'));
     }
 
-    // 2. Is it inside the session's specialty scope? Entity writes and link
+    // 2. May this session write the fields the payload names? A role that
+    // reaches an entity for one narrow purpose is held to it: an assigner
+    // updates an Inspection to move it to Assigned, and nothing else. Only
+    // rules that name fields are checked; a role that owns the entity outright
+    // has none.
+    if (decision.kind === 'write' && decision.byRole && decision.hasPayload) {
+      const allowance = writeAllowanceFor(decision.byRole, req.auth?.session?.roles);
+      const payload = forwardableBody(req);
+      const refused = firstDisallowedField(allowance, payload);
+      if (refused) {
+        logger?.warn?.('Refused a gateway write of a field the session may not set', {
+          entity: decision.entity,
+          operation: decision.operation,
+          field: refused.field,
+          reason: refused.reason,
+        });
+        const detail = refused.reason === 'value'
+          ? `${decision.entity}.${refused.field} may only be set to ${refused.allowed.join(', ')} by this session.`
+          : `This session may not write ${decision.entity}.${refused.field}.`;
+        return res.status(403).json(buildError(FIELD_FORBIDDEN, detail));
+      }
+
+      // Some fields belong to a person rather than a role: an inspection's
+      // report outcome is the main inspector's, and that is a fact about the
+      // record, not about the session's roles.
+      for (const owner of requiredOwnersFor(allowance, payload)) {
+        const refusal = await ownershipGuard.checkRecordOwner({
+          owner,
+          session: req.auth?.session,
+          ticket: req.auth?.ticket,
+          entity: decision.entity,
+          id: decision.id,
+        });
+        if (refusal) {
+          logger?.warn?.('Refused a gateway write of a field owned by another user', {
+            entity: decision.entity,
+            id: decision.id,
+            owner,
+            code: refusal.code,
+          });
+          return res.status(refusal.status).json(buildError(refusal.code, refusal.message));
+        }
+      }
+    }
+
+    // 3. Is it inside the session's specialty scope? Entity writes and link
     // writes are both attributed to a record — for a link write, to the record
     // the relation hangs off, which is what carries the specialty.
     if (decision.kind === 'write' || decision.kind === 'linkWrite') {
@@ -229,4 +282,6 @@ module.exports = {
   createNodeRedProxyRouter,
   SCOPE_FORBIDDEN,
   SCOPE_UNVERIFIED,
+  GATEWAY_FORBIDDEN,
+  FIELD_FORBIDDEN,
 };

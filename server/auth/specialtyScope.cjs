@@ -47,6 +47,14 @@ function isSpecialtyScopedSession(roles) {
   return !SCOPE_EXEMPTING_ROLES.some((role) => held.has(role));
 }
 
+// Does this session hold the inspector role at all? Weaker than the question
+// above: an inspector who is also a planner is *not* specialty-scoped, but is
+// still an inspector, and may be the main inspector of a site visit — so the
+// session still needs to know which Inspector record is theirs.
+function holdsInspectorRole(roles) {
+  return toRoleSet(roles).has(INSPECTOR_ROLE);
+}
+
 function normalizeCode(value) {
   const trimmed = String(value ?? '').trim();
   return trimmed ? trimmed.toUpperCase() : null;
@@ -228,6 +236,7 @@ function hasRefs(refs) {
 module.exports = {
   SCOPE_EXEMPTING_ROLES,
   isSpecialtyScopedSession,
+  holdsInspectorRole,
   normalizeCode,
   normalizeId,
   scopeFromInspector,

@@ -270,11 +270,13 @@ const saveAssignments = async () => {
       const inspections = inspectionStore.getForInspectedProvider(currentProviderId.value);
       const inspStatus = inspections.length > 0 ? inspections[0].status : null;
 
+      // The gateway decides whether the move is allowed; these branches only
+      // choose which message to show for a transition it will accept.
       if (inspStatus === INSPECTION_STATUS.DEFINED) {
-        await inspectionStore.updateInspectionStatus(currentProviderId.value, INSPECTION_STATUS.ASSIGNED);
+        await inspectionStore.assignInspection(currentProviderId.value);
         toast.success(t('assignInspectors.toast.statusUpdated'));
       } else if (inspStatus && shouldRevertToAssignedOnReassign(inspStatus)) {
-        await inspectionStore.updateInspectionStatus(currentProviderId.value, INSPECTION_STATUS.ASSIGNED);
+        await inspectionStore.assignInspection(currentProviderId.value);
         toast.success(t('assignInspectors.toast.statusReverted'));
       }
     } catch (error) {

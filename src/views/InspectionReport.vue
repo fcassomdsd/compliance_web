@@ -211,13 +211,14 @@ const generateReport = async () => {
       await inspectionStore.getInspections(providerInsp.id);
       const inspections = inspectionStore.getForInspectedProvider(providerInsp.id);
       if (inspections.length > 0) {
+        // Only the report outcome. Objective, scope and the activity type are
+        // the planner's, set in InspectionManager and shown here read-only —
+        // sending them back would round-trip fields this screen cannot edit and
+        // could overwrite a planner's change made in the meantime.
         await inspectionStore.updateInspection({
           id: inspections[0].id,
           description: reportFields.description,
           conclusion: reportFields.conclusion,
-          objective: reportFields.objective,
-          scope: reportFields.scope,
-          activityTypeId: reportFields.activityTypeId,
         }, providerInsp.id);
       }
     }

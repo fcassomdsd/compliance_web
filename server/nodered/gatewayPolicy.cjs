@@ -21,9 +21,16 @@
 // operation, taken from the routes in src/router/index.js. `Inspection` updates,
 // for example, are reached from three screens with three different role sets
 // (InspectionManager as planner, InspectionReport as inspector, AssignInspectors
-// as assigner), so all three roles appear. This is entity-level authorization:
-// it cannot express "an assigner may set status=Assigned but nothing else" —
-// that distinction belongs in the flows or a domain layer, not here.
+// as assigner), so all three roles appear.
+//
+// Where a role reaches an entity for one narrow purpose, the rule also names the
+// fields — and where the screen only ever writes one value, the values — that
+// role may write. `Inspection.update` is the only operation that needs this: it
+// is the only write more than one non-admin role performs, and the three roles
+// do three different jobs on it. A role that owns an entity outright is given a
+// plain role list and may write the whole record.
+
+const { SITE_VISIT_MAIN_INSPECTOR } = require('./ownershipGuard.cjs');
 
 const ADMIN = 'admin';
 
@@ -42,12 +49,51 @@ const ENTITY_WRITE_ROLES = {
   SiteVisit: allOf('planner'),
   InspectedProvider: allOf('planner'),
 
-  // One provider's work within a site visit — InspectionManager as a planner,
-  // InspectionReport as an inspector (it stamps the report outcome), and
-  // AssignInspectors as an assigner (it moves the inspection to Assigned).
+  // One provider's work within a site visit, and the only write three different
+  // roles perform — so the only one whose rule is per role rather than a plain
+  // list. Each field set is what that role's screen actually sends:
+  //
+  //   planner    InspectionManager defines the inspection and moves it to Defined
+  //   inspector  InspectionReport stamps the report outcome before generating it
+  //   assigner   AssignInspectors moves it to Assigned, and nothing else
+  //
+  // Each role writes only what its screen owns. InspectionManager submits the
+  // form's own fields rather than the record it loaded, so the planner can be
+  // named as precisely as the others:
+  //
+  //   planner    InspectionManager defines the inspection — activity type,
+  //              objective, scope. `code` is there because updateInspection
+  //              re-mints the activity code when the activity type changes while
+  //              the inspection is still at Created — the store adds that field,
+  //              not the view.
+  //
+  //   inspector  InspectionReport stamps the report outcome — `description` and
+  //              `conclusion`, and nothing else. The objective, scope and
+  //              activity type are the planner's and are shown read-only there;
+  //              `status` is not a field write either, since the Reported
+  //              transition belongs to the /inspectionReport action. The outcome
+  //              belongs to the **main inspector of the site visit** rather than
+  //              to the role, which no role can express — hence `owner`, checked
+  //              against the record (see ./ownershipGuard.cjs).
+  //   assigner   AssignInspectors moves the inspection to Assigned, on both of
+  //              its paths (first assignment, and reassignment), and does
+  //              nothing else to it.
   Inspection: {
     add: ['planner', ADMIN],
-    update: ['planner', 'inspector', 'assigner', ADMIN],
+    // `status` is not writable by anyone here. Every transition belongs to a
+    // purpose-named gateway action that decides the target status and enforces
+    // the state machine (see ACTION_ROLES), so the assigner — whose only write
+    // was the move to Assigned — no longer touches this entity at all.
+    update: {
+      planner: {
+        fields: ['activityTypeId', 'objective', 'scope', 'code'],
+      },
+      inspector: {
+        fields: ['description', 'conclusion'],
+        owner: SITE_VISIT_MAIN_INSPECTOR,
+      },
+      [ADMIN]: {},
+    },
     delete: ['planner', ADMIN],
   },
   InspectionSchedule: allOf('planner'),
@@ -69,10 +115,18 @@ const LINK_WRITE_ROLES = {
   'InspectedSpecialty.actingInspectors': ['assigner', ADMIN],
 };
 
-// The two GETs that change state. Their role sets match the routes that reach
-// them: /inspection-plan is planner|inspector|admin, /inspection-report is
-// inspector|admin.
+// The GETs that change state. Each one *is* the transition — the caller names
+// the action, never a target status — so the role that performs it in the UI is
+// the role that may call it, and the state machine itself is enforced upstream
+// in the flow rather than in the browser.
+//
+//   /inspectionDefine  Created -> Defined, from InspectionManager (planner)
+//   /inspectionAssign  -> Assigned, from AssignInspectors (assigner)
+//   /inspectionPlan    -> Planned, from InspectionPlan (planner|inspector)
+//   /inspectionReport  -> Reported, from InspectionReport (inspector)
 const ACTION_ROLES = {
+  '/inspectionDefine': ['planner', ADMIN],
+  '/inspectionAssign': ['assigner', ADMIN],
   '/inspectionPlan': ['planner', 'inspector', ADMIN],
   '/inspectionReport': ['inspector', ADMIN],
 };
@@ -106,6 +160,100 @@ const LINK_WRITE_METHODS = {
 
 // A prefixed read takes exactly one more path segment (`/inspector/:externalId`),
 // so `/inspector/a/b` is not a read of anything the gateway serves.
+// A write rule is either a plain list of roles — that role may write the whole
+// record — or an object keyed by role, naming the fields and optionally the
+// values each may write. An empty object for a role means unrestricted.
+function normalizeWriteRule(rule) {
+  if (!rule) return null;
+  if (Array.isArray(rule)) return { roles: rule, byRole: null };
+  const roles = Object.keys(rule);
+  return roles.length ? { roles, byRole: rule } : null;
+}
+
+// What a session may write, unioned across the roles it actually holds: holding
+// two roles grants the union of their fields, the same way authorization is an
+// any-role match. `null` means unrestricted.
+//
+// Returns { fields, values, owners } where
+//   fields  Set<string>
+//   values  Map<field, Set<string>|null>   null = any value
+//   owners  Map<field, string|null>        null = no ownership requirement
+//
+// Ownership is tracked **per field**, not per session: a second role lifts the
+// requirement only on the fields it grants in its own right. An inspector who is
+// also a planner may write the planner's fields freely, and still only sets the
+// report outcome on a visit they lead.
+function writeAllowanceFor(byRole, sessionRoles) {
+  if (!byRole) return null;
+
+  const held = new Set((Array.isArray(sessionRoles) ? sessionRoles : []).map((r) => String(r ?? '').trim().toLowerCase()));
+  const fields = new Set();
+  const values = new Map();
+  const owners = new Map();
+  let matched = false;
+
+  for (const [role, constraint] of Object.entries(byRole)) {
+    if (!held.has(role.toLowerCase())) continue;
+    matched = true;
+    // No field list for a role this session holds: unrestricted.
+    if (!constraint || !Array.isArray(constraint.fields)) return null;
+
+    for (const field of constraint.fields) {
+      fields.add(field);
+
+      const allowedValues = constraint.values?.[field];
+      if (Array.isArray(allowedValues)) {
+        const current = values.get(field);
+        if (current !== null) {
+          const merged = current || new Set();
+          allowedValues.forEach((v) => merged.add(String(v)));
+          values.set(field, merged);
+        }
+      } else {
+        values.set(field, null);
+      }
+
+      // A role granting the field without an owner requirement lifts it.
+      if (constraint.owner && owners.get(field) !== null) {
+        owners.set(field, constraint.owner);
+      } else if (!constraint.owner) {
+        owners.set(field, null);
+      }
+    }
+  }
+
+  return matched ? { fields, values, owners } : null;
+}
+
+// The record owners this payload requires the session to be, if any.
+function requiredOwnersFor(allowance, payload) {
+  const required = new Set();
+  if (!allowance || !payload || typeof payload !== 'object') return required;
+
+  for (const field of Object.keys(payload)) {
+    const owner = allowance.owners.get(field);
+    if (owner) required.add(owner);
+  }
+  return required;
+}
+
+// The first field in the payload this session may not write, or null when the
+// whole payload is allowed.
+function firstDisallowedField(allowance, payload) {
+  if (!allowance || !payload || typeof payload !== 'object') return null;
+
+  for (const [field, value] of Object.entries(payload)) {
+    if (!allowance.fields.has(field)) {
+      return { field, reason: 'field' };
+    }
+    const allowed = allowance.values.get(field);
+    if (allowed && !allowed.has(String(value))) {
+      return { field, reason: 'value', value: String(value), allowed: Array.from(allowed) };
+    }
+  }
+  return null;
+}
+
 function matchesRead(method, path) {
   return READ_ROUTES.some((route) => {
     if (route.method !== method) return false;
@@ -141,15 +289,16 @@ function classifyGatewayRequest({ method, path, query = {} }) {
     if (!entity || (entityWrite.needsId && !id)) {
       return { kind: 'write', badRequest: true, entity, operation: entityWrite.operation };
     }
-    const roles = ENTITY_WRITE_ROLES[entity]?.[entityWrite.operation];
-    if (!roles) return null;
+    const rule = normalizeWriteRule(ENTITY_WRITE_ROLES[entity]?.[entityWrite.operation]);
+    if (!rule) return null;
     return {
       kind: 'write',
       operation: entityWrite.operation,
       entity,
       id,
       hasPayload: entityWrite.hasPayload,
-      roles,
+      roles: rule.roles,
+      byRole: rule.byRole,
     };
   }
 
@@ -174,6 +323,9 @@ function classifyGatewayRequest({ method, path, query = {} }) {
 
 module.exports = {
   classifyGatewayRequest,
+  writeAllowanceFor,
+  requiredOwnersFor,
+  firstDisallowedField,
   ENTITY_WRITE_ROLES,
   LINK_WRITE_ROLES,
   ACTION_ROLES,

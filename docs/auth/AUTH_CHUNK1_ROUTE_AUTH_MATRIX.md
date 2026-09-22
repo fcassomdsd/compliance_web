@@ -139,7 +139,8 @@ and never reaches the gateway. That matters because the same gateway also serves
 and the import service — `/importCanonical`, `/importFollowUps`, `/checklist`, `/findings/open` and
 the rest are not reachable from a browser session.
 
-Order of checks: session → classification → role → specialty scope → forward.
+Order of checks: session → classification → role → **field rules → record ownership** → specialty
+scope → forward.
 
 ### Reads — a session is enough
 
@@ -156,7 +157,7 @@ role. A prefixed read takes exactly one further path segment.
 |---|---|---|---|
 | `SiteVisit` | planner, admin | planner, admin | planner, admin |
 | `InspectedProvider` | planner, admin | planner, admin | planner, admin |
-| `Inspection` | planner, admin | planner, **inspector**, **assigner**, admin | planner, admin |
+| `Inspection` | planner, admin | planner, **inspector**, **assigner**, admin — per field, see below | planner, admin |
 | `InspectionSchedule` | planner, admin | planner, admin | planner, admin |
 | `InspectedService` | planner, admin | planner, admin | planner, admin |
 | `InspectedSpecialty` | planner, admin | planner, admin | planner, admin |
@@ -167,10 +168,58 @@ Any other entity cannot be written through the proxy at all: locations, provider
 specialties, checklist questions and the rest of the reference data are maintained in AtroCore
 itself.
 
-`Inspection.update` carries three roles because three screens perform it — InspectionManager as a
-planner, InspectionReport as an inspector, AssignInspectors as an assigner. This is **entity-level**
-authorization: it cannot express "an assigner may set `status=Assigned` and nothing else". That
-distinction belongs in the flows or a domain layer.
+#### Field rules on `Inspection.update`
+
+`Inspection.update` is the only gateway write more than one non-admin role performs, and the three
+roles do three different jobs on it — so its rule names the fields, and where a screen writes one
+value or one person's data, the values and the owner too:
+
+| Role | May write | Why |
+|---|---|---|
+| `planner` | `activityTypeId`, `objective`, `scope`, `code` | InspectionManager defines the inspection. `code` is there because `updateInspection` re-mints the activity code when the activity type changes while the inspection is still at `Created`. |
+| `inspector` | `description`, `conclusion` — **and only if the session is the site visit's main inspector** | InspectionReport stamps the report outcome. The objective, scope and activity type are the planner's and are shown read-only there. |
+| `admin` | *anything* | Break-glass. |
+
+**`status` is nobody's to write here.** Every transition is a gateway action that decides the target
+status itself (see below), so the assigner — whose only write to an `Inspection` was the move to
+`Assigned` — no longer appears on this entity at all.
+
+The two screens are separated in the UI to match: InspectionManager shows `description`/`conclusion`
+read-only ("set during report"), and InspectionReport shows `objective`/`scope`/activity type
+read-only. Neither submits the fields it only displays.
+
+A session holding two roles gets the **union** of their field sets, the same way authorization is an
+any-role match. Ownership, though, is tracked **per field**: a second role lifts the requirement only
+on the fields it grants in its own right, so an inspector who is also a planner may write the
+planner's fields freely and still only sets the report outcome on a visit they lead.
+
+A payload is refused whole, with 403 `AUTH_GATEWAY_FIELD_FORBIDDEN`, as soon as one field is out of
+bounds; nothing reaches the gateway.
+
+#### Record ownership
+
+`description` and `conclusion` are the **report outcome**, and they belong to the main inspector of
+the site visit — the person designated to lead it, not to whoever holds the inspector role. Being
+main inspector is a per-site-visit attribution (`SiteVisit.mainInspectorId`): anyone can lead one
+visit and not the next, so no group membership and no role can express it.
+
+`server/nodered/ownershipGuard.cjs` resolves it the same way the specialty guard reads records back:
+
+```
+Inspection.inspectedProviderId -> InspectedProvider.siteVisitId -> SiteVisit.mainInspectorId
+```
+
+compared against the session's own `Inspector` id, resolved at login and carried in
+`metadata.inspectorId`. Note this is resolved for **any** session holding the `inspector` role, not
+only a specialty-scoped one — an inspector who is also a planner can still lead a visit.
+
+It fails closed, as the specialty guard does: 403 `AUTH_NOT_RECORD_OWNER` when the session is not
+the main inspector, and 403 `AUTH_OWNERSHIP_UNVERIFIED` when the chain cannot be followed or the
+visit names no main inspector. A write that cannot be attributed is not assumed to be the owner's.
+
+Every other write keeps a plain role list, because a single role owns the entity outright. Field
+rules are for a role reaching an entity for one narrow purpose; ownership rules are for a field that
+belongs to a person.
 
 ### Link writes — per entity + relation
 
@@ -182,20 +231,38 @@ The paths are `/addLinks` and `/deleteLinks` — **no `Entity` suffix**, which i
 expose and what the client calls. The proxy previously looked for `/addLinksEntity`, so link writes
 matched no rule and were forwarded without a specialty check.
 
-### Actions — the two state-changing GETs
+### Actions — the state-changing GETs
 
-| Action | Roles |
-|---|---|
-| `GET /inspectionPlan` | planner, inspector, admin |
-| `GET /inspectionReport` | inspector, admin |
+Each action *is* a transition: the caller names the action and never a target status, so the role
+that performs it in the UI is the role that may call it, and the state machine is enforced in the
+flow rather than in the browser.
 
-Matching `/inspection-plan` and `/inspection-report` in the frontend table.
+| Action | Transition | Roles |
+|---|---|---|
+| `GET /inspectionDefine` | `Created → Defined` | planner, admin |
+| `GET /inspectionAssign` | `→ Assigned`, from `Defined` or `Planned` | assigner, admin |
+| `GET /inspectionPlan` | `→ Planned` | planner, inspector, admin |
+| `GET /inspectionReport` | `→ Reported` | inspector, admin |
+
+`Planned → Assigned` is the reassignment revert: assigning different inspectors to an inspection
+that already has a plan sends it back so the plan is regenerated. A disallowed transition answers
+`409` from the flow, an unknown inspection `404`, and one already in effect `200` with
+`changed: false`.
+
+`compliance_flow` owns the rules — see its "Inspection Status Transitions" tab and its README's API
+Reference. `Planned → Uploaded` is `/importCanonical`'s, reached by the Electron app rather than
+from here.
+
+Note the specialty-scope check on actions is keyed by `siteVisit`+`provider` and so does not apply
+to the two id-keyed transitions; both are performed by roles that are unscoped by definition
+(planner, assigner), so there is nothing to narrow.
 
 ### What this means for `assigner`
 
-`assigner` is now enforced server-side: it is the only role besides `admin` that may write
-`InspectedSpecialty.actingInspectors`, and one of three that may update an `Inspection`. It is no
-longer a frontend-only role.
+`assigner` is enforced server-side: it is the only role besides `admin` that may write
+`InspectedSpecialty.actingInspectors`, and the only one that may call `/inspectionAssign`. It no
+longer writes the `Inspection` entity at all — its transition became an action — so it is a
+frontend-only role no more, and its server surface is now exactly its job.
 
 ### Interaction with the specialty scope
 
@@ -226,6 +293,15 @@ every scope-controlled read a scoped session makes.
     `DELETE /nodered/deleteEntity?entity=Location` → 403.
 12. Gateway: `inspector` → `POST /nodered/addLinks?entity=InspectedSpecialty&link=actingInspectors`
     → 403; `assigner` → forwarded.
+13. Gateway fields: `assigner` → `PUT …updateEntity?entity=Inspection` with `{"status":"Assigned"}`
+    → 200; with `{"status":"Complete"}` or `{"objective":"…"}` → 403
+    `AUTH_GATEWAY_FIELD_FORBIDDEN`. `planner` → its own form fields → 200; `{"conclusion":"…"}` → 403.
+14. Gateway ownership: the visit's main inspector → `{"conclusion":"…"}` → 200; another inspector of
+    the same specialty → 403 `AUTH_NOT_RECORD_OWNER`; a visit with no main inspector → 403
+    `AUTH_OWNERSHIP_UNVERIFIED`.
+15. Gateway transitions: `planner` → `GET /nodered/inspectionDefine?inspection=…` → 200,
+    `/inspectionAssign` → 403; `assigner` the reverse. Any role writing `{"status":…}` through
+    `updateEntity` → 403 `AUTH_GATEWAY_FIELD_FORBIDDEN`.
 
 Covered by `tests/unit/router/guards.test.js`, `tests/unit/router/navigation.test.js`,
 `tests/unit/App.test.js`, `tests/server/nodeRedProxy.test.js` and the server router tests;
