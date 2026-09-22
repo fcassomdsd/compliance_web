@@ -55,6 +55,33 @@ services:
       # Secure by default. Local HTTP development must opt out explicitly.
       AUTH_COOKIE_SECURE: ${AUTH_COOKIE_SECURE:-true}
       NODE_ENV: ${AUTH_NODE_ENV:-production}
+      # Service account for the scheduled jobs and for role-addressed
+      # notifications, which read Alfresco group membership to find who holds a
+      # role. Without it both jobs log "skipped" at startup and every role
+      # notification falls back to the fixed addresses below. It needs to read
+      # groups and people, which an ordinary (non-administrator) Alfresco
+      # account can do.
+      ALFRESCO_JOB_USERNAME: ${ALFRESCO_JOB_USERNAME:-}
+      ALFRESCO_JOB_PASSWORD: ${ALFRESCO_JOB_PASSWORD:-}
+      # How long the role -> users lookup is cached, in ms (default 15 minutes).
+      ROLE_RECIPIENT_CACHE_MS: ${ROLE_RECIPIENT_CACHE_MS:-}
+      # Email delivery. Without SMTP_HOST the transport is not configured and
+      # email notifications queue and fail; the in-app notifications a role
+      # notification also creates are unaffected, since they need no transport.
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-}
+      SMTP_SECURE: ${SMTP_SECURE:-}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASS: ${SMTP_PASS:-}
+      SMTP_FROM: ${SMTP_FROM:-}
+      # Fallback addresses for role-addressed notifications, used when a role
+      # resolves to nobody, the lookup fails, or no service account is set.
+      # CASE_ESCALATION_EMAIL has no role behind it by design — the BPMN routes a
+      # missed deadline to a safety-case team that is not one of the app's roles.
+      INSPECTOR_NOTIFICATIONS_EMAIL: ${INSPECTOR_NOTIFICATIONS_EMAIL:-}
+      CAP_ENTRY_NOTIFICATIONS_EMAIL: ${CAP_ENTRY_NOTIFICATIONS_EMAIL:-}
+      PLANNER_NOTIFICATIONS_EMAIL: ${PLANNER_NOTIFICATIONS_EMAIL:-}
+      CASE_ESCALATION_EMAIL: ${CASE_ESCALATION_EMAIL:-}
     depends_on:
       db:
         condition: service_healthy
