@@ -275,6 +275,38 @@ export async function apiInspectionReport(inspectionCode, reportDate, servicePro
   }
 }
 
+// The two inspection status transitions the gateway owns. The caller names the
+// action, never the target status: the flow decides it and enforces the state
+// machine, and the proxy gates each action by role. See compliance_flow's
+// "Inspection Status Transitions" tab.
+async function inspectionTransition(action, inspectionId) {
+  if (!inspectionId || typeof inspectionId !== 'string' || inspectionId.trim().length === 0) {
+    throw new Error('inspectionId is required');
+  }
+  const result = await axios({
+    method: 'get',
+    url: `${apiServer}/${action}?inspection=${encodeURIComponent(inspectionId.trim())}`,
+    headers: buildNodeRedHeaders(),
+  });
+  return { data: result.data, status: result.status };
+}
+
+export async function apiInspectionDefine(inspectionId) {
+  try {
+    return await inspectionTransition('inspectionDefine', inspectionId);
+  } catch (error) {
+    throw new Error('apiInspectionDefine: ' + error.message);
+  }
+}
+
+export async function apiInspectionAssign(inspectionId) {
+  try {
+    return await inspectionTransition('inspectionAssign', inspectionId);
+  } catch (error) {
+    throw new Error('apiInspectionAssign: ' + error.message);
+  }
+}
+
 export async function apiInspectorByAlfrescoUser(alfrescoUserId) {
   try {
     if (!alfrescoUserId || typeof alfrescoUserId !== 'string' || alfrescoUserId.trim().length === 0) {

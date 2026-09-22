@@ -245,18 +245,20 @@ sys.exit(0 if ids == ['q-ats', 'q-met'] and data.get('total') == 2 else 1)
 code=$(curl -s -o /dev/null -w '%{http_code}' -b "$PLANNER_JAR" -X POST "http://127.0.0.1:${APP_PORT}/nodered/addEntity?entity=InspectedSpecialty" -H 'Content-Type: application/json' -d '{"specialtyId":"spec_met"}')
 check "planner writes outside the Inspector record's specialties -> 200" 200 "$code"
 
-# Inspection.update is the one write three roles perform, so its rule names the
-# fields each may set. An assigner moves an inspection to Assigned and does
-# nothing else to it.
+# Status is nobody's to write through updateEntity any more: every transition is
+# a purpose-named action the gateway owns, gated by the role that performs it.
 ASSIGNER_JAR="$WORK_DIR/cookies-assigner.txt"
 curl -s -c "$ASSIGNER_JAR" -X POST "http://127.0.0.1:${APP_PORT}/api/auth/login" -H 'Content-Type: application/json' \
   -d '{"username":"alba.assigner","password":"secret"}' >/dev/null
 
-code=$(curl -s -o /dev/null -w '%{http_code}' -b "$ASSIGNER_JAR" -X PUT "http://127.0.0.1:${APP_PORT}/nodered/updateEntity?entity=Inspection&id=insp-1" -H 'Content-Type: application/json' -d '{"status":"Assigned"}')
-check "assigner setting status=Assigned -> 200" 200 "$code"
+code=$(curl -s -o /dev/null -w '%{http_code}' -b "$ASSIGNER_JAR" -X GET "http://127.0.0.1:${APP_PORT}/nodered/inspectionAssign?inspection=insp-1")
+check "assigner calling inspectionAssign -> 200" 200 "$code"
 
-code=$(curl -s -o /dev/null -w '%{http_code}' -b "$ASSIGNER_JAR" -X PUT "http://127.0.0.1:${APP_PORT}/nodered/updateEntity?entity=Inspection&id=insp-1" -H 'Content-Type: application/json' -d '{"status":"Complete"}')
-check "assigner setting any other status -> 403" 403 "$code"
+code=$(curl -s -o /dev/null -w '%{http_code}' -b "$ASSIGNER_JAR" -X GET "http://127.0.0.1:${APP_PORT}/nodered/inspectionDefine?inspection=insp-1")
+check "assigner calling inspectionDefine -> 403" 403 "$code"
+
+code=$(curl -s -o /dev/null -w '%{http_code}' -b "$ASSIGNER_JAR" -X PUT "http://127.0.0.1:${APP_PORT}/nodered/updateEntity?entity=Inspection&id=insp-1" -H 'Content-Type: application/json' -d '{"status":"Assigned"}')
+check "assigner writing status through updateEntity -> 403" 403 "$code"
 
 code=$(curl -s -o /dev/null -w '%{http_code}' -b "$ASSIGNER_JAR" -X PUT "http://127.0.0.1:${APP_PORT}/nodered/updateEntity?entity=Inspection&id=insp-1" -H 'Content-Type: application/json' -d '{"objective":"rewritten"}')
 check "assigner editing the inspection itself -> 403" 403 "$code"
@@ -297,8 +299,17 @@ code=$(curl -s -o /dev/null -w '%{http_code}' -b "$ONLY_JAR" -X POST "http://127
 check "planner-only writing its own entity -> 200" 200 "$code"
 
 # The planner writes the fields its form owns, and not the report outcome.
-code=$(curl -s -o /dev/null -w '%{http_code}' -b "$ONLY_JAR" -X PUT "http://127.0.0.1:${APP_PORT}/nodered/updateEntity?entity=Inspection&id=insp-1" -H 'Content-Type: application/json' -d '{"status":"Defined","objective":"o","scope":"s","activityTypeId":"at-1"}')
+code=$(curl -s -o /dev/null -w '%{http_code}' -b "$ONLY_JAR" -X PUT "http://127.0.0.1:${APP_PORT}/nodered/updateEntity?entity=Inspection&id=insp-1" -H 'Content-Type: application/json' -d '{"objective":"o","scope":"s","activityTypeId":"at-1"}')
 check "planner writing its own form fields -> 200" 200 "$code"
+
+code=$(curl -s -o /dev/null -w '%{http_code}' -b "$ONLY_JAR" -X PUT "http://127.0.0.1:${APP_PORT}/nodered/updateEntity?entity=Inspection&id=insp-1" -H 'Content-Type: application/json' -d '{"status":"Defined"}')
+check "planner writing status through updateEntity -> 403" 403 "$code"
+
+code=$(curl -s -o /dev/null -w '%{http_code}' -b "$ONLY_JAR" -X GET "http://127.0.0.1:${APP_PORT}/nodered/inspectionDefine?inspection=insp-1")
+check "planner calling inspectionDefine -> 200" 200 "$code"
+
+code=$(curl -s -o /dev/null -w '%{http_code}' -b "$ONLY_JAR" -X GET "http://127.0.0.1:${APP_PORT}/nodered/inspectionAssign?inspection=insp-1")
+check "planner calling inspectionAssign -> 403" 403 "$code"
 
 code=$(curl -s -o /dev/null -w '%{http_code}' -b "$ONLY_JAR" -X PUT "http://127.0.0.1:${APP_PORT}/nodered/updateEntity?entity=Inspection&id=insp-1" -H 'Content-Type: application/json' -d '{"conclusion":"rewritten by the planner"}')
 check "planner overwriting the report outcome -> 403" 403 "$code"

@@ -288,6 +288,7 @@ describe('Node-RED proxy', () => {
   // different jobs on it — so the rule names the fields each may set.
   describe('field-level rules on Inspection.update', () => {
     async function update(group, payload, { mainInspectorId = INSPECTOR.id } = {}) {
+      const groups = Array.isArray(group) ? group : [group];
       gateway = await startStubGateway((entry, res) => {
         if (entry.url.startsWith('/inspector/')) return json(res, 200, INSPECTOR);
         if (entry.url.includes('entity=InspectedProvider')) {
@@ -301,7 +302,7 @@ describe('Node-RED proxy', () => {
         }
         return json(res, 200, { ok: true });
       });
-      const { app } = buildTestApp({ gatewayUrl: gateway.url, groups: [group] });
+      const { app } = buildTestApp({ gatewayUrl: gateway.url, groups });
       const cookie = await loginCookie(app, 'user.x');
       return request(app)
         .put('/nodered/updateEntity?entity=Inspection&id=insp-1')
@@ -309,27 +310,27 @@ describe('Node-RED proxy', () => {
         .send(payload);
     }
 
-    it('lets an assigner move an inspection to Assigned', async () => {
+    // The assigner's only write here was the move to Assigned, and that is now a
+    // gateway action — so the role has no business on this entity at all and is
+    // refused before the field rules are even consulted.
+    it('keeps the assigner off the entity entirely', async () => {
       const res = await update('GROUP_ASSIGNER', { status: 'Assigned' });
-      expect(res.status).toBe(200);
-    });
-
-    it('stops an assigner setting any other status', async () => {
-      const res = await update('GROUP_ASSIGNER', { status: 'Complete' });
       expect(res.status).toBe(403);
-      expect(res.body.code).toBe('AUTH_GATEWAY_FIELD_FORBIDDEN');
-      expect(res.body.message).toContain('Assigned');
+      expect(res.body.code).toBe('AUTH_FORBIDDEN');
       expect(gateway.requests.filter((e) => e.url.startsWith('/updateEntity'))).toHaveLength(0);
     });
 
-    it('stops an assigner editing the inspection itself', async () => {
-      const res = await update('GROUP_ASSIGNER', { objective: 'Rewritten by the assigner' });
+    // No role writes `status` through updateEntity any more: every transition is
+    // a purpose-named action that decides the target status itself.
+    it.each([['GROUP_PLANNER'], ['GROUP_INSPECTOR']])('stops %s writing status directly', async (group) => {
+      const res = await update(group, { status: 'Assigned' });
       expect(res.status).toBe(403);
       expect(res.body.code).toBe('AUTH_GATEWAY_FIELD_FORBIDDEN');
+      expect(gateway.requests.filter((e) => e.url.startsWith('/updateEntity'))).toHaveLength(0);
     });
 
     it('refuses the whole payload when one field is out of bounds', async () => {
-      const res = await update('GROUP_ASSIGNER', { status: 'Assigned', objective: 'smuggled' });
+      const res = await update('GROUP_PLANNER', { objective: 'ok', conclusion: 'smuggled' });
       expect(res.status).toBe(403);
       expect(gateway.requests.filter((e) => e.url.startsWith('/updateEntity'))).toHaveLength(0);
     });
@@ -386,33 +387,27 @@ describe('Node-RED proxy', () => {
     });
 
     it('does not ask about ownership for a field that does not need it', async () => {
-      const res = await update('GROUP_ASSIGNER', { status: 'Assigned' });
+      const res = await update('GROUP_PLANNER', { objective: 'o' });
       expect(res.status).toBe(200);
       expect(gateway.requests.filter((e) => e.url.includes('entity=SiteVisit'))).toHaveLength(0);
     });
 
     it('grants the union of both role sets to a user holding two roles', async () => {
-      gateway = await startStubGateway((entry, res) => {
-        if (entry.url.startsWith('/inspector/')) return json(res, 200, INSPECTOR);
-        if (entry.url.startsWith('/queryEntity')) {
-          return json(res, 200, { total: 1, list: [{ id: 'insp-1', inspectedSpecialties: [] }] });
-        }
-        return json(res, 200, { ok: true });
-      });
-      const { app } = buildTestApp({
-        gatewayUrl: gateway.url,
-        groups: ['GROUP_ASSIGNER', 'GROUP_PLANNER'],
-      });
-      const cookie = await loginCookie(app, 'user.both');
-
-      // A planner may set any status, so holding both roles lifts the
-      // assigner's value restriction rather than intersecting with it.
-      const res = await request(app)
-        .put('/nodered/updateEntity?entity=Inspection&id=insp-1')
-        .set('Cookie', cookie)
-        .send({ status: 'Complete' });
-
+      // The planner's fields and the inspector's outcome together. The outcome
+      // still needs ownership: the planner role does not lift it, because it
+      // does not grant those fields in its own right.
+      const res = await update(['GROUP_INSPECTOR', 'GROUP_PLANNER'], { objective: 'o', conclusion: 'c' });
       expect(res.status).toBe(200);
+    });
+
+    it('still holds a planner-and-inspector to ownership on the outcome', async () => {
+      const res = await update(
+        ['GROUP_INSPECTOR', 'GROUP_PLANNER'],
+        { objective: 'o', conclusion: 'c' },
+        { mainInspectorId: 'insp-someone-else' }
+      );
+      expect(res.status).toBe(403);
+      expect(res.body.code).toBe('AUTH_NOT_RECORD_OWNER');
     });
 
     it('leaves an entity with a plain role list unrestricted', async () => {

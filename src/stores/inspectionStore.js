@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia';
-import { apiEntityCRUD } from '@/services/apiServices';
+import { apiEntityCRUD, apiInspectionDefine, apiInspectionAssign } from '@/services/apiServices';
 import { INSPECTION_STATUS } from '@/utils/siteVisitStatus';
 import {
   DEFAULT_ACTIVITY_TYPE_CODE,
@@ -166,14 +166,30 @@ export const useInspectionStore = defineStore('inspection', {
       }
     },
 
-    async updateInspectionStatus(inspectedProviderId, newStatus) {
+    // Status is never written from here. The gateway owns each transition behind
+    // a purpose-named action — it decides the target status and enforces the
+    // state machine, so a client cannot move an inspection to an arbitrary
+    // state. `/inspectionPlan`, `/importCanonical` and `/inspectionReport`
+    // already worked this way; these are the remaining two.
+    async defineInspection(inspectedProviderId) {
       try {
         const list = this.getForInspectedProvider(inspectedProviderId);
         if (list.length === 0) return;
-        const inspId = list[0].id;
-        await this.updateInspection({ id: inspId, status: newStatus }, inspectedProviderId);
+        await apiInspectionDefine(list[0].id);
+        await this.getInspections(inspectedProviderId);
       } catch (error) {
-        throw new Error('updateInspectionStatus: ' + error.message);
+        throw new Error('defineInspection: ' + error.message);
+      }
+    },
+
+    async assignInspection(inspectedProviderId) {
+      try {
+        const list = this.getForInspectedProvider(inspectedProviderId);
+        if (list.length === 0) return;
+        await apiInspectionAssign(list[0].id);
+        await this.getInspections(inspectedProviderId);
+      } catch (error) {
+        throw new Error('assignInspection: ' + error.message);
       }
     },
 

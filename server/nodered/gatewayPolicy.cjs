@@ -61,11 +61,11 @@ const ENTITY_WRITE_ROLES = {
   // form's own fields rather than the record it loaded, so the planner can be
   // named as precisely as the others:
   //
-  //   planner    InspectionManager defines the inspection (activity type,
-  //              objective, scope) and moves it to Defined. `code` is there
-  //              because updateInspection re-mints the activity code when the
-  //              activity type changes while the inspection is still at Created
-  //              — the store adds that field, not the view.
+  //   planner    InspectionManager defines the inspection — activity type,
+  //              objective, scope. `code` is there because updateInspection
+  //              re-mints the activity code when the activity type changes while
+  //              the inspection is still at Created — the store adds that field,
+  //              not the view.
   //
   //   inspector  InspectionReport stamps the report outcome — `description` and
   //              `conclusion`, and nothing else. The objective, scope and
@@ -80,17 +80,17 @@ const ENTITY_WRITE_ROLES = {
   //              nothing else to it.
   Inspection: {
     add: ['planner', ADMIN],
+    // `status` is not writable by anyone here. Every transition belongs to a
+    // purpose-named gateway action that decides the target status and enforces
+    // the state machine (see ACTION_ROLES), so the assigner — whose only write
+    // was the move to Assigned — no longer touches this entity at all.
     update: {
       planner: {
-        fields: ['activityTypeId', 'objective', 'scope', 'status', 'code'],
+        fields: ['activityTypeId', 'objective', 'scope', 'code'],
       },
       inspector: {
         fields: ['description', 'conclusion'],
         owner: SITE_VISIT_MAIN_INSPECTOR,
-      },
-      assigner: {
-        fields: ['status'],
-        values: { status: ['Assigned'] },
       },
       [ADMIN]: {},
     },
@@ -115,10 +115,18 @@ const LINK_WRITE_ROLES = {
   'InspectedSpecialty.actingInspectors': ['assigner', ADMIN],
 };
 
-// The two GETs that change state. Their role sets match the routes that reach
-// them: /inspection-plan is planner|inspector|admin, /inspection-report is
-// inspector|admin.
+// The GETs that change state. Each one *is* the transition — the caller names
+// the action, never a target status — so the role that performs it in the UI is
+// the role that may call it, and the state machine itself is enforced upstream
+// in the flow rather than in the browser.
+//
+//   /inspectionDefine  Created -> Defined, from InspectionManager (planner)
+//   /inspectionAssign  -> Assigned, from AssignInspectors (assigner)
+//   /inspectionPlan    -> Planned, from InspectionPlan (planner|inspector)
+//   /inspectionReport  -> Reported, from InspectionReport (inspector)
 const ACTION_ROLES = {
+  '/inspectionDefine': ['planner', ADMIN],
+  '/inspectionAssign': ['assigner', ADMIN],
   '/inspectionPlan': ['planner', 'inspector', ADMIN],
   '/inspectionReport': ['inspector', ADMIN],
 };

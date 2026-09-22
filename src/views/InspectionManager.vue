@@ -427,7 +427,7 @@ const checkAndTransitionToDefined = async () => {
 
   if (hasServices && hasSchedules) {
     try {
-      await inspectionStore.updateInspectionStatus(inspectedProviderId, INSPECTION_STATUS.DEFINED);
+      await inspectionStore.defineInspection(inspectedProviderId);
       inspectionData.value.status = INSPECTION_STATUS.DEFINED;
       toast.success(t('inspectionManager.toast.statusDefined'));
     } catch (error) {

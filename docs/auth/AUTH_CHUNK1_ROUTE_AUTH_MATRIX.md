@@ -176,10 +176,13 @@ value or one person's data, the values and the owner too:
 
 | Role | May write | Why |
 |---|---|---|
-| `planner` | `activityTypeId`, `objective`, `scope`, `status`, `code` | InspectionManager defines the inspection and moves it to `Defined`. `code` is there because `updateInspection` re-mints the activity code when the activity type changes while the inspection is still at `Created`. |
-| `inspector` | `description`, `conclusion` — **and only if the session is the site visit's main inspector** | InspectionReport stamps the report outcome. The objective, scope and activity type are the planner's and are shown read-only there; `status` is not a field write either, since the `Reported` transition belongs to the `/inspectionReport` action. |
-| `assigner` | `status`, and only the value `Assigned` | AssignInspectors moves the inspection to `Assigned` on both its paths (first assignment and reassignment) and does nothing else to it. |
+| `planner` | `activityTypeId`, `objective`, `scope`, `code` | InspectionManager defines the inspection. `code` is there because `updateInspection` re-mints the activity code when the activity type changes while the inspection is still at `Created`. |
+| `inspector` | `description`, `conclusion` — **and only if the session is the site visit's main inspector** | InspectionReport stamps the report outcome. The objective, scope and activity type are the planner's and are shown read-only there. |
 | `admin` | *anything* | Break-glass. |
+
+**`status` is nobody's to write here.** Every transition is a gateway action that decides the target
+status itself (see below), so the assigner — whose only write to an `Inspection` was the move to
+`Assigned` — no longer appears on this entity at all.
 
 The two screens are separated in the UI to match: InspectionManager shows `description`/`conclusion`
 read-only ("set during report"), and InspectionReport shows `objective`/`scope`/activity type
@@ -228,20 +231,38 @@ The paths are `/addLinks` and `/deleteLinks` — **no `Entity` suffix**, which i
 expose and what the client calls. The proxy previously looked for `/addLinksEntity`, so link writes
 matched no rule and were forwarded without a specialty check.
 
-### Actions — the two state-changing GETs
+### Actions — the state-changing GETs
 
-| Action | Roles |
-|---|---|
-| `GET /inspectionPlan` | planner, inspector, admin |
-| `GET /inspectionReport` | inspector, admin |
+Each action *is* a transition: the caller names the action and never a target status, so the role
+that performs it in the UI is the role that may call it, and the state machine is enforced in the
+flow rather than in the browser.
 
-Matching `/inspection-plan` and `/inspection-report` in the frontend table.
+| Action | Transition | Roles |
+|---|---|---|
+| `GET /inspectionDefine` | `Created → Defined` | planner, admin |
+| `GET /inspectionAssign` | `→ Assigned`, from `Defined` or `Planned` | assigner, admin |
+| `GET /inspectionPlan` | `→ Planned` | planner, inspector, admin |
+| `GET /inspectionReport` | `→ Reported` | inspector, admin |
+
+`Planned → Assigned` is the reassignment revert: assigning different inspectors to an inspection
+that already has a plan sends it back so the plan is regenerated. A disallowed transition answers
+`409` from the flow, an unknown inspection `404`, and one already in effect `200` with
+`changed: false`.
+
+`compliance_flow` owns the rules — see its "Inspection Status Transitions" tab and its README's API
+Reference. `Planned → Uploaded` is `/importCanonical`'s, reached by the Electron app rather than
+from here.
+
+Note the specialty-scope check on actions is keyed by `siteVisit`+`provider` and so does not apply
+to the two id-keyed transitions; both are performed by roles that are unscoped by definition
+(planner, assigner), so there is nothing to narrow.
 
 ### What this means for `assigner`
 
-`assigner` is now enforced server-side: it is the only role besides `admin` that may write
-`InspectedSpecialty.actingInspectors`, and one of three that may update an `Inspection`. It is no
-longer a frontend-only role.
+`assigner` is enforced server-side: it is the only role besides `admin` that may write
+`InspectedSpecialty.actingInspectors`, and the only one that may call `/inspectionAssign`. It no
+longer writes the `Inspection` entity at all — its transition became an action — so it is a
+frontend-only role no more, and its server surface is now exactly its job.
 
 ### Interaction with the specialty scope
 
@@ -277,7 +298,10 @@ every scope-controlled read a scoped session makes.
     `AUTH_GATEWAY_FIELD_FORBIDDEN`. `planner` → its own form fields → 200; `{"conclusion":"…"}` → 403.
 14. Gateway ownership: the visit's main inspector → `{"conclusion":"…"}` → 200; another inspector of
     the same specialty → 403 `AUTH_NOT_RECORD_OWNER`; a visit with no main inspector → 403
-    `AUTH_OWNERSHIP_UNVERIFIED`. An `inspector` setting `{"status":"Reported"}` → 403 (field).
+    `AUTH_OWNERSHIP_UNVERIFIED`.
+15. Gateway transitions: `planner` → `GET /nodered/inspectionDefine?inspection=…` → 200,
+    `/inspectionAssign` → 403; `assigner` the reverse. Any role writing `{"status":…}` through
+    `updateEntity` → 403 `AUTH_GATEWAY_FIELD_FORBIDDEN`.
 
 Covered by `tests/unit/router/guards.test.js`, `tests/unit/router/navigation.test.js`,
 `tests/unit/App.test.js`, `tests/server/nodeRedProxy.test.js` and the server router tests;
