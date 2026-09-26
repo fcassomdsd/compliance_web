@@ -187,21 +187,19 @@ services:
         VITE_NODE_RED_BASE_URL: /nodered
     container_name: compliance-frontend-prod
     restart: unless-stopped
-    # Container hardening (P3.2), partial by design. nginx's master process
-    # needs NET_BIND_SERVICE to listen on :80 and CHOWN/SETUID/SETGID to drop
-    # its workers to the nginx user, so cap_drop: ALL plus those four is the
-    # correct shape rather than dropping everything. read_only and a non-root
-    # `user:` are deferred to P3.3, which reworks this service into the TLS
-    # edge and changes its listen port anyway -- hardening it twice would be
-    # wasted work, and the 8080 collision with compliance_cmis's Traefik has
-    # to be resolved in the same change.
+    # Fully hardened as of P3.3, which is what made it possible: nginx now
+    # listens on 8080 inside the container instead of 80, so it needs no
+    # NET_BIND_SERVICE and can run as the unprivileged `nginx` user with an
+    # immutable root filesystem. The tmpfs mounts are nginx's own writable
+    # paths; without them a read-only rootfs fails at startup, not at runtime.
+    user: nginx
+    read_only: true
+    tmpfs:
+      - /var/cache/nginx:uid=101,gid=101
+      - /var/run:uid=101,gid=101
+      - /tmp:size=16m
     cap_drop:
       - ALL
-    cap_add:
-      - NET_BIND_SERVICE
-      - CHOWN
-      - SETUID
-      - SETGID
     security_opt:
       - no-new-privileges:true
     deploy:
@@ -210,10 +208,61 @@ services:
           cpus: "0.5"
           memory: 256M
     ports:
-      - "8080:80"
+      # NOT 8080 on the host. compliance_cmis's Traefik owns host 8080 for
+      # Alfresco and is wired into the demo, the runbook and every smoke
+      # probe; publishing here too meant the prod profile could never start
+      # beside the Alfresco stack, which is why that had gone unnoticed --
+      # nothing had ever run both at once.
+      - "${WEB_HTTP_PORT:-8081}:8080"
     healthcheck:
       # Same IPv6-first `localhost` trap as frontend-dev: probe the IPv4 address nginx binds.
-      test: ["CMD-SHELL", "wget -q --spider http://127.0.0.1/ || exit 1"]
+      test: ["CMD-SHELL", "wget -q --spider http://127.0.0.1:8080/ || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+    depends_on:
+      - backend
+
+  # The TLS edge. Same image plus the 8443 server block, certificates mounted
+  # read-only from the host. Run `./scripts/generate-dev-cert.sh` first to
+  # verify the configuration locally with a self-signed pair; a real
+  # deployment mounts a certificate from an enterprise CA or ACME.
+  #
+  # Publishes host 443 to the container's unprivileged 8443, so nginx never
+  # needs to bind a privileged port.
+  frontend-tls:
+    profiles: ["tls"]
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+      target: prod-tls
+      args:
+        VITE_AUTH_API_BASE_URL: /api/auth
+        VITE_NODE_RED_BASE_URL: /nodered
+    container_name: compliance-frontend-tls
+    restart: unless-stopped
+    user: nginx
+    read_only: true
+    tmpfs:
+      - /var/cache/nginx:uid=101,gid=101
+      - /var/run:uid=101,gid=101
+      - /tmp:size=16m
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 256M
+    volumes:
+      - ./docker/nginx/certs:/etc/nginx/certs:ro
+    ports:
+      - "${WEB_HTTPS_PORT:-443}:8443"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --no-check-certificate --spider https://127.0.0.1:8443/ || exit 1"]
       interval: 15s
       timeout: 5s
       retries: 10

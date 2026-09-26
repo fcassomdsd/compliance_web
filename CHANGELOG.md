@@ -4,6 +4,22 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+
+- **A TLS edge — P3.3.** A new `tls` compose profile builds a `prod-tls` image that serves HTTPS on 8443 inside the container, published to host 443. Verified end to end with a self-signed certificate: **HTTP/2, TLSv1.3 (`TLS_AES_256_GCM_SHA384`)**, HSTS, and a CSP that allows `'unsafe-inline'` for styles only — the Vite build emits no inline scripts, so `script-src` stays strictly `'self'`. `X-Content-Type-Options`, `X-Frame-Options: DENY` and `Referrer-Policy` are set on both edges. **HSTS is set only on the TLS server**: sending it over plain HTTP is meaningless, and sending it from a demo stack would pin a developer's browser to HTTPS for a host that does not serve it.
+
+- **`scripts/generate-dev-cert.sh`** — a self-signed pair for verifying the TLS configuration locally. It proves the ciphers, protocol versions, HSTS and certificate wiring are right, and nothing about identity; production uses an enterprise CA or the ACME configuration already written at `atrocore-docker/traefik/traefik.yml.example`. The output directory is gitignored, because a committed key — even a throwaway one — teaches people to expect keys in the repository. The script sets the key's **ownership** to uid 101 rather than loosening its mode: the edge runs nginx unprivileged, so the key must be readable by that uid, and `chmod 644` on a private key is a habit worth not teaching.
+
+### Fixed
+
+- **`frontend-prod` no longer publishes host port 8080, which `compliance_cmis`'s Traefik owns.** Both bound it, so the `prod` profile could never start beside the Alfresco stack — undetected because every documented bring-up uses the `dev` profile on 3000, and nothing had ever run both at once. Traefik keeps 8080 (the demo, the runbook and every smoke probe are wired to `:8080/alfresco`); this service moved to `${WEB_HTTP_PORT:-8081}`. Verified by holding host 8080 with a third service while both `compliance_web` edges served simultaneously — a configuration that was impossible before.
+
+### Security
+
+- **The nginx edge is now fully hardened**, closing what P3.2 deferred. Moving nginx from port 80 to 8080 *inside* the container is what made it possible: a port above 1024 needs no `NET_BIND_SERVICE`, so it runs as the unprivileged `nginx` user with `read_only: true` and `cap_drop: ALL` — confirmed at runtime as uid 101 with an immutable root filesystem on both the HTTP and TLS edges. The `tmpfs` mounts are nginx's own writable paths; without them a read-only rootfs fails at startup.
+
+- **Routing and security headers live in one shared include** (`docker/nginx/app.conf.inc`) used by both the HTTP and TLS servers, so a route added for the demo is automatically present in production. Two copies would drift, and the drift would be silent.
+
 ### Security
 
 - **Container hardening — P3.2.** No service in this platform previously declared a resource limit, a non-root user, a read-only root filesystem, dropped capabilities or `no-new-privileges`. What each service can take differs, and the differences are recorded as comments in the compose files rather than silently skipped:
