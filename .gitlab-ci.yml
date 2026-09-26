@@ -121,11 +121,19 @@ validate:edge:
     - apk add --no-cache openssl
     - docker build --target prod     -f Dockerfile.frontend -t edge-http .
     - docker build --target prod-tls -f Dockerfile.frontend -t edge-tls  .
-    - mkdir -p /tmp/certs
-    - openssl req -x509 -newkey rsa:2048 -nodes -keyout /tmp/certs/server.key -out /tmp/certs/server.crt -days 1 -subj "/CN=ci"
-    - chmod 644 /tmp/certs/server.key
+    # The certificate is baked into a throwaway layer rather than bind-mounted.
+    # Under dind the docker CLI runs here but the daemon is a separate service
+    # with its own filesystem, so `-v /tmp/certs:...` mounts a path the daemon
+    # cannot see and nginx reports the certificate missing. A build context is
+    # tarred and sent to the daemon, so it crosses that boundary. The same trap
+    # is documented in atrocore-docker/scripts/demo-verify-ci.sh.
+    - mkdir -p certctx
+    - openssl req -x509 -newkey rsa:2048 -nodes -keyout certctx/server.key -out certctx/server.crt -days 1 -subj "/CN=ci"
+    - chmod 644 certctx/server.key
+    - printf 'FROM edge-tls\nUSER root\nCOPY server.crt server.key /etc/nginx/certs/\n' > certctx/Dockerfile
+    - docker build -t edge-tls-withcert certctx
     - docker run --rm --add-host backend:127.0.0.1 --user root edge-http nginx -t
-    - docker run --rm -v /tmp/certs:/etc/nginx/certs:ro --add-host backend:127.0.0.1 --user root edge-tls nginx -t
+    - docker run --rm --add-host backend:127.0.0.1 --user root edge-tls-withcert nginx -t
     # HSTS belongs on the TLS server only: over plain HTTP it is meaningless,
     # and a demo stack sending it would pin a developer's browser to HTTPS for
     # a host that does not serve it.
