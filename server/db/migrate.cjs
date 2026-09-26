@@ -18,6 +18,7 @@
 
 const fs = require('node:fs');
 const path = require('node:path');
+const { resolveSecret } = require('../config/secrets.cjs');
 const { Client } = require('pg');
 
 const DEFAULT_MIGRATIONS_DIR = path.join(__dirname, '..', '..', 'migrations');
@@ -42,7 +43,11 @@ async function runMigrations({
   logger = console,
   createClient = (config) => new Client(config),
 } = {}) {
-  const connectionString = databaseUrl || process.env.DATABASE_URL;
+  // Resolve DATABASE_URL through the same precedence the server uses
+  // (DATABASE_URL_FILE -> /run/secrets/database_url -> the env var), so a
+  // secret-managed connection string works for migrations too and not only at
+  // runtime. An explicit argument still wins, for tests and one-off runs.
+  const connectionString = databaseUrl || resolveSecret('DATABASE_URL');
   if (!connectionString) {
     throw new Error('DATABASE_URL is required to run migrations');
   }

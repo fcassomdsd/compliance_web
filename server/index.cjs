@@ -1,3 +1,18 @@
+// Resolve secrets before anything else is required.
+//
+// This must stay the first require in the file: ./auth/config.cjs evaluates
+// AUTH_TICKET_ENCRYPTION_KEY at module load time, so a file-sourced value has
+// to be in process.env before that require runs. CommonJS requires execute in
+// order, so placing this first is what makes the ordering reliable.
+const secrets = require('./config/secrets.cjs');
+
+const resolvedSecrets = secrets.applySecrets();
+if (process.env.NODE_ENV === 'production') {
+  // Throws when a required secret is absent, or when any secret still holds a
+  // value published in this repository and therefore secret to nobody.
+  secrets.assertProductionSecrets(resolvedSecrets);
+}
+
 const { createApp } = require('./app.cjs');
 const { AUTH_CONFIG } = require('./auth/config.cjs');
 const { PgSessionRepository } = require('./auth/pgSessionRepository.cjs');
