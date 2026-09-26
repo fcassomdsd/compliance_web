@@ -3,6 +3,19 @@ name: compliance-web
 services:
   db:
     image: postgres:16-alpine@sha256:16bc17c64a573ef34162af9298258d1aec548232985b33ed7b1eac33ba35c229
+    restart: unless-stopped
+    # Deliberately NOT read_only and NOT cap_drop: ALL. The official Postgres
+    # image needs to chown its data directory and drop privileges to the
+    # postgres user at startup, which requires CHOWN/SETUID/SETGID/FOWNER, and
+    # it writes to /var/run/postgresql and /tmp. no-new-privileges and resource
+    # limits are the controls that apply cleanly here.
+    security_opt:
+      - no-new-privileges:true
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 1G
     container_name: compliance-db
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-compliance}
@@ -27,6 +40,16 @@ services:
       dockerfile: Dockerfile.backend
       target: ${BACKEND_BUILD_TARGET:-dev}
     container_name: compliance-migrate
+    # Runs once and exits, but it holds the database credential while it does,
+    # so it gets the same treatment as the backend it shares an image with.
+    user: node
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER:-compliance}:${POSTGRES_PASSWORD:-compliance}@db:5432/${POSTGRES_DB:-compliance}
     command: ["npm", "run", "db:migrate"]
@@ -42,6 +65,24 @@ services:
       dockerfile: Dockerfile.backend
       target: ${BACKEND_BUILD_TARGET:-dev}
     container_name: compliance-backend
+    restart: unless-stopped
+    # Container hardening (P3.2). The app writes nothing to its own filesystem
+    # -- dependencies are installed at build time and all state is in Postgres
+    # -- so the root filesystem is immutable and it runs as the image's
+    # non-root `node` user. /tmp is a small tmpfs for anything transient.
+    user: node
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 512M
     environment:
       AUTH_SERVER_PORT: 4000
       DATABASE_URL: postgresql://${POSTGRES_USER:-compliance}:${POSTGRES_PASSWORD:-compliance}@db:5432/${POSTGRES_DB:-compliance}
@@ -145,6 +186,29 @@ services:
         VITE_AUTH_API_BASE_URL: /api/auth
         VITE_NODE_RED_BASE_URL: /nodered
     container_name: compliance-frontend-prod
+    restart: unless-stopped
+    # Container hardening (P3.2), partial by design. nginx's master process
+    # needs NET_BIND_SERVICE to listen on :80 and CHOWN/SETUID/SETGID to drop
+    # its workers to the nginx user, so cap_drop: ALL plus those four is the
+    # correct shape rather than dropping everything. read_only and a non-root
+    # `user:` are deferred to P3.3, which reworks this service into the TLS
+    # edge and changes its listen port anyway -- hardening it twice would be
+    # wasted work, and the 8080 collision with compliance_cmis's Traefik has
+    # to be resolved in the same change.
+    cap_drop:
+      - ALL
+    cap_add:
+      - NET_BIND_SERVICE
+      - CHOWN
+      - SETUID
+      - SETGID
+    security_opt:
+      - no-new-privileges:true
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 256M
     ports:
       - "8080:80"
     healthcheck:
