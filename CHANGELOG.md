@@ -4,6 +4,38 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed
+
+- **`docker build` failed outright once a dev certificate existed.** `generate-dev-cert.sh` chowns the key to uid 101 with mode 640 so the unprivileged nginx can read it — which also meant the build context could not, and every `docker build` in this directory died with `no permission to read from docker/nginx/certs/server.key` before doing anything. The certs directory is now in `.dockerignore`, which it should have been regardless: certificates are mounted at runtime and must never be baked into an image.
+
+- **CI now validates the edge, which nothing previously did.** The `build` job compiles the SPA bundle and never builds an image; `publish:*:image` runs only on `main`/`develop`, behind `PUBLISH_DOCKER_IMAGES`, and only for `--target prod`. A broken Dockerfile stage or nginx config would therefore have reached a deployment with every pipeline green — the edge is the one component where that matters most. The new `validate:edge` job builds **both** stages and runs `nginx -t` against each, and asserts HSTS is present on the TLS server and absent from the plain-HTTP one.
+
+### Added
+
+- **The edge now carries the field app's traffic, so its upstreams can be closed off — P3.3.** `compliance_checklist` talks to Node-RED (`:1880`), the import service (`:8000`) and Alfresco (`:8080`) directly, which means **the shared API key and the inspector's Alfresco password currently cross the network in clear text**. Three new routes — `/gateway/`, `/upload/` and `/alfresco/` — put that traffic inside TLS and give a production deployment a single ingress, so those three services can be bound to the loopback interface. Verified live against real upstreams: `/upload/health` returns the import service's own `{"status":"ok"}`, `/gateway/specialties` returns AtroCore JSON, and `X-API-Key` is forwarded intact (`401` without a key, `422` — past auth — with the right one).
+
+  These are plain reverse proxies **on purpose**. The authentication that applies is the gateway's own API key and Alfresco's own login, unchanged; the edge adds transport security and one ingress point, not a second authorisation layer that could silently diverge from what the services themselves enforce. `/upload/` raises `client_max_body_size` to 512m and disables request buffering, because inspection payloads are evidence ZIPs the import service caps at 400 MB and nginx's 1 MB default would reject them with a `413` before the service ever saw the request.
+
+  The three cross-project upstreams resolve through Docker's embedded DNS at **request** time rather than at startup. nginx normally resolves a literal `proxy_pass` host when it loads its config and refuses to start if it cannot — which would tie this edge's startup to three services in three other compose projects. Confirmed: the edge starts cleanly with all three absent. `backend` stays a literal, because it is in this project and already a `depends_on`, so failing fast there is right.
+
+- **`BIND_IP` controls which host interface every published port listens on**, across all five compose files. Default `0.0.0.0` keeps the demo and CI working — `demo-verify-ci.sh` reaches services over the network, and under dind `DEMO_HOST` is `docker`, not localhost, so a hardcoded loopback bind would break the whole-stack guard. A production deployment sets `BIND_IP=127.0.0.1`, leaving the TLS edge on 443 as the only externally published port.
+
+### Added
+
+- **A TLS edge — P3.3.** A new `tls` compose profile builds a `prod-tls` image that serves HTTPS on 8443 inside the container, published to host 443. Verified end to end with a self-signed certificate: **HTTP/2, TLSv1.3 (`TLS_AES_256_GCM_SHA384`)**, HSTS, and a CSP that allows `'unsafe-inline'` for styles only — the Vite build emits no inline scripts, so `script-src` stays strictly `'self'`. `X-Content-Type-Options`, `X-Frame-Options: DENY` and `Referrer-Policy` are set on both edges. **HSTS is set only on the TLS server**: sending it over plain HTTP is meaningless, and sending it from a demo stack would pin a developer's browser to HTTPS for a host that does not serve it.
+
+- **`scripts/generate-dev-cert.sh`** — a self-signed pair for verifying the TLS configuration locally. It proves the ciphers, protocol versions, HSTS and certificate wiring are right, and nothing about identity; production uses an enterprise CA or the ACME configuration already written at `atrocore-docker/traefik/traefik.yml.example`. The output directory is gitignored, because a committed key — even a throwaway one — teaches people to expect keys in the repository. The script sets the key's **ownership** to uid 101 rather than loosening its mode: the edge runs nginx unprivileged, so the key must be readable by that uid, and `chmod 644` on a private key is a habit worth not teaching.
+
+### Fixed
+
+- **`frontend-prod` no longer publishes host port 8080, which `compliance_cmis`'s Traefik owns.** Both bound it, so the `prod` profile could never start beside the Alfresco stack — undetected because every documented bring-up uses the `dev` profile on 3000, and nothing had ever run both at once. Traefik keeps 8080 (the demo, the runbook and every smoke probe are wired to `:8080/alfresco`); this service moved to `${WEB_HTTP_PORT:-8081}`. Verified by holding host 8080 with a third service while both `compliance_web` edges served simultaneously — a configuration that was impossible before.
+
+### Security
+
+- **The nginx edge is now fully hardened**, closing what P3.2 deferred. Moving nginx from port 80 to 8080 *inside* the container is what made it possible: a port above 1024 needs no `NET_BIND_SERVICE`, so it runs as the unprivileged `nginx` user with `read_only: true` and `cap_drop: ALL` — confirmed at runtime as uid 101 with an immutable root filesystem on both the HTTP and TLS edges. The `tmpfs` mounts are nginx's own writable paths; without them a read-only rootfs fails at startup.
+
+- **Routing and security headers live in one shared include** (`docker/nginx/app.conf.inc`) used by both the HTTP and TLS servers, so a route added for the demo is automatically present in production. Two copies would drift, and the drift would be silent.
+
 ### Security
 
 - **Container hardening — P3.2.** No service in this platform previously declared a resource limit, a non-root user, a read-only root filesystem, dropped capabilities or `no-new-privileges`. What each service can take differs, and the differences are recorded as comments in the compose files rather than silently skipped:

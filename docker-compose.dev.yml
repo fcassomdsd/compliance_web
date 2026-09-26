@@ -1,7 +1,7 @@
 services:
   db:
     ports:
-      - "5433:5432"
+      - "${BIND_IP:-0.0.0.0}:5433:5432"
 
   # The app server owns /nodered now: the browser (and the Vite dev server) send
   # the gateway prefix here, where the Node-RED API key, the session's own
@@ -14,7 +14,7 @@ services:
   # override is gone.
   backend:
     ports:
-      - "4000:4000"
+      - "${BIND_IP:-0.0.0.0}:4000:4000"
     environment:
       ALFRESCO_BASE_URL: ${ALFRESCO_BASE_URL:-http://proxy:8080}
     networks:

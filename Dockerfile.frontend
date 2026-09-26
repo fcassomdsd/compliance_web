@@ -18,7 +18,21 @@ ARG VITE_NODE_RED_BASE_URL=/nodered
 ENV VITE_NODE_RED_BASE_URL=${VITE_NODE_RED_BASE_URL}
 RUN npm run build
 
+# Plain-HTTP edge. Listens on 8080 inside the container so it can run as the
+# unprivileged `nginx` user with a read-only root filesystem; the host mapping
+# decides the externally visible port. See docker/nginx/default.conf.
 FROM nginx:1.27-alpine@sha256:65645c7bb6a0661892a8b03b89d0743208a18dd2f3f17a54ef4b76fb8e2f2a10 AS prod
+COPY docker/nginx/app.conf.inc /etc/nginx/conf.d/app.conf.inc
 COPY docker/nginx/default.conf /etc/nginx/conf.d/default.conf
 COPY --from=build /app/dist /usr/share/nginx/html
-EXPOSE 80
+# nginx's own pid/temp paths must be writable under a read-only rootfs; the
+# compose service supplies tmpfs mounts for them.
+USER nginx
+EXPOSE 8080
+
+# TLS edge (production). Adds the 8443 server on top of the HTTP one, so a
+# deployment can redirect 80 -> 443 at the host or firewall while nginx itself
+# serves both. Certificates are mounted at /etc/nginx/certs, never baked in.
+FROM prod AS prod-tls
+COPY docker/nginx/tls.conf /etc/nginx/conf.d/tls.conf
+EXPOSE 8443

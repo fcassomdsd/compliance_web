@@ -7,3 +7,9 @@ eslint-report.json
 .env
 .env.*
 !.env.docker.example
+
+# Self-signed certificates for local TLS verification (never commit a key)
+docker/nginx/certs/
+
+# throwaway build context created by the validate:edge CI job
+certctx/
