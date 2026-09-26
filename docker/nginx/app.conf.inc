@@ -41,6 +41,80 @@ location /api/ {
   proxy_set_header X-Forwarded-Proto $scheme;
 }
 
+# ---------------------------------------------------------------------------
+# Field-app routes (compliance_checklist).
+#
+# The desktop app is not a browser session: it authenticates to the gateway
+# and the import service with the shared X-API-Key, and to Alfresco with the
+# inspector's own credentials at upload time. So it cannot use /api/ or
+# /nodered/ above, both of which require a compliance_web session.
+#
+# Today the app talks to :1880, :8000 and :8080 directly. That works, and it
+# means the API key and the inspector's Alfresco password cross the network
+# in clear text. Routing them through this edge puts them inside TLS, and
+# lets a production deployment bind those three services to the loopback
+# interface (BIND_IP=127.0.0.1) so the edge is the only way in.
+#
+# These are plain reverse proxies, deliberately: the authentication that
+# applies is the gateway's own API key and Alfresco's own login, unchanged.
+# The edge adds transport security and a single ingress point, not a new
+# authorisation layer -- adding one here would silently diverge from what
+# the services themselves enforce.
+#
+# Each of these three resolves its upstream through Docker's embedded DNS at
+# REQUEST time, via a variable, rather than at startup. nginx normally
+# resolves a literal proxy_pass host when it loads the config and refuses to
+# start if it cannot -- which would tie this edge's startup to three services
+# in three other compose projects. `backend` below stays a literal on
+# purpose: it is in this project and already a depends_on, so failing fast
+# there is correct.
+resolver 127.0.0.11 valid=30s ipv6=off;
+
+location /gateway/ {
+  set $upstream_gateway http://node-red:1880;
+  rewrite ^/gateway/(.*)$ /$1 break;
+  proxy_pass $upstream_gateway;
+  proxy_http_version 1.1;
+  proxy_set_header Host $host;
+  proxy_set_header X-Real-IP $remote_addr;
+  proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+  proxy_set_header X-Forwarded-Proto $scheme;
+}
+
+location /upload/ {
+  set $upstream_import http://compliance-import:8000;
+  rewrite ^/upload/(.*)$ /$1 break;
+  proxy_pass $upstream_import;
+  proxy_http_version 1.1;
+  proxy_set_header Host $host;
+  proxy_set_header X-Real-IP $remote_addr;
+  proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+  proxy_set_header X-Forwarded-Proto $scheme;
+  # Inspection payloads are ZIPs of evidence; the import service caps them at
+  # MAX_UPLOAD_SIZE_BYTES (400 MB default). nginx defaults to 1 MB and would
+  # reject them with a 413 before the service ever saw the request.
+  client_max_body_size 512m;
+  proxy_request_buffering off;
+  proxy_read_timeout 300s;
+  proxy_send_timeout 300s;
+}
+
+location /alfresco/ {
+  # Operator sign-in at upload time, and the ticket-authenticated reads that
+  # follow. Alfresco is behind compliance_cmis's Traefik, which production
+  # binds to the loopback interface.
+  set $upstream_alfresco http://proxy:8080;
+  rewrite ^/alfresco/(.*)$ /alfresco/$1 break;
+  proxy_pass $upstream_alfresco;
+  proxy_http_version 1.1;
+  proxy_set_header Host $host;
+  proxy_set_header X-Real-IP $remote_addr;
+  proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+  proxy_set_header X-Forwarded-Proto $scheme;
+  client_max_body_size 512m;
+  proxy_read_timeout 300s;
+}
+
 location / {
   try_files $uri $uri/ /index.html;
 }

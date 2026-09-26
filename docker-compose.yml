@@ -154,7 +154,7 @@ services:
       VITE_AUTH_API_BASE_URL: /api/auth
       VITE_AUTH_PROXY_TARGET: http://backend:4000
     ports:
-      - "3000:3000"
+      - "${BIND_IP:-0.0.0.0}:3000:3000"
     healthcheck:
       # 127.0.0.1, not localhost: in this image `localhost` resolves to `::1` first
       # (busybox wget tries it before IPv4) while Vite binds only 0.0.0.0:3000, so the
@@ -213,7 +213,7 @@ services:
       # probe; publishing here too meant the prod profile could never start
       # beside the Alfresco stack, which is why that had gone unnoticed --
       # nothing had ever run both at once.
-      - "${WEB_HTTP_PORT:-8081}:8080"
+      - "${BIND_IP:-0.0.0.0}:${WEB_HTTP_PORT:-8081}:8080"
     healthcheck:
       # Same IPv6-first `localhost` trap as frontend-dev: probe the IPv4 address nginx binds.
       test: ["CMD-SHELL", "wget -q --spider http://127.0.0.1:8080/ || exit 1"]
@@ -223,6 +223,14 @@ services:
       start_period: 20s
     depends_on:
       - backend
+    networks:
+      # alfresco_backend is where node-red, compliance-import and
+      # compliance_cmis's proxy all attach, so it is the one network the
+      # field-app routes need. Their names resolve through Docker's embedded
+      # DNS at request time (see docker/nginx/app.conf.inc), so this edge
+      # starts whether or not those projects are up.
+      - default
+      - alfresco_backend
 
   # The TLS edge. Same image plus the 8443 server block, certificates mounted
   # read-only from the host. Run `./scripts/generate-dev-cert.sh` first to
@@ -260,7 +268,7 @@ services:
     volumes:
       - ./docker/nginx/certs:/etc/nginx/certs:ro
     ports:
-      - "${WEB_HTTPS_PORT:-443}:8443"
+      - "${BIND_IP:-0.0.0.0}:${WEB_HTTPS_PORT:-443}:8443"
     healthcheck:
       test: ["CMD-SHELL", "wget -q --no-check-certificate --spider https://127.0.0.1:8443/ || exit 1"]
       interval: 15s
