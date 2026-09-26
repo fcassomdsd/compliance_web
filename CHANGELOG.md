@@ -4,6 +4,23 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Security
+
+- **Container hardening — P3.2.** No service in this platform previously declared a resource limit, a non-root user, a read-only root filesystem, dropped capabilities or `no-new-privileges`. What each service can take differs, and the differences are recorded as comments in the compose files rather than silently skipped:
+
+  - **Full hardening** (read-only rootfs, non-root user, `cap_drop: ALL`, `no-new-privileges`, CPU/memory limits) where the service writes nothing to its own filesystem. Verified by booting each one, not just by rendering the config.
+  - **Partial, with the reason stated in-file**, where a control is structurally inapplicable rather than merely postponed: Postgres chowns its data directory and drops privileges at startup, so `cap_drop: ALL` and a read-only rootfs break it; Node-RED must write `flows.json` into a bind mount, which is its deployment model; AtroCore installs itself into a bind mount at first run and Apache binds `:80` as root; the Alfresco JVM services write caches, logs and indexes inside their own filesystems.
+
+### Added
+
+- **Images are pinned by digest as well as tag — P3.2 (supply chain).** A tag is a mutable pointer: upstream can re-push it at any time, so a tag-only pin does not describe a reproducible build and two builds a week apart could differ with nothing in git changing. Every external image reference now uses `name:tag@sha256:...`, keeping the tag beside the digest so the version stays readable.
+
+- **Supply-chain scanning in CI — P3.2.** No repository in this platform had any security scanning before this. A new `security:scan` job (GitLab, mirrored to GitHub Actions) runs Trivy over the dependency tree and produces a CycloneDX SBOM as an artifact.
+
+  The gate policy was chosen from measurement, not aspiration. **CRITICAL is blocking**: measured at zero across all six repos, so the gate is green today and genuinely stops a regression rather than being red on arrival. **HIGH is reported but not blocking**: 33 findings exist today (21 in `compliance_web`, 12 in `compliance_checklist`), every one with a fix available. Blocking on HIGH immediately would red those pipelines and the gate would be switched off within a day — which is worse than no gate, because a disabled gate still reads as protection. Clear the backlog, then raise the bar.
+
+  `--ignore-unfixed` keeps the gate actionable: a CVE with no available fix is information, not a task. `--skip-dirs` excludes generated and bind-mounted runtime trees — `web-data/` in particular is the AtroCore application installed at container bootstrap, gitignored and absent from a fresh checkout, which vendors its own npm tree; scanning it reports upstream's dependencies as if they were ours. It is not clean (upstream vendors a CRITICAL prototype-pollution advisory in `swiper`), but that belongs in an upstream report and in image scanning, not a gate on tracked source.
+
 ### Added
 
 - **Secrets can arrive as files, not only as environment variables — P3.1 (production secrets).** `AUTH_TICKET_ENCRYPTION_KEY`, `DATABASE_URL`, `NODE_RED_API_KEY`, `ALFRESCO_JOB_PASSWORD` and `SMTP_PASS` now resolve by precedence in the new `server/config/secrets.cjs`: `<NAME>_FILE` → `/run/secrets/<name>` → the plain environment variable. This matches `compliance_flow/data/secrets.js` and `compliance_import`'s Alfresco credential resolution, so the platform has one shape, and it is the seam a secret manager writes into — introducing Vault later needs no change here. Three details are load-bearing: the resolution runs as the **first require in `server/index.cjs`**, because `server/auth/config.cjs` evaluates `AUTH_TICKET_ENCRYPTION_KEY` at module-load time and a file-sourced value has to be in `process.env` before that require executes; resolved values are **written back into `process.env`**, so the auth config, Node-RED client, job runners and mail transport pick them up without each needing to know about this module; and a `<NAME>_FILE` pointing at a **missing or empty file fails startup rather than falling back**, because a silent fallback is how a failed secret rotation comes to look like a successful one. `server/db/migrate.cjs` resolves `DATABASE_URL` the same way, so a secret-managed connection string works for migrations and not only at runtime.
