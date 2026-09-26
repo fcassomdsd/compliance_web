@@ -97,6 +97,45 @@ verify:endpoints:
     - develop
 
 # Build stage - Build the application
+# The edge is security-critical and nothing else in CI touches it. The `build`
+# job compiles the SPA bundle (`npm run build`) and never builds an image, and
+# publish:*:image runs only on main/develop behind PUBLISH_DOCKER_IMAGES and
+# only for --target prod -- so a broken Dockerfile stage or nginx config would
+# reach a deployment with every pipeline green. This builds both edge stages
+# and runs `nginx -t` against each.
+#
+# A throwaway certificate is generated because tls.conf references
+# ssl_certificate: nginx -t fails if the files are absent. --add-host supplies
+# `backend`, the one upstream resolved literally (the cross-project upstreams
+# resolve at request time and need nothing here).
+validate:edge:
+  stage: test
+  image: docker:27
+  services:
+    - docker:27-dind
+  variables:
+    DOCKER_HOST: tcp://docker:2375
+    DOCKER_TLS_CERTDIR: ""
+  before_script: []
+  script:
+    - apk add --no-cache openssl
+    - docker build --target prod     -f Dockerfile.frontend -t edge-http .
+    - docker build --target prod-tls -f Dockerfile.frontend -t edge-tls  .
+    - mkdir -p /tmp/certs
+    - openssl req -x509 -newkey rsa:2048 -nodes -keyout /tmp/certs/server.key -out /tmp/certs/server.crt -days 1 -subj "/CN=ci"
+    - chmod 644 /tmp/certs/server.key
+    - docker run --rm --add-host backend:127.0.0.1 --user root edge-http nginx -t
+    - docker run --rm -v /tmp/certs:/etc/nginx/certs:ro --add-host backend:127.0.0.1 --user root edge-tls nginx -t
+    # HSTS belongs on the TLS server only: over plain HTTP it is meaningless,
+    # and a demo stack sending it would pin a developer's browser to HTTPS for
+    # a host that does not serve it.
+    - docker run --rm edge-tls  sh -c 'grep -q Strict-Transport-Security /etc/nginx/conf.d/tls.conf'
+    - docker run --rm edge-http sh -c '! grep -q Strict-Transport-Security /etc/nginx/conf.d/default.conf'
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    - if: '$CI_COMMIT_BRANCH == "develop"'
+    - if: '$CI_COMMIT_BRANCH == "main"'
+
 build:
   stage: build
   image: node:20-alpine

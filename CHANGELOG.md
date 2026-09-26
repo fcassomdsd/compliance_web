@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed
+
+- **`docker build` failed outright once a dev certificate existed.** `generate-dev-cert.sh` chowns the key to uid 101 with mode 640 so the unprivileged nginx can read it — which also meant the build context could not, and every `docker build` in this directory died with `no permission to read from docker/nginx/certs/server.key` before doing anything. The certs directory is now in `.dockerignore`, which it should have been regardless: certificates are mounted at runtime and must never be baked into an image.
+
+- **CI now validates the edge, which nothing previously did.** The `build` job compiles the SPA bundle and never builds an image; `publish:*:image` runs only on `main`/`develop`, behind `PUBLISH_DOCKER_IMAGES`, and only for `--target prod`. A broken Dockerfile stage or nginx config would therefore have reached a deployment with every pipeline green — the edge is the one component where that matters most. The new `validate:edge` job builds **both** stages and runs `nginx -t` against each, and asserts HSTS is present on the TLS server and absent from the plain-HTTP one.
+
 ### Added
 
 - **The edge now carries the field app's traffic, so its upstreams can be closed off — P3.3.** `compliance_checklist` talks to Node-RED (`:1880`), the import service (`:8000`) and Alfresco (`:8080`) directly, which means **the shared API key and the inspector's Alfresco password currently cross the network in clear text**. Three new routes — `/gateway/`, `/upload/` and `/alfresco/` — put that traffic inside TLS and give a production deployment a single ingress, so those three services can be bound to the loopback interface. Verified live against real upstreams: `/upload/health` returns the import service's own `{"status":"ok"}`, `/gateway/specialties` returns AtroCore JSON, and `X-API-Key` is forwarded intact (`401` without a key, `422` — past auth — with the right one).

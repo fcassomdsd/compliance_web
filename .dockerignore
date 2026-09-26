@@ -10,3 +10,7 @@ dist
 .env
 .env.*
 !.env.docker.example
+# TLS certificates are mounted at runtime, never baked into an image. They are
+# also owned by the nginx uid and mode 640, so leaving them in the build
+# context makes `docker build` fail outright with "no permission to read".
+docker/nginx/certs/
