@@ -4,6 +4,14 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+
+- **WAL archiving, for point-in-time recovery — P3.4.** `archive_mode=on` with `archive_timeout=300`, so a segment is switched every five minutes even on an idle database and the exposure window is five minutes rather than the backup interval. PITR was proven end to end on a throwaway instance: a base backup, rows committed either side of a chosen timestamp, then recovery to that timestamp — PostgreSQL logged `recovery stopping before commit of transaction 734` and the recovered database held the "before" rows and not the "after" ones.
+
+  The archive directory is bind-mounted and gitignored. `${WAL_ARCHIVE_DIR}` overrides its location; in production it should not share a volume with the data it protects.
+
+**Operational hazard, stated because it is how this configuration bites:** with `archive_mode=on` a failing `archive_command` does **not** cause PostgreSQL to discard WAL. It retains every segment until archiving succeeds, and the data volume fills until the database stops — silent until it is sudden. `pg_stat_archiver.failed_count` must be monitored; it is named as an alert in P3.5. The `test ! -f` guard makes the command idempotent so a retry cannot fail on an already-archived segment.
+
 ### Fixed
 
 - **`docker build` failed outright once a dev certificate existed.** `generate-dev-cert.sh` chowns the key to uid 101 with mode 640 so the unprivileged nginx can read it — which also meant the build context could not, and every `docker build` in this directory died with `no permission to read from docker/nginx/certs/server.key` before doing anything. The certs directory is now in `.dockerignore`, which it should have been regardless: certificates are mounted at runtime and must never be baked into an image.

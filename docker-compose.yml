@@ -3,6 +3,18 @@ name: compliance-web
 services:
   db:
     image: postgres:16-alpine@sha256:16bc17c64a573ef34162af9298258d1aec548232985b33ed7b1eac33ba35c229
+    # WAL archiving (P3.4). archive_timeout=300 forces a segment switch every
+    # five minutes even when idle, which is what bounds RPO: without it an
+    # inactive database can hold an unarchived segment indefinitely.
+    #
+    # OPERATIONAL HAZARD, stated because it is the way this configuration
+    # bites: if archive_command starts failing, PostgreSQL does NOT discard
+    # the WAL -- it retains every segment until archiving succeeds, and the
+    # data volume fills until the database stops. Monitor
+    # pg_stat_archiver.failed_count; it is on P3.5's alert list for exactly
+    # this reason. The `test ! -f` guard makes the command idempotent so a
+    # retry cannot fail on an already-archived segment.
+    command: postgres -c archive_mode=on -c "archive_command=test ! -f /wal-archive/%f && cp %p /wal-archive/%f" -c archive_timeout=300 -c wal_level=replica
     restart: unless-stopped
     # Deliberately NOT read_only and NOT cap_drop: ALL. The official Postgres
     # image needs to chown its data directory and drop privileges to the
@@ -28,6 +40,7 @@ services:
       retries: 10
     volumes:
       - pgdata:/var/lib/postgresql/data
+      - ${WAL_ARCHIVE_DIR:-./data/wal-archive}:/wal-archive
 
   # Applies migrations/*.sql before the backend starts. Replaces the previous
   # docker-entrypoint-initdb.d mount, which only ran on a brand-new volume and

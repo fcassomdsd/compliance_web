@@ -13,3 +13,6 @@ docker/nginx/certs/
 
 # throwaway build context created by the validate:edge CI job
 certctx/
+
+# continuously written WAL archive (P3.4)
+data/wal-archive/
