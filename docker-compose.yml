@@ -150,6 +150,26 @@ services:
       CAP_ENTRY_NOTIFICATIONS_EMAIL: ${CAP_ENTRY_NOTIFICATIONS_EMAIL:-}
       PLANNER_NOTIFICATIONS_EMAIL: ${PLANNER_NOTIFICATIONS_EMAIL:-}
       CASE_ESCALATION_EMAIL: ${CASE_ESCALATION_EMAIL:-}
+    healthcheck:
+      # GET /health is registered in server/app.cjs before the auth router, so
+      # it answers unauthenticated -- which is what makes it usable here at
+      # all. Same IPv6-first `localhost` trap as the two frontends: probe the
+      # IPv4 address the server binds.
+      #
+      # --spider, not a body read: this rootfs is read_only, and wget's default
+      # behaviour is to write the response to a file in the working directory.
+      #
+      # This is liveness, not readiness -- /health answers `{ok:true}` from the
+      # Express process without consulting Postgres, Alfresco or the gateway. A
+      # probe that reached them would make this container's restart policy
+      # depend on whether Alfresco is up, and restarting the backend does not
+      # fix a down Alfresco. Those are Prometheus's business (P3.5), not
+      # Docker's.
+      test: ["CMD-SHELL", "wget -q --spider http://127.0.0.1:4000/health || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
     depends_on:
       db:
         condition: service_healthy

@@ -6,6 +6,16 @@ All notable changes to this project will be documented in this file.
 
 ### Added
 
+- **A compose healthcheck on `backend` — P3.5.** `db` and the two frontends had one; the service that every request actually depends on did not, so `docker compose ps` reported it `running` whether or not it could answer.
+
+  It probes `GET /health`, which `server/app.cjs` registers before the auth router and which therefore answers unauthenticated — the reason it is usable as a probe at all. `127.0.0.1`, not `localhost`, for the same IPv6-first reason already documented on the two frontends. `--spider` rather than a body read, because this rootfs is `read_only` and wget's default is to write the response to a file.
+
+  Liveness, not readiness: `/health` answers from the Express process without consulting Postgres, Alfresco or the gateway. Making it reach them would tie this container's restart policy to whether Alfresco is up, and restarting the backend does not fix a down Alfresco. Those are Prometheus's business.
+
+  Negative-controlled rather than assumed: the probe command exits 1 against a closed port and 1 against a 404 path, and 0 against the real endpoint — so a passing check means something.
+
+### Added
+
 - **A CI check that WAL archiving actually works, not just that it is configured — P3.4.** The failure mode this closes is silent: a broken `archive_command` does not stop PostgreSQL. It keeps serving, `failed_count` climbs, and WAL accumulates until the volume fills — at which point the cause is hours old. Every existing job that boots this database would have passed throughout. `scripts/verify-wal-archiving.sh` forces a segment switch and asserts it was archived, so a broken archiver fails at merge time instead of at 3am on a full disk. Byte-identical across the repos that enable archiving, the same convention as `release-tag.sh`.
 
   Two details it had to get right, both found by testing rather than reasoning. It counts segments **inside the container**, because under docker-in-docker the CLI and daemon have separate filesystems and a host-side count would read zero regardless of what archiving did. And it asserts archiving is healthy **now** — never failed, or succeeded since it last failed — rather than `failed_count = 0`: those counters are cumulative and survive restarts, so one transient blip would make a zero-check fail forever, and a check that cries wolf gets muted.
