@@ -37,6 +37,7 @@ allow-list in `server/nodered/gatewayPolicy.cjs` — tabulated in
 | GET | `/api/reports/usoap-ce-evidence` |
 | GET | `/api/reports/usoap-ce-evidence/candidates/:nodeId/content` |
 | GET | `/health` |
+| GET | `/metrics` |
 | PATCH | `/api/caps/:capId` |
 | PATCH | `/api/caps/:capId/actions/:sequenceNumber` |
 | PATCH | `/api/caps/:capId/review` |

@@ -109,6 +109,11 @@ services:
       # Secure by default. Local HTTP development must opt out explicitly.
       AUTH_COOKIE_SECURE: ${AUTH_COOKIE_SECURE:-true}
       NODE_ENV: ${AUTH_NODE_ENV:-production}
+      # Log format (P3.5): `json` or `text`. Unset, it follows NODE_ENV --
+      # JSON in production, where something is shipping these lines to Loki,
+      # and text in development, where a person is reading them in a
+      # terminal. Set it explicitly to get JSON out of a dev container.
+      LOG_FORMAT: ${LOG_FORMAT:-}
       # Service account for the scheduled jobs and for role-addressed
       # notifications, which read Alfresco group membership to find who holds a
       # role. Without it both jobs log "skipped" at startup and every role
@@ -150,6 +155,26 @@ services:
       CAP_ENTRY_NOTIFICATIONS_EMAIL: ${CAP_ENTRY_NOTIFICATIONS_EMAIL:-}
       PLANNER_NOTIFICATIONS_EMAIL: ${PLANNER_NOTIFICATIONS_EMAIL:-}
       CASE_ESCALATION_EMAIL: ${CASE_ESCALATION_EMAIL:-}
+    healthcheck:
+      # GET /health is registered in server/app.cjs before the auth router, so
+      # it answers unauthenticated -- which is what makes it usable here at
+      # all. Same IPv6-first `localhost` trap as the two frontends: probe the
+      # IPv4 address the server binds.
+      #
+      # --spider, not a body read: this rootfs is read_only, and wget's default
+      # behaviour is to write the response to a file in the working directory.
+      #
+      # This is liveness, not readiness -- /health answers `{ok:true}` from the
+      # Express process without consulting Postgres, Alfresco or the gateway. A
+      # probe that reached them would make this container's restart policy
+      # depend on whether Alfresco is up, and restarting the backend does not
+      # fix a down Alfresco. Those are Prometheus's business (P3.5), not
+      # Docker's.
+      test: ["CMD-SHELL", "wget -q --spider http://127.0.0.1:4000/health || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
     depends_on:
       db:
         condition: service_healthy

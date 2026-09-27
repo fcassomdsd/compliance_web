@@ -9,6 +9,7 @@ const { createReportsRouter } = require('./reports/router.cjs');
 const { createNotificationsRouter } = require('./notifications/router.cjs');
 const { createUsoapRouter } = require('./usoap/router.cjs');
 const { createNodeRedProxyRouter } = require('./nodered/router.cjs');
+const { render: renderMetrics, CONTENT_TYPE: METRICS_CONTENT_TYPE } = require('./metrics/authMetrics.cjs');
 
 function createApp({ config, sessionRepository, alfrescoClient, loginRateLimiter, logger, capDraftRepository, notificationRepository, notificationService, roleRecipients, nodeRedClient, now }) {
   const app = express();
@@ -26,6 +27,26 @@ function createApp({ config, sessionRepository, alfrescoClient, loginRateLimiter
 
   app.get('/health', (req, res) => {
     res.status(200).json({ ok: true });
+  });
+
+  // Prometheus scrape endpoint (P3.5) — the six metrics
+  // docs/auth/AUTH_CHUNK8_OPERATIONAL_READINESS.md section 6 has named since
+  // the auth subsystem shipped, and which nothing emitted until now.
+  //
+  // Registered before the auth router and therefore unauthenticated, for the
+  // same reason /health is: a scraper does not hold a session. That is safe
+  // here because port 4000 is not published outside the Docker network (only
+  // docker-compose.dev.yml publishes it) and the TLS edge proxies only
+  // /api/ and /nodered/, so this path is not routable from a browser.
+  //
+  // If that ever changes, this needs a guard. The counters are bare numbers
+  // with no usernames, session ids or addresses in them, so the exposure
+  // would be operational volumes rather than anything about a person — but a
+  // login-failure rate is still something an attacker would rather see than
+  // not.
+  app.get('/metrics', (req, res) => {
+    res.set('Content-Type', METRICS_CONTENT_TYPE);
+    res.status(200).send(renderMetrics());
   });
 
   app.use(

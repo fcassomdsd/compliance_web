@@ -1,3 +1,5 @@
+const { recordSession401 } = require('../metrics/authMetrics.cjs');
+
 function buildError(code, message) {
   return {
     code,
@@ -53,11 +55,17 @@ function createSessionAuth({ config, sessionRepository, now = () => new Date() }
     try {
       const sessionId = req.cookies?.[config.cookieName];
       if (!sessionId) {
+        // Counted, not audited (P3.5). An unauthenticated caller can produce
+        // these at will, so writing an audit row per rejection would let
+        // anyone fill the audit table; a counter is O(1) whatever the
+        // traffic. See server/metrics/authMetrics.cjs.
+        recordSession401();
         return res.status(401).json(buildError('AUTH_SESSION_EXPIRED', 'No active session'));
       }
 
       const session = await sessionRepository.getSession(sessionId);
       if (!session || isSessionExpired(session, now())) {
+        recordSession401();
         return res.status(401).json(buildError('AUTH_SESSION_EXPIRED', 'Session expired'));
       }
 

@@ -6,6 +6,38 @@ All notable changes to this project will be documented in this file.
 
 ### Added
 
+- **The six auth metrics from `docs/auth/AUTH_CHUNK8_OPERATIONAL_READINESS.md` §6, on `GET /metrics` — P3.5.** That document has named them since the auth subsystem shipped and nothing emitted them: login success rate, login failure and rate-limited counts, session 401 rate, CSRF mismatches, session rotations, and role-refresh failures.
+
+  Wired to the audit events that already exist rather than adding a second instrumentation scheme. `auditAuthEvent` is the one choke point every auth event already passes through, so **no call site changed** — and a future audit event has an obvious place to be counted. The one exception is the session 401 counter, incremented in `sessionAuth` directly: those are not audited and should not be, because an unauthenticated caller can produce them at will and auditing each would let anyone fill the audit table, while a counter is O(1) whatever the traffic.
+
+  Three of the counters are split more finely than §6 asked, because folding them together would mislead. A rate-limited attempt never reached the credential check, so counting it as a failure makes a brute-force attempt read as a password problem. An Alfresco outage is not a wrong password, and the runbook response is different. And role refreshes are counted on success as well as failure, because the failure count alone scales with how many people are logged in — ten failures is a crisis on a quiet morning and noise at nine o'clock.
+
+  No `prom-client` dependency: the metric set is fixed, tiny and unlabelled, and this is the auth server, whose dependency tree is deliberately small and is treated as attack surface. The exposition format for counters is a handful of lines; the parts that are easy to get subtly wrong are covered by tests. Counters render at zero rather than appearing on first use — a counter that only exists after its first event makes `rate()` return no data instead of 0, so "no successful logins in an hour" cannot be told from "nobody has logged in since the process started".
+
+  `/metrics` is unauthenticated, for the same reason `/health` is: a scraper holds no session. Safe because port 4000 is not published outside the Docker network and the TLS edge proxies only `/api/` and `/nodered/`.
+
+- **Structured JSON logging — P3.5.** `server/logging/structuredLogger.cjs`, installed explicitly from `server/index.cjs` before anything logs.
+
+  It replaces the `console` methods rather than exporting a logger to be adopted call site by call site. That is the unusual choice and it is deliberate: the alternative leaves behind whichever of the dozen direct `console.*` calls in this server someone missed, and leaves dependencies writing unstructured lines into the same stream regardless — and Promtail parses a container's output as one format or the other, so a stream that is 90% JSON is a stream that is not JSON. It is done once, at the entry point, and never as an import side effect: a module that rewires global state simply by being imported is a genuinely nasty thing to debug.
+
+  JSON in production, text otherwise, `LOG_FORMAT=json|text` overriding both ways. A developer reading a terminal is not a log aggregator.
+
+### Security
+
+- **Session ids are reduced to a short digest in log output.** The `auth_audit_event` table keeps the full value — it is access-controlled and it is the record of who did what — but stdout is shipped to a log aggregator that many more people can read, and anyone holding a session id holds the session. The digest is stable, so lines belonging to one session can still be correlated, and useless for resuming it. Tickets, passwords and API keys are removed outright rather than digested.
+
+### Added
+
+- **A compose healthcheck on `backend` — P3.5.** `db` and the two frontends had one; the service that every request actually depends on did not, so `docker compose ps` reported it `running` whether or not it could answer.
+
+  It probes `GET /health`, which `server/app.cjs` registers before the auth router and which therefore answers unauthenticated — the reason it is usable as a probe at all. `127.0.0.1`, not `localhost`, for the same IPv6-first reason already documented on the two frontends. `--spider` rather than a body read, because this rootfs is `read_only` and wget's default is to write the response to a file.
+
+  Liveness, not readiness: `/health` answers from the Express process without consulting Postgres, Alfresco or the gateway. Making it reach them would tie this container's restart policy to whether Alfresco is up, and restarting the backend does not fix a down Alfresco. Those are Prometheus's business.
+
+  Negative-controlled rather than assumed: the probe command exits 1 against a closed port and 1 against a 404 path, and 0 against the real endpoint — so a passing check means something.
+
+### Added
+
 - **A CI check that WAL archiving actually works, not just that it is configured — P3.4.** The failure mode this closes is silent: a broken `archive_command` does not stop PostgreSQL. It keeps serving, `failed_count` climbs, and WAL accumulates until the volume fills — at which point the cause is hours old. Every existing job that boots this database would have passed throughout. `scripts/verify-wal-archiving.sh` forces a segment switch and asserts it was archived, so a broken archiver fails at merge time instead of at 3am on a full disk. Byte-identical across the repos that enable archiving, the same convention as `release-tag.sh`.
 
   Two details it had to get right, both found by testing rather than reasoning. It counts segments **inside the container**, because under docker-in-docker the CLI and daemon have separate filesystems and a host-side count would read zero regardless of what archiving did. And it asserts archiving is healthy **now** — never failed, or succeeded since it last failed — rather than `failed_count = 0`: those counters are cumulative and survive restarts, so one transient blip would make a zero-check fail forever, and a check that cries wolf gets muted.
