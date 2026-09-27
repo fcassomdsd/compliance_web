@@ -13,6 +13,19 @@ if (process.env.NODE_ENV === 'production') {
   secrets.assertProductionSecrets(resolvedSecrets);
 }
 
+// Structured logging (P3.5). Installed here, before anything else logs, and
+// explicitly rather than as an import side effect. It replaces the console
+// methods so that EVERY line on this container's stdout is one JSON object --
+// including the dozen direct console.* calls elsewhere in this server and
+// anything a dependency writes. Promtail parses a container's output as one
+// format or the other, so a stream that is 90% JSON is a stream that is not
+// JSON, and a logger that only covers the call sites someone remembered to
+// change would leave it that way. Outside production it is a no-op: a
+// developer reading a terminal is not a log aggregator. LOG_FORMAT=json|text
+// overrides in both directions.
+const { installStructuredConsole } = require('./logging/structuredLogger.cjs');
+installStructuredConsole();
+
 const { createApp } = require('./app.cjs');
 const { AUTH_CONFIG } = require('./auth/config.cjs');
 const { PgSessionRepository } = require('./auth/pgSessionRepository.cjs');

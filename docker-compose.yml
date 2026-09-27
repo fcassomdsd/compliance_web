@@ -109,6 +109,11 @@ services:
       # Secure by default. Local HTTP development must opt out explicitly.
       AUTH_COOKIE_SECURE: ${AUTH_COOKIE_SECURE:-true}
       NODE_ENV: ${AUTH_NODE_ENV:-production}
+      # Log format (P3.5): `json` or `text`. Unset, it follows NODE_ENV --
+      # JSON in production, where something is shipping these lines to Loki,
+      # and text in development, where a person is reading them in a
+      # terminal. Set it explicitly to get JSON out of a dev container.
+      LOG_FORMAT: ${LOG_FORMAT:-}
       # Service account for the scheduled jobs and for role-addressed
       # notifications, which read Alfresco group membership to find who holds a
       # role. Without it both jobs log "skipped" at startup and every role
