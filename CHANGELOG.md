@@ -4,6 +4,33 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Security
+
+- **Cleared all 21 HIGH CVEs.** P3.2 shipped Trivy with CRITICAL blocking and HIGH reporting only, because a HIGH-blocking gate would have arrived red — and a gate that is red on arrival gets switched off within a day. This is the backlog that policy was waiting on.
+
+  | Package | From | To | CVEs |
+  |---|---|---|---|
+  | `axios` | 1.13.2 | 1.20.0 | 11 |
+  | `multer` | 2.2.0 | 2.4.0 | 3 |
+  | `nanoid` | 3.3.11 | 3.3.19 | 3 |
+  | `postcss` | 8.5.6 | 8.5.28 | 2 |
+  | `nodemailer` | 9.0.6 | 9.1.1 | 1 |
+  | `form-data` | 4.0.5 | (via axios) | 1 |
+
+  `nodemailer` stays on 9.x rather than taking 10.0.12: the advisory is fixed in 9.1.0, and a major bump in the mail path is a larger change than this warranted.
+
+  `nanoid` and `postcss` are transitive from `vite`, and `vite@5.4.21` is the newest 5.x — it still ships both. They are pinned with `overrides` rather than by taking Vite 8, because both fixes are **patch-level within the same major** (8.5.6 → 8.5.28, 3.3.11 → 3.3.19), so Vite's own ranges are satisfied and there is no compatibility risk. Three major versions of Vite would have been a far bigger change than the CVEs justify. **Remove the overrides when Vite ships fixed transitives.**
+
+  **Verified against the running stack, not only by unit tests**, because the frontend service tests mock `axios` and mocks cannot tell you a real HTTP client still works:
+
+  - a successful login through `alfrescoClient` — HTTP 200 with a session and CSRF token, and `auth_login_provider_unavailable_total` stayed 0, which is what distinguishes "Alfresco rejected the credentials" from "the HTTP client broke"
+  - a bad-credentials login — still 401 from Alfresco, not a client error
+  - `POST /nodered/queryEntity` through `nodeRedClient` — HTTP 200
+  - a multipart evidence upload — 415 from multer's `fileFilter` on a disallowed type, and 400 on `evidenceRole` for an allowed one, which is the parser having read the body and validation moving past the file
+  - `nodemailer` loads at boot and takes the documented stub path with `SMTP_HOST` unset
+
+  Gate: `test:auth:all` 464 passing across 34 files, lint, build, and `verify-endpoints` all clean. Trivy: **0 CRITICAL, 0 HIGH**.
+
 ### Added
 
 - **The six auth metrics from `docs/auth/AUTH_CHUNK8_OPERATIONAL_READINESS.md` §6, on `GET /metrics` — P3.5.** That document has named them since the auth subsystem shipped and nothing emitted them: login success rate, login failure and rate-limited counts, session 401 rate, CSRF mismatches, session rotations, and role-refresh failures.
